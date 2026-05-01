@@ -1,0 +1,42 @@
+[
+  {
+    "name": "Dataset",
+    "description": "Metadata for datasets and research data.",
+    "entity_type": "resource",
+    "fields": [
+      {
+        "name": "dataset_methodology",
+        "label": "Methodology",
+        "type": "textarea"
+      },
+      {
+        "name": "dataset_variables",
+        "label": "Variables",
+        "type": "textarea",
+        "placeholder": "List variables included in the dataset"
+      },
+      {
+        "name": "dataset_file_structure",
+        "label": "File structure",
+        "type": "textarea",
+        "placeholder": "Describe folder/file structure"
+      },
+      {
+        "name": "dataset_software_required",
+        "label": "Software required",
+        "type": "text",
+        "placeholder": "e.g. R, Python, SPSS"
+      },
+      {
+        "name": "dataset_version",
+        "label": "Version",
+        "type": "text"
+      },
+      {
+        "name": "dataset_collection_date",
+        "label": "Collection date",
+        "type": "text"
+      }
+    ]
+  }
+]

@@ -1,0 +1,145 @@
+[
+  {
+    "name": "Rights / License",
+    "description": "Rights and licensing information for a resource, including copyright status, usage permissions, and legal constraints.",
+    "entity_type": "rights",
+    "fields": [
+      {
+        "name": "rights_status",
+        "label": "Rights status",
+        "type": "select",
+        "required": true,
+        "options": [
+          "In copyright",
+          "In copyright — rights-holder unlocatable",
+          "No known copyright",
+          "Public domain",
+          "Orphan work",
+          "Unknown"
+        ],
+        "help_text": "Overall copyright status of the resource"
+      },
+      {
+        "name": "license_type",
+        "label": "License",
+        "type": "select",
+        "required": false,
+        "options": [
+          "All rights reserved",
+          "CC BY 4.0",
+          "CC BY-SA 4.0",
+          "CC BY-NC 4.0",
+          "CC BY-NC-SA 4.0",
+          "CC BY-ND 4.0",
+          "CC BY-NC-ND 4.0",
+          "CC0 1.0",
+          "RightsStatements.org — In Copyright",
+          "RightsStatements.org — No Known Copyright",
+          "Custom license"
+        ],
+        "help_text": "License governing reuse of the resource"
+      },
+      {
+        "name": "license_uri",
+        "label": "License URI",
+        "type": "url",
+        "required": false,
+        "placeholder": "https://creativecommons.org/licenses/by/4.0/",
+        "help_text": "Link to the full legal license text"
+      },
+      {
+        "name": "rights_holder",
+        "label": "Rights holder",
+        "type": "text",
+        "required": false,
+        "placeholder": "Person or organisation",
+        "help_text": "Prefer linking to an Agent record"
+      },
+      {
+        "name": "copyright_notice",
+        "label": "Copyright notice",
+        "type": "text",
+        "required": false,
+        "placeholder": "© 2020 Example Organisation",
+        "help_text": "Formal copyright statement"
+      },
+      {
+        "name": "access_rights",
+        "label": "Access rights",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Open",
+          "Restricted",
+          "Non-public",
+          "Embargoed"
+        ],
+        "help_text": "Who can access the resource"
+      },
+      {
+        "name": "usage_restrictions",
+        "label": "Usage restrictions",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Describe any restrictions on reuse",
+        "help_text": "Legal, ethical, or donor-imposed restrictions"
+      },
+      {
+        "name": "embargo_end_date",
+        "label": "Embargo end date",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD",
+        "help_text": "Date when embargo is lifted"
+      },
+      {
+        "name": "jurisdiction",
+        "label": "Jurisdiction",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. Sweden, EU",
+        "help_text": "Legal jurisdiction governing the rights"
+      },
+      {
+        "name": "rights_start_date",
+        "label": "Rights start date",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD",
+        "help_text": "When the rights became effective"
+      },
+      {
+        "name": "rights_end_date",
+        "label": "Rights end date",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD",
+        "help_text": "When the rights expire (if applicable)"
+      },
+      {
+        "name": "credit_line",
+        "label": "Credit line",
+        "type": "text",
+        "required": false,
+        "placeholder": "How the resource should be credited",
+        "help_text": "Required attribution text"
+      },
+      {
+        "name": "source_of_rights_information",
+        "label": "Source of rights information",
+        "type": "text",
+        "required": false,
+        "placeholder": "Contract, donor agreement, internal record",
+        "help_text": "Where the rights information comes from"
+      },
+      {
+        "name": "rights_notes",
+        "label": "Notes",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Additional notes",
+        "help_text": "Any extra context about rights or licensing"
+      }
+    ]
+  }
+]

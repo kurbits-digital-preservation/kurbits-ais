@@ -1,0 +1,172 @@
+.tree {
+  width: 100%;
+}
+
+.nodeRow {
+  width: 100%;
+}
+
+.nodeItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding-top: 5px;
+  padding-bottom: 5px;
+  padding-right: var(--space-3);
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.08s;
+  position: relative;
+  border-left: 2px solid transparent;
+}
+
+.nodeItem:hover {
+  background: var(--color-bg-subtle);
+}
+
+.nodeItem.selected {
+  background: var(--color-accent-bg);
+  border-left-color: var(--color-accent);
+}
+
+.expandBtn {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  padding: 0;
+  margin-top: 1px;
+  border-radius: var(--radius-sm);
+  transition: color 0.1s;
+}
+
+.expandBtn:hover:not(:disabled) {
+  color: var(--color-ink);
+}
+
+.expandBtn:disabled {
+  cursor: default;
+}
+
+.leaf {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--color-border);
+  margin: auto;
+}
+
+.nodeInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.nodeTitle {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+}
+
+.nodeMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.refCode {
+  font-size: 10px;
+}
+
+.level {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  font-style: italic;
+}
+
+.addChildBtn {
+  flex-shrink: 0;
+  opacity: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--color-ink-muted);
+  transition: all 0.1s;
+}
+
+.nodeItem:hover .addChildBtn,
+.nodeItem.selected .addChildBtn {
+  opacity: 1;
+}
+
+.addChildBtn:hover {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent-light);
+  color: var(--color-accent);
+}
+
+.children {
+  width: 100%;
+}
+
+/* States */
+.state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-4);
+  color: var(--color-ink-faint);
+  font-size: var(--text-sm);
+}
+
+.empty {
+  padding: var(--space-8) var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.empty p { font-size: var(--text-sm); color: var(--color-ink-muted); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { animation: spin 1s linear infinite; }
+
+.statusBadge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+}
+
+.status_draft {
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-faint);
+  border-color: var(--color-border);
+}
+
+.status_restricted {
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+  border-color: var(--color-warning-border);
+}

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ead xmlns="urn:isbn:1-931666-22-9"
+     xmlns:xlink="http://www.w3.org/1999/xlink"
+     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+     xsi:schemaLocation="urn:isbn:1-931666-22-9 http://www.loc.gov/ead/ead.xsd">
+
+  <eadheader langencoding="iso639-2b" countryencoding="iso3166-1"
+             dateencoding="iso8601" repositoryencoding="iso15511">
+    <eadid>{{ node.ref_code }}</eadid>
+    <filedesc>
+      <titlestmt>
+        <titleproper>{{ node.title | e }}</titleproper>
+      </titlestmt>
+    </filedesc>
+    <profiledesc>
+      <creation>Exported from Kurbits AIS — {{ node.updated_at[:10] }}</creation>
+    </profiledesc>
+  </eadheader>
+
+  <archdesc level="{{ node.level | lower }}">
+    <did>
+      <unitid label="Ref" type="persistent">{{ node.local_ref | e }}</unitid>
+      <unitid label="Full reference code" type="local">{{ node.ref_code | e }}</unitid>
+      <unittitle>{{ node.title | e }}</unittitle>
+      {% if node.date_display %}
+      <unitdate{% if node.date_start %} normal="{{ node.date_start }}{% if node.date_end %}/{{ node.date_end }}{% endif %}"{% endif %}
+               {% if node.date_certainty %}certainty="{{ node.date_certainty }}"{% endif %}>
+        {{ node.date_display | e }}
+      </unitdate>
+      {% endif %}
+      {% if node.extent %}
+      <physdesc><extent>{{ node.extent | e }}</extent></physdesc>
+      {% endif %}
+      {% if node.language %}
+      <langmaterial>
+        <language langcode="{{ node.language[:3] | lower }}">{{ node.language | e }}</language>
+      </langmaterial>
+      {% endif %}
+      {% if node.creators %}
+      {% for creator in node.creators %}
+      <origination label="creator">
+        <{{ 'persname' if creator.agent_type == 'person' else 'corpname' }}>{{ creator.name | e }}</{{ 'persname' if creator.agent_type == 'person' else 'corpname' }}>
+      </origination>
+      {% endfor %}
+      {% endif %}
+    </did>
+
+    {% if node.description %}
+    <bioghist><p>{{ node.description | e }}</p></bioghist>
+    {% endif %}
+    {% if node.scope_and_content %}
+    <scopecontent><p>{{ node.scope_and_content | e }}</p></scopecontent>
+    {% endif %}
+    {% if node.arrangement %}
+    <arrangement><p>{{ node.arrangement | e }}</p></arrangement>
+    {% endif %}
+    {% if node.access_conditions %}
+    <accessrestrict><p>{{ node.access_conditions | e }}</p></accessrestrict>
+    {% endif %}
+    {% if node.reproduction_conditions %}
+    <userestrict><p>{{ node.reproduction_conditions | e }}</p></userestrict>
+    {% endif %}
+    {% if node.finding_aids %}
+    <otherfindaid><p>{{ node.finding_aids | e }}</p></otherfindaid>
+    {% endif %}
+    {% for note in node.notes %}
+    <odd type="{{ note.type }}"><p>{{ note.content | e }}</p></odd>
+    {% endfor %}
+    {% if node.classifications %}
+    <controlaccess>
+      {% for c in node.classifications %}
+      <subject>{{ c.full_code }} — {{ c.name | e }}</subject>
+      {% endfor %}
+    </controlaccess>
+    {% endif %}
+
+    {% if node.children %}
+    <dsc>
+      {{ children_block(node.children) }}
+    </dsc>
+    {% endif %}
+  </archdesc>
+</ead>
+
+{%- macro children_block(children) %}
+{% for child in children %}
+<c level="{{ child.level | lower }}">
+  <did>
+    <unitid label="Ref">{{ child.local_ref | e }}</unitid>
+    <unitid label="Full reference code" type="local">{{ child.ref_code | e }}</unitid>
+    <unittitle>{{ child.title | e }}</unittitle>
+    {% if child.date_display %}
+    <unitdate{% if child.date_start %} normal="{{ child.date_start }}{% if child.date_end %}/{{ child.date_end }}{% endif %}"{% endif %}>{{ child.date_display | e }}</unitdate>
+    {% endif %}
+    {% if child.extent %}<physdesc><extent>{{ child.extent | e }}</extent></physdesc>{% endif %}
+  </did>
+  {% if child.scope_and_content %}<scopecontent><p>{{ child.scope_and_content | e }}</p></scopecontent>{% endif %}
+  {% if child.arrangement %}<arrangement><p>{{ child.arrangement | e }}</p></arrangement>{% endif %}
+  {% if child.access_conditions %}<accessrestrict><p>{{ child.access_conditions | e }}</p></accessrestrict>{% endif %}
+  {% if child.notes %}{% for note in child.notes %}<odd type="{{ note.type }}"><p>{{ note.content | e }}</p></odd>{% endfor %}{% endif %}
+  {% if child.children %}
+  <dsc>{{ children_block(child.children) }}</dsc>
+  {% endif %}
+</c>
+{% endfor %}
+{%- endmacro %}

@@ -1,0 +1,59 @@
+.boolValue {
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.urlValue {
+  color: var(--color-accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+.urlValue:hover { text-decoration: underline; }
+
+.multiValues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-border);
+}
+
+.multiselectGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.checkOption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: normal;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  transition: all 0.08s;
+}
+.checkOption:hover {
+  border-color: var(--color-accent-border);
+  color: var(--color-ink);
+  background: var(--color-accent-bg);
+}
+.checkOption input[type="checkbox"] {
+  width: auto;
+}

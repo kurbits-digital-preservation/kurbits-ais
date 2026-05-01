@@ -1,0 +1,155 @@
+[
+  {
+    "name": "Dublin Core Terms",
+    "description": "Extended Dublin Core using dcterms refinements (DCMI Metadata Terms). More precise than plain DC.",
+    "entity_type": "resource",
+    "fields": [
+      {
+        "name": "dcterms_alternative",
+        "label": "Alternative title",
+        "type": "text",
+        "required": false,
+        "placeholder": "An alternative name for the resource",
+        "help_text": "dcterms:alternative — subtitle, abbreviation, or translated title"
+      },
+      {
+        "name": "dcterms_abstract",
+        "label": "Abstract",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "A summary of the resource",
+        "help_text": "dcterms:abstract"
+      },
+      {
+        "name": "dcterms_created",
+        "label": "Date created",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD",
+        "help_text": "dcterms:created — date of creation of the resource"
+      },
+      {
+        "name": "dcterms_modified",
+        "label": "Date modified",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD",
+        "help_text": "dcterms:modified — date on which the resource was changed"
+      },
+      {
+        "name": "dcterms_issued",
+        "label": "Date issued",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD",
+        "help_text": "dcterms:issued — date of formal issuance or publication"
+      },
+      {
+        "name": "dcterms_valid",
+        "label": "Date valid",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD/YYYY-MM-DD",
+        "help_text": "dcterms:valid — date (range) of validity of the resource"
+      },
+      {
+        "name": "dcterms_extent",
+        "label": "Extent",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. 42 pages, 1 h 23 min",
+        "help_text": "dcterms:extent — size or duration"
+      },
+      {
+        "name": "dcterms_medium",
+        "label": "Medium",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. paper, canvas, film",
+        "help_text": "dcterms:medium — material or physical carrier of the resource"
+      },
+      {
+        "name": "dcterms_spatial",
+        "label": "Spatial coverage",
+        "type": "text",
+        "required": false,
+        "placeholder": "Place name or coordinates",
+        "help_text": "dcterms:spatial — spatial characteristics of the resource"
+      },
+      {
+        "name": "dcterms_temporal",
+        "label": "Temporal coverage",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. 1900/1950 or 'Second World War'",
+        "help_text": "dcterms:temporal — temporal characteristics of the resource"
+      },
+      {
+        "name": "dcterms_language",
+        "label": "Language",
+        "type": "text",
+        "required": false,
+        "placeholder": "ISO 639-1 e.g. sv, en, de",
+        "help_text": "dcterms:language"
+      },
+      {
+        "name": "dcterms_license",
+        "label": "License",
+        "type": "url",
+        "required": false,
+        "placeholder": "https://creativecommons.org/licenses/by/4.0/",
+        "help_text": "dcterms:license — legal document giving permission to use the resource"
+      },
+      {
+        "name": "dcterms_rights_holder",
+        "label": "Rights holder",
+        "type": "text",
+        "required": false,
+        "placeholder": "Person or organisation owning the rights",
+        "help_text": "dcterms:rightsHolder"
+      },
+      {
+        "name": "dcterms_access_rights",
+        "label": "Access rights",
+        "type": "select",
+        "required": false,
+        "options": ["Open", "Restricted", "Non-public", "Embargoed"],
+        "help_text": "dcterms:accessRights"
+      },
+      {
+        "name": "dcterms_accrual_method",
+        "label": "Accrual method",
+        "type": "select",
+        "required": false,
+        "options": ["Deposit", "Donation", "Purchase", "Loan", "License", "Item", "Subscription"],
+        "help_text": "dcterms:accrualMethod — how items are added to the collection"
+      },
+      {
+        "name": "dcterms_accrual_periodicity",
+        "label": "Accrual periodicity",
+        "type": "select",
+        "required": false,
+        "options": ["Irregular", "Annual", "Biennial", "Bimonthly", "Biweekly", "Continuous",
+                    "Daily", "Monthly", "Quarterly", "Semiannual", "Semimonthly", "Semiweekly",
+                    "Three times a week", "Three times a month", "Weekly"],
+        "help_text": "dcterms:accrualPeriodicity — frequency of additions to the collection"
+      },
+      {
+        "name": "dcterms_conforms_to",
+        "label": "Conforms to",
+        "type": "text",
+        "required": false,
+        "placeholder": "Standard or specification the resource conforms to",
+        "help_text": "dcterms:conformsTo"
+      },
+      {
+        "name": "dcterms_bibliographic_citation",
+        "label": "Bibliographic citation",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Recommended citation for the resource",
+        "help_text": "dcterms:bibliographicCitation"
+      }
+    ]
+  }
+]

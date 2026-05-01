@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+{%- macro dc_record(n) -%}
+<oai_dc:dc xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"
+           xmlns:dc="http://purl.org/dc/elements/1.1/"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/
+                               http://www.openarchives.org/OAI/2.0/oai_dc.xsd">
+  <dc:title>{{ n.title | e }}</dc:title>
+  <dc:identifier>{{ n.ref_code | e }}</dc:identifier>
+  {% for creator in n.creators %}
+  <dc:creator>{{ creator.name | e }}</dc:creator>
+  {% endfor %}
+  {% if n.date_display %}
+  <dc:date>{{ n.date_display | e }}</dc:date>
+  {% endif %}
+  {% if n.description %}
+  <dc:description>{{ n.description | e }}</dc:description>
+  {% elif n.scope_and_content %}
+  <dc:description>{{ n.scope_and_content | e }}</dc:description>
+  {% endif %}
+  {% if n.language %}
+  <dc:language>{{ n.language | e }}</dc:language>
+  {% endif %}
+  {% if n.extent %}
+  <dc:format>{{ n.extent | e }}</dc:format>
+  {% endif %}
+  <dc:type>{{ n.level | e }}</dc:type>
+  {% for c in n.classifications %}
+  <dc:subject>{{ c.full_code }} {{ c.name | e }}</dc:subject>
+  {% endfor %}
+  {% if n.access_conditions %}
+  <dc:rights>{{ n.access_conditions | e }}</dc:rights>
+  {% endif %}
+  <dc:source>{{ n.institution_name | e }}</dc:source>
+</oai_dc:dc>
+{%- endmacro -%}
+{% if include_children and node.children %}
+<oai_dc:dcCollection xmlns:oai_dc="http://www.openarchives.org/OAI/2.0/oai_dc/"
+                     xmlns:dc="http://purl.org/dc/elements/1.1/"
+                     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                     xsi:schemaLocation="http://www.openarchives.org/OAI/2.0/oai_dc/
+                                         http://www.openarchives.org/OAI/2.0/oai_dc.xsd">
+  {{ dc_record(node) }}
+  {% for n in all_nodes[1:] %}
+  {{ dc_record(n) }}
+  {% endfor %}
+</oai_dc:dcCollection>
+{% else %}
+{{ dc_record(node) }}
+{% endif %}

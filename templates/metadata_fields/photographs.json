@@ -1,0 +1,171 @@
+[
+  {
+    "name": "Photographic records",
+    "description": "Detailed description for photographic materials — suitable for photo archives, press photography, and documentary photography. Based on VRA Core and SPECTRUM.",
+    "entity_type": "resource",
+    "fields": [
+      {
+        "name": "photo_technique",
+        "label": "Photographic technique",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Albumen print", "Ambrotype", "Calotype / paper negative", "Chromogenic print (C-print)",
+          "Collodion wet plate", "Cyanotype", "Daguerreotype", "Dye transfer print",
+          "Ferrotype / tintype", "Gelatin silver print", "Gum bichromate", "Inkjet print",
+          "Ilfochrome / Cibachrome", "Palladium / platinum print", "Photogravure",
+          "Polaroid", "Salt print", "Woodburytype", "Digital (born-digital)", "Unknown"
+        ],
+        "help_text": "The photographic process used to create the image"
+      },
+      {
+        "name": "photo_colour",
+        "label": "Colour / tone",
+        "type": "select",
+        "required": false,
+        "options": ["Black and white", "Colour", "Hand-coloured", "Sepia / toned", "Cyanotype blue", "Other"],
+        "help_text": "Colour characteristics of the image"
+      },
+      {
+        "name": "photo_format_physical",
+        "label": "Physical format",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Glass plate negative", "Film negative — 35 mm", "Film negative — medium format",
+          "Film negative — large format", "Film negative — 120/220", "Slide / transparency — 35 mm",
+          "Slide / transparency — medium format", "Print — contact", "Print — enlargement",
+          "Print — carte de visite", "Print — cabinet card", "Print — stereograph",
+          "Digital file", "Other"
+        ],
+        "help_text": "Physical format or carrier"
+      },
+      {
+        "name": "photo_dimensions",
+        "label": "Dimensions",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. 13 × 18 cm or 24 × 36 mm",
+        "help_text": "Physical dimensions of the original (height × width)"
+      },
+      {
+        "name": "photo_digital_resolution",
+        "label": "Digital resolution",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. 400 dpi, 4000 × 6000 px",
+        "help_text": "Resolution of the digital capture or born-digital image"
+      },
+      {
+        "name": "photo_photographer",
+        "label": "Photographer",
+        "type": "text",
+        "required": false,
+        "placeholder": "Name of the photographer",
+        "help_text": "Prefer linking via Agents tab for authority-controlled names"
+      },
+      {
+        "name": "photo_studio",
+        "label": "Studio / agency",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. Pressens Bild, Magnum Photos",
+        "help_text": "Studio or agency the image originates from"
+      },
+      {
+        "name": "photo_date_captured",
+        "label": "Date captured",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD or YYYY or circa YYYY",
+        "help_text": "Date the photograph was taken; use 'circa' or '?' for uncertain dates"
+      },
+      {
+        "name": "photo_location_captured",
+        "label": "Location captured",
+        "type": "text",
+        "required": false,
+        "placeholder": "Where the photograph was taken",
+        "help_text": "Use Places tab for geo-coordinates and Wikidata links"
+      },
+      {
+        "name": "photo_depicted_persons",
+        "label": "Depicted persons",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Names of persons visible in the image",
+        "help_text": "One per line; link via Agents tab for authority-controlled names"
+      },
+      {
+        "name": "photo_caption",
+        "label": "Original caption",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Caption as it appeared on the original or accompanying the image",
+        "help_text": "Transcribe the original caption verbatim if possible"
+      },
+      {
+        "name": "photo_negative_number",
+        "label": "Negative / reference number",
+        "type": "text",
+        "required": false,
+        "placeholder": "Original negative or archive reference number",
+        "help_text": "Internal numbering system of the producing studio or agency"
+      },
+      {
+        "name": "photo_condition",
+        "label": "Condition",
+        "type": "select",
+        "required": false,
+        "options": ["Excellent", "Good", "Fair", "Poor", "Damaged", "Fragmentary"],
+        "help_text": "Physical condition of the original"
+      },
+      {
+        "name": "photo_condition_notes",
+        "label": "Condition notes",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Describe any damage, deterioration, or special storage needs",
+        "help_text": "Fading, foxing, tears, silver mirroring, vinegar syndrome etc."
+      },
+      {
+        "name": "photo_digitisation_date",
+        "label": "Digitisation date",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD",
+        "help_text": "Date the physical item was digitised"
+      },
+      {
+        "name": "photo_digitised_by",
+        "label": "Digitised by",
+        "type": "text",
+        "required": false,
+        "placeholder": "Person or organisation responsible for digitisation",
+        "help_text": "Scanner operator, external service provider etc."
+      },
+      {
+        "name": "photo_rights_statement",
+        "label": "Rights statement",
+        "type": "select",
+        "required": false,
+        "options": [
+          "In copyright", "In copyright — educational use permitted",
+          "In copyright — rights-holder unlocatable",
+          "No known copyright", "Public domain",
+          "CC BY 4.0", "CC BY-SA 4.0", "CC BY-NC 4.0", "CC BY-NC-SA 4.0",
+          "CC BY-ND 4.0", "CC BY-NC-ND 4.0", "CC0 1.0 (Public Domain Dedication)"
+        ],
+        "help_text": "Rights status of the image"
+      },
+      {
+        "name": "photo_usage_restrictions",
+        "label": "Usage restrictions",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Any specific restrictions on use or reproduction",
+        "help_text": "e.g. portrait rights, sensitive content, donor restrictions"
+      }
+    ]
+  }
+]

@@ -1,0 +1,1 @@
+from app.api.v1.ead import routes  # noqa: F401

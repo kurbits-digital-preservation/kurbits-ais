@@ -1,0 +1,76 @@
+# ─── Kurbits AIS — OpenShift overlay ────────────────────────────────
+# Usage:
+#   helm install kurbits ./helm/kurbits \
+#     -f helm/kurbits/values-openshift.yaml \
+#     --set app.secretKey="$(openssl rand -hex 32)" \
+#     --set postgresql.auth.password="$(openssl rand -hex 16)" \
+#     --set image.repository=ghcr.io/your-org/kurbits \
+#     --set image.tag=0.1.0 \
+#     --set route.host=kurbits.apps.your-cluster.example.com
+
+# ── Routing: OpenShift Route (no Ingress) ─────────────────────────────
+ingress:
+  enabled: false
+
+route:
+  enabled: true
+  host: ""    # set via --set route.host=... or leave empty for auto-assign
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+# ── Security: compatible with OpenShift restricted-v2 SCC ─────────────
+# OpenShift assigns a random UID from the project's UID range.
+# The container must NOT specify runAsUser — OpenShift sets it.
+# fsGroup: 0 (root group) is the standard for writable volumes.
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 0
+  # Do NOT set runAsUser here — OpenShift SCC will assign one
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+  capabilities:
+    drop:
+      - ALL
+
+# ── Service account: allow OpenShift SCC binding ──────────────────────
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# ── Storage: use OpenShift default StorageClass ───────────────────────
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""     # uses cluster default (typically thin-csi or gp3-csi)
+  accessMode: ReadWriteOnce
+
+# ── PostgreSQL: use RWO PVC (standard on OpenShift) ───────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: kurbits
+    password: ""
+    database: kurbits
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+    # OpenShift: PostgreSQL official image already handles arbitrary UIDs
+    podSecurityContext:
+      enabled: true
+      fsGroup: 0
+    containerSecurityContext:
+      enabled: true
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL

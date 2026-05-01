@@ -1,0 +1,89 @@
+[
+
+  {
+
+    "name": "Physical object",
+
+    "description": "Metadata for physical artefacts and museum objects.",
+
+    "entity_type": "resource",
+
+    "fields": [
+
+      {
+
+        "name": "object_material",
+
+        "label": "Material",
+
+        "type": "text"
+
+      },
+
+      {
+
+        "name": "object_technique",
+
+        "label": "Technique",
+
+        "type": "text"
+
+      },
+
+      {
+
+        "name": "object_dimensions",
+
+        "label": "Dimensions",
+
+        "type": "text"
+
+      },
+
+      {
+
+        "name": "object_weight",
+
+        "label": "Weight",
+
+        "type": "text"
+
+      },
+
+      {
+
+        "name": "object_condition",
+
+        "label": "Condition",
+
+        "type": "select",
+
+        "options": ["Excellent", "Good", "Fair", "Poor"]
+
+      },
+
+      {
+
+        "name": "object_inscriptions",
+
+        "label": "Inscriptions / markings",
+
+        "type": "textarea"
+
+      },
+
+      {
+
+        "name": "object_provenance",
+
+        "label": "Provenance",
+
+        "type": "textarea"
+
+      }
+
+    ]
+
+  }
+
+]
