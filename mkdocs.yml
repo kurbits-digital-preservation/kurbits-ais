@@ -1,0 +1,37 @@
+site_name: KURBITS AIS Documentation
+
+theme:
+  name: material
+  language: sv # Sätter gränssnittet till svenska
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+markdown_extensions:
+  - attr_list
+  - md_in_html
+
+nav:
+  - Home: user/index.md
+  - User manual:
+      - Introduction: user/index.md
+      - Getting-started: user/01-getting-started.md
+      - Resources: user/02-resources.md
+      - Agents: user/03-agents.md
+      - Locations: user/04-locations.md
+      - Classifications: user/05-classifications.md
+      - Flags: user/06-flags.md
+      - Acquisitions: user/07-acquisitions.md
+      - Search: user/08-search.md
+      - Administration: user/09-administration.md
+      - Import / Export / Lookups: user/10-lookups-import-export.md
+      - Visual-Arkiv: user/visual-arkiv-import.md
