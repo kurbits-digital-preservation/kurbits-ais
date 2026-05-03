@@ -1,4 +1,39 @@
-# kurbits-ais
+<p align="center">
+  <img src="frontend/public/kurbits.png" alt="Kurbits" width="180" />
+</p>
+<h1 align="center">Kurbits AIS</h1>
+ 
+<p align="center">
+  Archival Information System for archives, special collections, and museums.
+</p>
+<p align="center">
+  <a href="docs/index.md">Documentation</a> ·
+  <a href="docs/visual-arkiv-import.md">Visual Arkiv import (sv)</a>
+</p>
+---
+ 
+## What is Kurbits AIS?
+ 
+Kurbits is an archival information system built for institutions that need to describe, organise, locate, and track their holdings — whether archival records, library special collections, or museum objects.
+ 
+It follows established standards (ISAD(G), ISAAR(CPF), EAD 2002, EAC-CPF, OAI-PMH) while remaining practical for smaller institutions without dedicated IT departments.
+ 
+### Features
+ 
+| Area | Capabilities |
+|---|---|
+| **Description** | Hierarchical archival description (fonds → series → file → item), ISAD(G)-aligned fields, custom metadata templates per level |
+| **Agents** | Authority records for persons, organisations, families — with Wikidata, VIAF and ORCID lookup |
+| **Location tracking** | Physical location hierarchy, check-in / check-out, movement history, "Checked out" virtual location |
+| **Classifications** | Controlled vocabulary schemes with version history |
+| **Acquisitions** | Submission agreements, deliveries with configurable checklists, accessions linked to resources |
+| **Flags** | Workflow flags for metadata, conservation, rights, digitisation — assignable to staff |
+| **Files** | Attachment upload with automatic technical metadata extraction (checksums, PRONOM, EXIF, AV, thumbnails) |
+| **Import / export** | EAD 2002 import/export, OAI-PMH harvest, EAC-CPF agent import, Visual Arkiv 7 XML import |
+| **Search** | Full-text search across resources and agents with filters |
+| **Multi-tenancy** | Multiple institutions on one instance, users can belong to several |
+ 
+---
 
 
 # License & Usage
