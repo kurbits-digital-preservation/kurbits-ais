@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="frontend/public/kurbits.png" alt="Kurbits" width="180" />
+  <img src="docs/kurbits.png" alt="Kurbits" width="180" />
 </p>
 <h1 align="center">Kurbits AIS</h1>
  
