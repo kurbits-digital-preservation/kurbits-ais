@@ -5,6 +5,8 @@
 ---
 
 Kurbits stödjer import av exportfiler från **Visual Arkiv 7** via ett kommandoradsverktyg.
+Verifierade versioner av VA för Allmänna Arkivschemat: **7.0.5.1**, **7.1.6.0**
+
 
 > ⚠️ **Viktigt:** Importfunktionen är enbart testad mot Visual Arkiv 7 och enbart mot arkiv som förtecknats enligt **Allmänna Arkivschemat** (AA-schemat) med seriebeteckningar på formen Y + Z + A (t.ex. A1, F2a). Stöd för verksamhetsbaserad arkivredovisning (processorienterad förteckning) finns inte implementerat i nuläget.
 >
