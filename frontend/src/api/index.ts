@@ -84,6 +84,13 @@ export const nodesApi = {
   getDownloadUrl: (nodeId: number, attachmentId: number) =>
     `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/download`,
 
+  printLabels: (nodeIds: number[], format: string, copies: number) =>
+    api.post('/nodes/labels', { node_ids: nodeIds, format, copies },
+      { responseType: 'blob' }),
+
+  findingAid: (nodeId: number) =>
+    api.get(`/nodes/${nodeId}/finding-aid`, { responseType: 'blob' }),
+
   reextractMetadata: (nodeId: number, attachmentId: number) =>
     api.post(`/nodes/${nodeId}/attachments/${attachmentId}/extract`),
 
@@ -173,6 +180,12 @@ export const locationsApi = {
 
   getMovements: (locationId: number, page = 1) =>
     api.get(`/locations/${locationId}/movements`, { params: { page } }),
+
+  getNodeMovements: (nodeId: number) =>
+    api.get<{ status: string; data: any[] }>(`/nodes/${nodeId}/movements`),
+
+  inventory: (locationId: number) =>
+    api.get(`/locations/${locationId}/inventory`, { responseType: 'blob' }),
 }
 
 // ─── Classifications ─────────────────────────────────────────────────
@@ -596,16 +609,4 @@ export const checklistTemplatesApi = {
     api.patch<{ status: string; data: any }>(`/vocab/checklist-templates/${id}`, data),
   delete: (id: number) =>
     api.delete(`/vocab/checklist-templates/${id}`),
-}
-
-// ─── Location overview & movements ───────────────────────────────────────
-export const locationOverviewApi = {
-  getOverview: (params?: { status?: string; location_id?: number }) =>
-    api.get<{ status: string; data: any }>('/locations/overview', { params }),
-
-  moveNode: (nodeId: number, data: Record<string, unknown>) =>
-    api.post(`/nodes/${nodeId}/move`, data),
-
-  getNodeMovements: (nodeId: number) =>
-    api.get<{ status: string; data: any[] }>(`/nodes/${nodeId}/movements`),
 }

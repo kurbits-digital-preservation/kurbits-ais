@@ -4,7 +4,7 @@ import {
   Plus, X, User, Building2, UsersRound, Bot,
   MapPin, Tag, Link, Search, ChevronDown
 } from 'lucide-react'
-import { nodeRelationsApi, agentsApi, locationsApi, classificationsApi, nodesApi, locationOverviewApi } from '@/api'
+import { nodeRelationsApi, agentsApi, locationsApi, classificationsApi, nodesApi } from '@/api'
 import { Spinner, TypePill } from '@/components/ui'
 import styles from './NodeRelationsTab.module.css'
 
@@ -612,7 +612,7 @@ export function NodeLocationsTab({ nodeId }: { nodeId: number }) {
 
   const { data: history = [], isLoading: histLoading } = useQuery({
     queryKey: ['node-movements', nodeId],
-    queryFn: () => locationOverviewApi.getNodeMovements(nodeId).then(r => r.data.data),
+    queryFn: () => locationsApi.getNodeMovements(nodeId).then(r => r.data.data),
     enabled: showHistory,
   })
 

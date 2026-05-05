@@ -32,7 +32,7 @@ export default function LoginPage() {
     <div className={styles.page}>
       <div className={styles.panel}>
         <div className={styles.header}>
-          <h1 className={styles.wordmark}>Kurbits</h1>
+          <img src="/kurbits.png" alt="Kurbits" className={styles.logo} />
           <p className={styles.tagline}>Archival Information System</p>
         </div>
 

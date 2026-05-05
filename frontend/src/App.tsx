@@ -11,7 +11,6 @@ import InstitutionAdminPage from '@/pages/app/InstitutionAdminPage'
 import MetadataTemplatesPage from '@/pages/app/MetadataTemplatesPage'
 import FlagsPage from '@/pages/app/FlagsPage'
 import AcquisitionsPage from '@/pages/app/AcquisitionsPage'
-import LocationOverviewPage from '@/pages/app/LocationOverviewPage'
 import SearchPage from '@/pages/app/SearchPage'
 
 const queryClient = new QueryClient({
@@ -37,7 +36,6 @@ const router = createBrowserRouter([
         { path: 'administration/templates', element: <MetadataTemplatesPage /> },
         { path: 'flags',                   element: <FlagsPage /> },
         { path: 'acquisitions',            element: <AcquisitionsPage /> },
-        { path: 'locations/overview',      element: <LocationOverviewPage /> },
         { path: 'search',                  element: <SearchPage /> },
         // Legacy redirects
         { path: 'institution',        element: <Navigate to="/app/administration" replace /> },

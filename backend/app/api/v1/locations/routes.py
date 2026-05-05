@@ -506,62 +506,6 @@ def search_locations():
 
 # ── Institution-wide location overview ────────────────────────────────
 
-# GET /api/v1/locations/overview
-# Returns all nodes with their current location — for the overview page
-@bp.route('/locations/overview', methods=['GET'])
-@login_required
-def location_overview():
-    institution_id = current_user.active_institution_id
-    if not institution_id:
-        return error('No active institution', 400)
-
-    from app.models.node import Node
-    from app.models.location import Location
-
-    status_filter = request.args.get('status')   # e.g. on_loan_out
-    location_id   = request.args.get('location_id', type=int)
-
-    stmt = sa.select(Node).where(
-        Node.institution_id == institution_id,
-        Node.current_location_id.isnot(None),
-    )
-    if status_filter:
-        stmt = stmt.where(Node.current_location_status == status_filter)
-    if location_id:
-        stmt = stmt.where(Node.current_location_id == location_id)
-
-    nodes = db.session.execute(stmt.order_by(Node.title)).scalars().all()
-
-    result = []
-    for node in nodes:
-        loc = db.session.get(Location, node.current_location_id) if node.current_location_id else None
-        result.append({
-            'node_id': node.id,
-            'node_title': node.title,
-            'node_ref_code': node.ref_code,
-            'node_level': node.level_of_description,
-            'current_location_id': node.current_location_id,
-            'current_location_name': loc.name if loc else None,
-            'current_location_path': loc.get_full_path() if loc else None,
-            'current_location_type': loc.location_type if loc else None,
-            'current_location_status': node.current_location_status,
-        })
-
-    # Summary counts by status
-    all_statuses = db.session.execute(
-        sa.select(Node.current_location_status, sa.func.count())
-        .where(
-            Node.institution_id == institution_id,
-            Node.current_location_status.isnot(None),
-        )
-        .group_by(Node.current_location_status)
-    ).all()
-
-    return success({
-        'items': result,
-        'total': len(result),
-        'summary': {row[0]: row[1] for row in all_statuses},
-    })
 
 
 # POST /api/v1/nodes/<id>/move
@@ -632,3 +576,28 @@ def get_node_movements(node_id):
         .order_by(LocationMovement.moved_at.desc())
     ).scalars().all()
     return success([m.to_dict() for m in movements])
+
+# GET /api/v1/locations/<id>/inventory
+@bp.route('/locations/<int:location_id>/inventory', methods=['GET'])
+@login_required
+def print_location_inventory(location_id):
+    """Generate an inventory PDF for a location and all its sub-locations."""
+    from flask import make_response
+    from app.reports import generate_location_inventory
+
+    institution_id = current_user.active_institution_id
+    loc = _get_location_or_404(location_id, institution_id)
+    if not loc:
+        return error('Location not found', 404)
+
+    try:
+        pdf_bytes = generate_location_inventory(location_id, institution_id, db)
+    except Exception as e:
+        current_app.logger.error(f'Inventory generation failed: {e}')
+        return error(f'Failed to generate inventory: {e}', 500)
+
+    safe_name = (loc.name or 'inventory').replace(' ', '_')[:40]
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename="{safe_name}_inventory.pdf"'
+    return response

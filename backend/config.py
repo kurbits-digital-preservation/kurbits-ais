@@ -23,8 +23,7 @@ class Config:
     SESSION_COOKIE_SAMESITE = 'None'
     SESSION_COOKIE_SECURE = False      # set True in production (requires HTTPS)
     SESSION_COOKIE_HTTPONLY = True
-
-    CORS_ORIGINS = ['http://localhost:5173']
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
 
 
 class DevelopmentConfig(Config):
@@ -38,10 +37,13 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
-    SESSION_COOKIE_SECURE = True       # HTTPS in production
-    SESSION_COOKIE_SAMESITE = 'Lax'    # same-origin in production (Flask serves React)
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_HTTPONLY = True
     SQLALCHEMY_DATABASE_URI = _fix_postgres_url(os.environ.get('DATABASE_URL'))
-    CORS_ORIGINS = []                  # no CORS needed — Flask serves the SPA directly
+    CORS_ORIGINS = []
 
 
 class TestingConfig(Config):

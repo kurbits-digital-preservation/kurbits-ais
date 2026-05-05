@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
 import {
   FolderOpen, Users, MapPin, Tag, ChevronDown,
-  LogOut, Building2, Settings, Search, Flag, PackageOpen, LayoutList
+  LogOut, Building2, Settings, Search, Flag, PackageOpen
 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth'
 import { authApi } from '@/api'
@@ -10,12 +10,12 @@ import styles from './AppLayout.module.css'
 import { GlobalSearchModal, SearchTrigger } from './GlobalSearch'
 
 const NAV_ITEMS = [
-  { to: '/app/resources',       icon: FolderOpen, label: 'Resources' },
-  { to: '/app/agents',          icon: Users,      label: 'Agents' },
-  { to: '/app/locations',       icon: MapPin,     label: 'Locations' },
-  { to: '/app/classifications',  icon: Tag,        label: 'Classifications' },
-  { to: '/app/flags',             icon: Flag,        label: 'Flags' },
-  { to: '/app/acquisitions',      icon: PackageOpen, label: 'Acquisitions' },
+  { to: '/app/resources',          icon: FolderOpen,  label: 'Resources' },
+  { to: '/app/agents',             icon: Users,       label: 'Agents' },
+  { to: '/app/locations',          icon: MapPin,      label: 'Locations' },
+  { to: '/app/classifications',    icon: Tag,         label: 'Classifications' },
+  { to: '/app/flags',              icon: Flag,        label: 'Flags' },
+  { to: '/app/acquisitions',       icon: PackageOpen, label: 'Acquisitions' },
 ]
 
 export default function AppLayout() {
@@ -53,18 +53,19 @@ export default function AppLayout() {
       <header className={styles.topbar}>
         {/* Left: wordmark + nav */}
         <div className={styles.topbarLeft}>
+          <img src="/kurbits.png" alt="" className={styles.topbarLogo} aria-hidden="true" />
           <span className={styles.wordmark}>Kurbits</span>
 
           <nav className={styles.topbarNav}>
-            {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+            {NAV_ITEMS.map(({ to, label }) => (
               <NavLink
                 key={to}
                 to={to}
+                end
                 className={({ isActive }) =>
                   `${styles.topbarNavItem} ${isActive ? styles.topbarNavItemActive : ''}`
                 }
               >
-                <Icon size={14} />
                 {label}
               </NavLink>
             ))}

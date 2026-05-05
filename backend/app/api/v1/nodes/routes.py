@@ -1887,3 +1887,103 @@ def list_all_flags():
         'pages': max(1, (total + per_page - 1) // per_page),
         'per_page': per_page,
     })
+
+
+# ── Label printing ────────────────────────────────────────────────────
+
+# POST /api/v1/nodes/labels
+# Body: { node_ids: [1,2,3], format: "avery_l7163", copies: 1 }
+@bp.route('/nodes/labels', methods=['POST'])
+@login_required
+def print_labels():
+    """Generate a label PDF for one or more nodes."""
+    from flask import make_response
+    from app.labels import generate_label_pdf, LabelData
+    from app.models.location import Location
+
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+
+    node_ids = data.get('node_ids', [])
+    fmt = data.get('format', 'avery_l7163')
+    copies = max(1, min(int(data.get('copies', 1)), 10))
+
+    if not node_ids:
+        return error('node_ids is required', 400)
+    if len(node_ids) > 200:
+        return error('Maximum 200 labels per request', 400)
+
+    nodes = db.session.execute(
+        sa.select(Node)
+        .where(
+            Node.id.in_(node_ids),
+            Node.institution_id == institution_id,
+        )
+        .order_by(Node.ref_code)
+    ).scalars().all()
+
+    if not nodes:
+        return error('No nodes found', 404)
+
+    from app.models import Institution
+    institution = db.session.get(Institution, institution_id)
+    inst_name = institution.name if institution else ''
+
+    labels = []
+    for node in nodes:
+        location_path = None
+        if node.current_location_id:
+            loc = db.session.get(Location, node.current_location_id)
+            if loc:
+                location_path = loc.get_full_path()
+
+        labels.append(LabelData(
+            ref_code=node.ref_code or node.local_ref,
+            title=node.title,
+            level=node.level_of_description or '',
+            local_ref=node.local_ref or '',
+            date_from=node.date_start.strftime('%Y') if node.date_start else None,
+            date_to=node.date_end.strftime('%Y') if node.date_end else None,
+            institution_name=inst_name,
+            location_path=location_path,
+            copies=copies,
+        ))
+
+    try:
+        pdf_bytes = generate_label_pdf(labels, format_key=fmt)
+    except Exception as e:
+        current_app.logger.error(f'Label generation failed: {e}')
+        return error(f'Label generation failed: {e}', 500)
+
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = 'inline; filename="labels.pdf"'
+    return response
+
+
+# ── Finding aid ───────────────────────────────────────────────────────
+
+# GET /api/v1/nodes/<id>/finding-aid
+@bp.route('/nodes/<int:node_id>/finding-aid', methods=['GET'])
+@login_required
+def print_finding_aid(node_id):
+    """Generate a finding aid PDF for a node and all its descendants."""
+    from flask import make_response
+    from app.reports import generate_finding_aid
+
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    try:
+        pdf_bytes = generate_finding_aid(node_id, institution_id, db)
+    except Exception as e:
+        current_app.logger.error(f'Finding aid generation failed: {e}')
+        return error(f'Failed to generate finding aid: {e}', 500)
+
+    safe_title = (node.title or 'finding_aid').replace(' ', '_')[:40]
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename="{safe_title}_finding_aid.pdf"'
+    return response

@@ -11,6 +11,9 @@ interface NodeTreeProps {
   onAddChild?: (parentId: number) => void
   searchQuery?: string
   hierarchyTypeId?: number
+  // Multi-select for bulk actions
+  selectedIds?: Set<number>
+  onToggleSelect?: (node: NodeStub) => void
 }
 
 interface NodeRowProps {
@@ -21,9 +24,11 @@ interface NodeRowProps {
   onToggle: (id: number) => void
   onSelect: (node: NodeStub) => void
   onAddChild?: (parentId: number) => void
+  selectedIds?: Set<number>
+  onToggleSelect?: (node: NodeStub) => void
 }
 
-function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onAddChild }: NodeRowProps) {
+function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onAddChild, selectedIds, onToggleSelect }: NodeRowProps) {
   const expanded = expandedIds.has(node.id)
 
   const { data: childrenData, isLoading } = useQuery({
@@ -38,14 +43,24 @@ function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onA
   }, [node.has_children, node.id, onToggle])
 
   const isSelected = selectedId === node.id
+  const isChecked = selectedIds?.has(node.id) ?? false
 
   return (
     <div className={styles.nodeRow}>
       <div
-        className={`${styles.nodeItem} ${isSelected ? styles.selected : ''}`}
-        style={{ paddingLeft: `${12 + depth * 18}px` }}
-        onClick={() => onSelect(node)}
+        className={`${styles.nodeItem} ${isSelected ? styles.selected : ''} ${isChecked ? styles.checked : ''}`}
+        style={{ paddingLeft: `${onToggleSelect ? 6 + depth * 18 : 12 + depth * 18}px` }}
+        onClick={() => onToggleSelect ? onToggleSelect(node) : onSelect(node)}
       >
+        {onToggleSelect && (
+          <input
+            type="checkbox"
+            checked={isChecked}
+            onChange={e => { e.stopPropagation(); onToggleSelect(node) }}
+            onClick={e => e.stopPropagation()}
+            style={{ marginRight: 6, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--color-accent)' }}
+          />
+        )}
         <button
           className={styles.expandBtn}
           onClick={toggle}
@@ -101,6 +116,8 @@ function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onA
               onToggle={onToggle}
               onSelect={onSelect}
               onAddChild={onAddChild}
+              selectedIds={selectedIds}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </div>
@@ -109,7 +126,7 @@ function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onA
   )
 }
 
-export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery, hierarchyTypeId }: NodeTreeProps) {
+export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery, hierarchyTypeId, selectedIds, onToggleSelect }: NodeTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
 
   const { data, isLoading, error } = useQuery({
@@ -193,10 +210,19 @@ export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery
         {(searchResults as any[]).map((node: any) => (
           <div
             key={node.id}
-            className={`${styles.nodeItem} ${node.id === selectedId ? styles.selected : ''}`}
+            className={`${styles.nodeItem} ${node.id === selectedId ? styles.selected : ''} ${selectedIds?.has(node.id) ? styles.checked : ''}`}
             style={{ paddingLeft: 'var(--space-3)', cursor: 'pointer' }}
-            onClick={() => onSelect(node)}
+            onClick={() => onToggleSelect ? onToggleSelect(node) : onSelect(node)}
           >
+            {onToggleSelect && (
+              <input
+                type="checkbox"
+                checked={selectedIds?.has(node.id) ?? false}
+                onChange={() => onToggleSelect(node)}
+                onClick={e => e.stopPropagation()}
+                style={{ marginRight: 6, flexShrink: 0, cursor: 'pointer', accentColor: 'var(--color-accent)' }}
+              />
+            )}
             <div className={styles.nodeInfo}>
               <span className={styles.nodeTitle}>{node.title}</span>
               <div className={styles.nodeMeta}>
@@ -226,6 +252,8 @@ export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery
           onToggle={onToggle}
           onSelect={onSelect}
           onAddChild={onAddChild}
+          selectedIds={selectedIds}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </div>

@@ -3,13 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { nodesApi } from '@/api'
 import {
-  Plus, MapPin, Package, ArrowDownToLine, ArrowUpFromLine, ExternalLink, ArrowRightLeft,
+  Plus, MapPin, Package, ArrowDownToLine, ArrowUpFromLine, ExternalLink, ArrowRightLeft, FileText,
   ArrowLeftRight, Pencil, Trash2, X, Save, Clock,
   BarChart3, ChevronRight
 } from 'lucide-react'
 import { locationsApi } from '@/api'
 import LocationTree from '@/components/tree/LocationTree'
-import { PageShell, SidebarPanel, EmptyState, Tabs, FieldList, Spinner } from '@/components/ui'
+import { PageShell, SidebarPanel, EmptyState, Tabs, FieldList, Spinner, PrintLabelsButton } from '@/components/ui'
 import HierarchyLevelSelect from '@/components/ui/HierarchyLevelSelect'
 import type { LocationDetail, LocationStub } from '@/types'
 import styles from './LocationsPage.module.css'
@@ -324,6 +324,7 @@ function StoredItemsTab({
               >
                 <ExternalLink size={13} />
               </button>
+              <PrintLabelsButton nodeIds={[node.id]} label="Label" />
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => onMove({ id: node.id, title: node.title, ref_code: node.ref_code })}
@@ -714,6 +715,18 @@ function LocationDetailPanel({
                   <ArrowDownToLine size={13} /> Check in
                 </button>
               )}
+              <button className="btn btn-ghost btn-sm" onClick={async () => {
+                try {
+                  const res = await locationsApi.inventory(locationId)
+                  const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' })
+                  const url = URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url; a.download = `inventory_${locationId}.pdf`; a.click()
+                  setTimeout(() => URL.revokeObjectURL(url), 2000)
+                } catch (e) { alert('Failed to generate inventory') }
+              }}>
+                <FileText size={13} /> Inventory
+              </button>
               <button className="btn btn-secondary btn-sm" onClick={() => onAddChild(locationId)}>
                 <Plus size={13} /> Add child
               </button>

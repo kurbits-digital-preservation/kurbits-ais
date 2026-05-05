@@ -5,12 +5,23 @@ Usage:
     flask import-visual-arkiv --institution-id 1 --file export.xml
     flask import-visual-arkiv --institution-id 1 --file export.xml --force-agents
     flask import-visual-arkiv --institution-id 1 --file export.xml --dry-run
+    flask import-visual-arkiv --institution-id 1 --file export.xml --parse-codes
 
-Structure mapping:
-    Arkivbildare  → Agent (organization / person / family)
+Structure mapping (Allmänna Arkivschemat):
+    Arkivbildare  → Agent
     Arkiv         → Node level=Fonds
-    SerieAA       → Node level=Series (child of Fonds)
-    Volym         → Node level=Volume  (child of Series)
+    SerieAA (Y)         → Node level=Series
+    SerieAA (Y+Z)       → Node level=Sub-series    (--parse-codes: child of Y)
+    SerieAA (Y+Z+A)     → Node level=Sub-sub-series (--parse-codes: child of Y+Z)
+    Volym               → Node level=Volume
+
+Structure mapping (Verksamhetsbaserad / classification-based):
+    Arkivbildare          → Agent
+    Arkiv                 → Node level=Fonds
+    KlassStrukt           → Classification tree under root "Klassificeringsstruktur"
+    HandlingsSlag         → Node level=Series (linked to Classification)
+    FörvaringsenhetRel    → Node level=Volume
+    --parse-codes: HandlingsSlag re-parented by HS_Struktur dot-notation
 
 The importer uses iterparse so it handles arbitrarily large files.
 """
@@ -25,52 +36,50 @@ from xml.etree.ElementTree import iterparse
 # ── Helpers ───────────────────────────────────────────────────────────
 
 def _txt(el, tag: str, default: str = '') -> str:
-    """Get trimmed text of a child element, or default."""
     child = el.find(tag)
     if child is None or not child.text:
         return default
     return child.text.strip()
 
 
-def _serie_code(el) -> str:
-    """Compose serie reference: Y + Z + A  e.g. 'A', '1' → 'A1'; 'F', '2', 'a' → 'F2a'."""
+def _serie_parts(el) -> tuple[str, str, str]:
+    """Return (Y, Z, A) components of a SerieAA code."""
     y = _txt(el, 'Serie_Y', '').strip()
     z = _txt(el, 'Serie_Z', '').strip()
     a = _txt(el, 'Serie_A', '').strip()
-    code = y
-    if z and z != '0':
-        code += z
-    if a:
-        code += a
-    return code or 'X'
+    if z == '0':
+        z = ''
+    return y, z, a
+
+
+def _serie_code(el) -> str:
+    y, z, a = _serie_parts(el)
+    return (y + z + a) or 'X'
 
 
 def _ips_to_agent_type(ips: str) -> str:
     mapping = {
         'I': 'organization',
         'P': 'person',
-        'S': 'organization',  # Stiftelse/förening → organization
+        'S': 'organization',
         'F': 'family',
     }
     return mapping.get(ips.upper(), 'organization')
 
 
 def _hyllmeter(raw: str) -> str | None:
-    """Convert mm integer to readable extent string."""
     if not raw or raw == '0':
         return None
     try:
         mm = int(raw)
         if mm == 0:
             return None
-        metres = mm / 1000
-        return f'{metres:.1f} hm'
+        return f'{mm / 1000:.1f} hm'
     except ValueError:
         return None
 
 
 def _make_unique_ref(base_ref: str, institution_id: int, parent_id, db, Node) -> str:
-    """Ensure local_ref is unique within parent scope by appending suffix if needed."""
     import sqlalchemy as sa
     candidate = base_ref
     suffix = 1
@@ -88,17 +97,28 @@ def _make_unique_ref(base_ref: str, institution_id: int, parent_id, db, Node) ->
         candidate = f'{base_ref}-{suffix}'
 
 
+def _nivaa_to_level_name(nivaa: str) -> str:
+    """Map KlassStrukt_Nivaa to classification level name."""
+    mapping = {
+        '0': 'Verksamhetsområde',
+        '1': 'Processgrupp',
+        '2': 'Process',
+    }
+    return mapping.get(nivaa.strip(), f'Nivå-{nivaa.strip()}')
+
+
 # ── Hierarchy bootstrap ───────────────────────────────────────────────
 
-def _ensure_va_hierarchy(institution_id: int, db, log) -> tuple:
+def _ensure_va_hierarchy(institution_id: int, db, log, parse_codes: bool = False) -> tuple:
     """
-    Find or create an ISAD(G) hierarchy extended with 'Volume' level.
+    Find or create an ISAD(G) hierarchy.
+    With parse_codes=True also ensures Sub-series and Sub-sub-series levels exist.
     Returns (hierarchy_type, {level_name: HierarchyLevel}).
     """
     from app.models import HierarchyType, HierarchyLevel, HierarchyEntityType
+    from app.models.hierarchy import hierarchy_level_relationships
     import sqlalchemy as sa
 
-    # Prefer existing ISAD(G) or create Visual Arkiv specific type
     ht = db.session.execute(
         sa.select(HierarchyType).where(
             HierarchyType.institution_id == institution_id,
@@ -107,7 +127,7 @@ def _ensure_va_hierarchy(institution_id: int, db, log) -> tuple:
     ).scalars().first()
 
     if not ht:
-        log('  Creating ISAD(G) hierarchy type…')
+        log('  Creating ISAD(G) hierarchy type...')
         ht = HierarchyType(
             institution_id=institution_id,
             name='ISAD(G)',
@@ -118,13 +138,10 @@ def _ensure_va_hierarchy(institution_id: int, db, log) -> tuple:
         db.session.add(ht)
         db.session.flush()
 
-    # Collect existing levels
     existing = {
         lv.name.lower(): lv
         for lv in db.session.execute(
-            sa.select(HierarchyLevel).where(
-                HierarchyLevel.hierarchy_type_id == ht.id
-            )
+            sa.select(HierarchyLevel).where(HierarchyLevel.hierarchy_type_id == ht.id)
         ).scalars().all()
     }
 
@@ -148,26 +165,36 @@ def _ensure_va_hierarchy(institution_id: int, db, log) -> tuple:
 
     levels['Fonds']  = _get_or_create_level('Fonds',  0, False)
     levels['Series'] = _get_or_create_level('Series', 2, False)
-    levels['Volume'] = _get_or_create_level('Volume', 4, True)
+    levels['Volume'] = _get_or_create_level('Volume', 6, True)
 
-    # Ensure Series → Volume and Fonds → Series parent-child relations exist
-    from app.models.hierarchy import hierarchy_level_relationships as hierarchy_level_relations
-    for parent, child in [
-        (levels['Fonds'], levels['Series']),
-        (levels['Fonds'], levels['Volume']),
+    if parse_codes:
+        levels['Sub-series']     = _get_or_create_level('Sub-series',     3, False)
+        levels['Sub-sub-series'] = _get_or_create_level('Sub-sub-series', 4, False)
+
+    relations = [
+        (levels['Fonds'],  levels['Series']),
+        (levels['Fonds'],  levels['Volume']),
         (levels['Series'], levels['Volume']),
-    ]:
+    ]
+    if parse_codes:
+        relations += [
+            (levels['Series'],         levels['Sub-series']),
+            (levels['Sub-series'],     levels['Sub-sub-series']),
+            (levels['Sub-series'],     levels['Volume']),
+            (levels['Sub-sub-series'], levels['Volume']),
+        ]
+
+    for parent, child in relations:
         exists = db.session.execute(
-            sa.select(hierarchy_level_relations).where(
-                hierarchy_level_relations.c.parent_id == parent.id,
-                hierarchy_level_relations.c.child_id == child.id,
+            sa.select(hierarchy_level_relationships).where(
+                hierarchy_level_relationships.c.parent_id == parent.id,
+                hierarchy_level_relationships.c.child_id == child.id,
             )
         ).first()
         if not exists:
             db.session.execute(
-                hierarchy_level_relations.insert().values(
-                    parent_id=parent.id,
-                    child_id=child.id,
+                hierarchy_level_relationships.insert().values(
+                    parent_id=parent.id, child_id=child.id,
                 )
             )
 
@@ -175,53 +202,45 @@ def _ensure_va_hierarchy(institution_id: int, db, log) -> tuple:
     return ht, levels
 
 
-
 def _year_to_date(year_str: str | None, end: bool = False):
-    """Convert year string to Python date. end=True gives Dec 31."""
     from datetime import date as date_cls
     if not year_str or not year_str.strip():
         return None
-    # Extract first 4-digit year
     m = re.search(r'\d{4}', year_str)
     if not m:
         return None
     year = int(m.group())
+    if year > 2400:
+        return None
     if end:
         return date_cls(year, 12, 31)
     return date_cls(year, 1, 1)
 
+
 # ── Agent import ──────────────────────────────────────────────────────
 
 def _get_system_user_id(institution_id: int, db) -> int | None:
-    """Find any admin/archivist user in the institution for note attribution."""
-    from app.models.user import User
     from app.models.institution import user_institution_association
     import sqlalchemy as sa
-    result = db.session.execute(
+    return db.session.execute(
         sa.select(user_institution_association.c.user_id).where(
             user_institution_association.c.institution_id == institution_id
         ).limit(1)
     ).scalar()
-    return result
 
 
 def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
-    """
-    Parse <Arkivbildare> element and create/find Agent.
-    Returns (agent, created_bool).
-    """
     from app.models.agent import Agent, AgentType, AgentNote
     import sqlalchemy as sa
     system_user_id = _get_system_user_id(institution_id, db)
 
-    name = _txt(el, 'Arkivb_Namn') or _txt(el, 'Arkivb_NamnUtskr') or 'Unknown'
-    ips_type = _txt(el, 'Arkivb_IPSTyp', 'I')
+    name           = _txt(el, 'Arkivb_Namn') or _txt(el, 'Arkivb_NamnUtskr') or 'Unknown'
+    ips_type       = _txt(el, 'Arkivb_IPSTyp', 'I')
     agent_type_str = _ips_to_agent_type(ips_type)
-    date_from = _txt(el, 'Arkivb_Verksamf') or None
-    date_to   = _txt(el, 'Arkivb_Verksamt') or None
-    description = _txt(el, 'Arkivb_Sammanfattning') or None
+    date_from      = _txt(el, 'Arkivb_Verksamf') or None
+    date_to        = _txt(el, 'Arkivb_Verksamt') or None
+    description    = _txt(el, 'Arkivb_Sammanfattning') or None
 
-    # Check for existing agent with same name
     existing = db.session.execute(
         sa.select(Agent).where(
             Agent.institution_id == institution_id,
@@ -255,10 +274,8 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
         created = True
         log(f'  Created agent: {name}')
 
-    # History note
     historik = _txt(el, './/Historik_Historik')
     if historik:
-        # Remove or update existing history note
         existing_note = db.session.execute(
             sa.select(AgentNote).where(
                 AgentNote.agent_id == agent.id,
@@ -278,10 +295,9 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
     return agent, created
 
 
-# ── Node import ───────────────────────────────────────────────────────
+# ── Fonds import ──────────────────────────────────────────────────────
 
 def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_user_id=None) -> object:
-    """Parse <Arkiv> → Fonds node."""
     from app.models.node import Node, NodeNote
     import sqlalchemy as sa
 
@@ -292,8 +308,7 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
     notes_txt = _txt(el, 'Arkiv_Anteckningar') or None
     placering = _txt(el, 'Arkiv_Placering') or None
     sekretess = _txt(el, 'Arkiv_Sekretess', '0')
-
-    extent = _hyllmeter(_txt(el, 'Arkiv_HyllmeterMetric'))
+    extent    = _hyllmeter(_txt(el, 'Arkiv_HyllmeterMetric'))
 
     description_parts = []
     if extent:
@@ -325,22 +340,21 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
 
     if notes_txt:
         db.session.add(NodeNote(node_id=node.id, note_type='general', content=notes_txt, created_by_id=system_user_id))
-
     historik = _txt(el, 'Arkiv_Historik')
     if historik:
         db.session.add(NodeNote(node_id=node.id, note_type='administrative_history', content=historik, created_by_id=system_user_id))
 
-    log(f'    Fonds: {node.ref_code} — {name}')
+    log(f'    Fonds: {node.ref_code} -- {name}')
     return node
 
 
-def _import_serie(el, fonds_node, institution_id: int, ht, levels, db, log, system_user_id=None) -> object:
-    """Parse <SerieAA> → Series node."""
+# ── AA Series import ──────────────────────────────────────────────────
+
+def _build_serie_node(el, parent_node, level_name, local_ref, institution_id, ht, db, log, system_user_id=None):
+    """Create a single Series / Sub-series / Sub-sub-series node from <SerieAA>."""
     from app.models.node import Node, NodeNote
-    import sqlalchemy as sa
 
     title     = _txt(el, 'Serie_Serierubrik') or 'Untitled series'
-    code      = _serie_code(el)
     notes_txt = _txt(el, 'Serie_Anmerkning') or None
     placering = _txt(el, 'Serie_Placering') or None
     sekretess = _txt(el, 'Serie_Sekretess', '0')
@@ -355,44 +369,131 @@ def _import_serie(el, fonds_node, institution_id: int, ht, levels, db, log, syst
         sek_text = _txt(el, 'Serie_SekretessText') or 'Secrecy restrictions apply'
         description_parts.append(f'Access restrictions: {sek_text}')
     if gallras == '1':
-        disposition = f'Appraisal: scheduled for disposal'
+        disp = 'Appraisal: scheduled for disposal'
         if gallr_ar:
-            disposition += f' ({gallr_ar})'
+            disp += f' ({gallr_ar})'
         if gallr_txt:
-            disposition += f' — {gallr_txt}'
-        description_parts.append(disposition)
-
-    local_ref = _make_unique_ref(code, institution_id, fonds_node.id, db, Node)
+            disp += f' -- {gallr_txt}'
+        description_parts.append(disp)
 
     node = Node(
         institution_id=institution_id,
-        parent_id=fonds_node.id,
+        parent_id=parent_node.id,
         local_ref=local_ref,
         title=title,
-        level_of_description='Series',
+        level_of_description=level_name,
         hierarchy_type_id=ht.id,
-        date_start=None,
-        date_end=None,
         description='\n'.join(description_parts) if description_parts else None,
     )
-    node.ref_code = f'{fonds_node.ref_code}/{local_ref}'
+    node.ref_code = f'{parent_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
 
     if notes_txt:
         db.session.add(NodeNote(node_id=node.id, note_type='general', content=notes_txt, created_by_id=system_user_id))
 
-    log(f'      Series: {node.ref_code} — {title}')
+    log(f'      {level_name}: {node.ref_code} -- {title}')
     return node
 
 
+def _import_series_flat(arkiv_el, fonds_node, institution_id, ht, levels, db, log, system_user_id, stats):
+    """Import all SerieAA flat under Fonds (no --parse-codes)."""
+    from app.models.node import Node
+
+    for serie_el in arkiv_el.findall('.//SerieAA'):
+        code      = _serie_code(serie_el)
+        local_ref = _make_unique_ref(code, institution_id, fonds_node.id, db, Node)
+        serie     = _build_serie_node(
+            serie_el, fonds_node, 'Series', local_ref,
+            institution_id, ht, db, log, system_user_id
+        )
+        stats['series_created'] += 1
+
+        for vol_idx, volym_el in enumerate(serie_el.findall('.//Volym'), start=1):
+            _import_volym(volym_el, serie, institution_id, ht, db, log, vol_idx, system_user_id)
+            stats['volumes_created'] += 1
+
+
+def _import_series_parsed(arkiv_el, fonds_node, institution_id, ht, levels, db, log, system_user_id, stats):
+    """
+    Import SerieAA building a real tree from Y / Y+Z / Y+Z+A code structure.
+
+    Y        -> Series         (child of Fonds)
+    Y+Z      -> Sub-series     (child of Y node)
+    Y+Z+A    -> Sub-sub-series (child of Y+Z node)
+
+    If a parent code is missing from the export a stub node is created.
+    """
+    from app.models.node import Node
+
+    # Collect all series elements keyed by their full code
+    series_els: dict[str, object] = {}
+    for serie_el in arkiv_el.findall('.//SerieAA'):
+        code = _serie_code(serie_el)
+        series_els[code] = serie_el
+
+    serie_nodes: dict[str, Node] = {}
+
+    def _get_or_create_parent(parent_code: str, parent_level: str) -> object:
+        if parent_code in serie_nodes:
+            return serie_nodes[parent_code]
+        local_ref = _make_unique_ref(parent_code, institution_id, fonds_node.id, db, Node)
+        stub = Node(
+            institution_id=institution_id,
+            parent_id=fonds_node.id,
+            local_ref=local_ref,
+            title=parent_code,
+            level_of_description=parent_level,
+            hierarchy_type_id=ht.id,
+        )
+        stub.ref_code = f'{fonds_node.ref_code}/{local_ref}'
+        db.session.add(stub)
+        db.session.flush()
+        serie_nodes[parent_code] = stub
+        log(f'      {parent_level} (stub): {stub.ref_code} -- {parent_code}')
+        return stub
+
+    def _sort_key(code):
+        y, z, a = _serie_parts(series_els[code])
+        return (y, z or '', a or '')
+
+    for code in sorted(series_els.keys(), key=_sort_key):
+        serie_el = series_els[code]
+        y, z, a  = _serie_parts(serie_el)
+
+        if z and a:
+            parent_code  = y + z
+            parent_level = 'Sub-series'
+            level_name   = 'Sub-sub-series'
+            parent_node  = _get_or_create_parent(parent_code, parent_level)
+            local_ref    = _make_unique_ref(code, institution_id, parent_node.id, db, Node)
+        elif z:
+            parent_code  = y
+            parent_level = 'Series'
+            level_name   = 'Sub-series'
+            parent_node  = _get_or_create_parent(parent_code, parent_level)
+            local_ref    = _make_unique_ref(code, institution_id, parent_node.id, db, Node)
+        else:
+            level_name  = 'Series'
+            parent_node = fonds_node
+            local_ref   = _make_unique_ref(code, institution_id, fonds_node.id, db, Node)
+
+        node = _build_serie_node(
+            serie_el, parent_node, level_name, local_ref,
+            institution_id, ht, db, log, system_user_id
+        )
+        serie_nodes[code] = node
+        stats['series_created'] += 1
+
+        for vol_idx, volym_el in enumerate(serie_el.findall('.//Volym'), start=1):
+            _import_volym(volym_el, node, institution_id, ht, db, log, vol_idx, system_user_id)
+            stats['volumes_created'] += 1
+
+
 def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int, system_user_id=None) -> object:
-    """Parse <Volym> → Volume node (OtherLevel='Volume')."""
     from app.models.node import Node, NodeNote
-    import sqlalchemy as sa
 
     volnr     = _txt(el, 'Volym_Volnr') or str(vol_idx)
-    vonr      = _txt(el, 'Volym_Vonr') or volnr
     tid       = _txt(el, 'Volym_Tid') or None
     date_from = _txt(el, 'Volym_TidFrom') or None
     date_to   = _txt(el, 'Volym_TidTom') or None
@@ -403,9 +504,8 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
     gallr_txt = _txt(el, 'Volym_GallrasText') or None
     omf_enhet = _txt(el, 'Volym_OmfEnhet') or None
     omf_mgd   = _txt(el, 'Volym_OmfMgd', '0')
-    forvtyp   = _txt(el, 'Volyml_FörvaringsenhetTyp') or None
+    forvtyp   = _txt(el, 'Volyml_ForvaringsenhetTyp') or None
 
-    # Title: volume number + date range
     title = f'Vol. {volnr}'
     if tid:
         title += f' ({tid})'
@@ -421,11 +521,11 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
         sek_text = _txt(el, 'Volym_SekretessText') or 'Secrecy restrictions apply'
         description_parts.append(f'Access restrictions: {sek_text}')
     if gallr_ar or gallr_txt:
-        disp = f'Appraisal: scheduled for disposal'
+        disp = 'Appraisal: scheduled for disposal'
         if gallr_ar:
             disp += f' ({gallr_ar})'
         if gallr_txt:
-            disp += f' — {gallr_txt}'
+            disp += f' -- {gallr_txt}'
         description_parts.append(disp)
 
     local_ref = _make_unique_ref(volnr, institution_id, serie_node.id, db, Node)
@@ -448,12 +548,367 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
     if anm:
         db.session.add(NodeNote(node_id=node.id, note_type='general', content=anm, created_by_id=system_user_id))
 
-    log(f'        Volume: {node.ref_code} — {title}')
+    log(f'        Volume: {node.ref_code} -- {title}')
     return node
 
 
+# ── Classification import ─────────────────────────────────────────────
+
+def _ensure_klass_root(institution_id: int, ht, version_label: str, db, log, system_user_id=None) -> object:
+    """
+    Find or create the root Classification node 'Klassificeringsstruktur'.
+    All KlassStrukt nodes are parented under this root.
+    """
+    from app.models.classification import Classification
+    import sqlalchemy as sa
+
+    root_name = 'Klassificeringsstruktur'
+    root_code = re.sub(r'[^A-Za-z0-9-]', '-', version_label)[:50]
+
+    existing = db.session.execute(
+        sa.select(Classification).where(
+            Classification.institution_id == institution_id,
+            Classification.parent_id == None,
+            Classification.hierarchy_type_id == ht.id,
+            Classification.code == root_code,
+        )
+    ).scalars().first()
+
+    if existing:
+        return existing
+
+    root = Classification(
+        institution_id=institution_id,
+        name=root_name,
+        code=root_code,
+        level_name='Klassificeringsstruktur',
+        hierarchy_type_id=ht.id,
+        parent_id=None,
+        status='published',
+        version_label=version_label,
+        created_by_id=system_user_id,
+    )
+    db.session.add(root)
+    db.session.flush()
+    log(f'      Classification root: {root_name} ({version_label})')
+    return root
+
+
+def _import_klass_strukt_tree(arkiv_el, institution_id: int, ht, db, log, system_user_id=None) -> dict[str, object]:
+    """
+    Parse all <KlassStrukt> elements nested inside <Arkiv> and create
+    Classification rows under a root 'Klassificeringsstruktur' node.
+
+    Levels:  Nivaa 0 -> Verksamhetsomrade
+             Nivaa 1 -> Processgrupp
+             Nivaa 2 -> Process
+
+    Returns dict: Strukturenhet -> Classification instance.
+    """
+    from app.models.classification import Classification
+    import sqlalchemy as sa
+
+    klass_ver_el  = arkiv_el.find('KlassStruktVersion')
+    version_label = (
+        _txt(klass_ver_el, 'KlassStruktVer_KlassStruktVersion', 'KS')
+        if klass_ver_el is not None else 'KS'
+    )
+
+    root = _ensure_klass_root(institution_id, ht, version_label, db, log, system_user_id)
+    strukt_map: dict[str, Classification] = {}
+
+    def _process_klass_el(el, parent_classification):
+        strukturenhet = _txt(el, 'KlassStrukt_Strukturenhet')
+        namn          = _txt(el, 'KlassStrukt_StruktNamn')
+        nivaa         = _txt(el, 'KlassStrukt_Nivaa', '0')
+
+        if not strukturenhet or not namn:
+            return
+
+        level_name = _nivaa_to_level_name(nivaa)
+        code       = strukturenhet.split('.')[-1].lstrip('0') or '0'
+
+        existing = db.session.execute(
+            sa.select(Classification).where(
+                Classification.institution_id == institution_id,
+                Classification.code == code,
+                Classification.parent_id == parent_classification.id,
+                Classification.hierarchy_type_id == ht.id,
+            )
+        ).scalars().first()
+
+        if existing:
+            strukt_map[strukturenhet] = existing
+        else:
+            c = Classification(
+                institution_id=institution_id,
+                name=namn,
+                code=code,
+                level_name=level_name,
+                hierarchy_type_id=ht.id,
+                parent_id=parent_classification.id,
+                status='published',
+                version_label=version_label,
+                created_by_id=system_user_id,
+            )
+            db.session.add(c)
+            db.session.flush()
+            strukt_map[strukturenhet] = c
+            log(f'      Classification: {strukturenhet} -- {namn}')
+
+        for child_el in el.findall('KlassStrukt'):
+            _process_klass_el(child_el, strukt_map[strukturenhet])
+
+    for top_el in arkiv_el.findall('KlassStrukt'):
+        _process_klass_el(top_el, root)
+
+    return strukt_map
+
+
+def _resolve_hs_classification(hs_el, strukt_map: dict) -> object | None:
+    """
+    Resolve Classification for a HandlingsSlag via HS_StrukturSort.
+    '0000100000.0000500000' -> strukturenhet '00001.00005'
+    """
+    struktur_sort = _txt(hs_el, 'HS_StrukturSort')
+    if not struktur_sort or not strukt_map:
+        return None
+    try:
+        segments      = struktur_sort.split('.')
+        ident_parts   = [seg[:5] for seg in segments if seg.strip('0')]
+        if not ident_parts:
+            return None
+        strukturenhet = '.'.join(ident_parts)
+        return strukt_map.get(strukturenhet)
+    except Exception:
+        return None
+
+
+def _link_node_to_classification(node, classification, db) -> None:
+    from app.models.classification import classification_node_association
+    import sqlalchemy as sa
+
+    if classification is None:
+        return
+    exists = db.session.execute(
+        sa.select(classification_node_association).where(
+            classification_node_association.c.classification_id == classification.id,
+            classification_node_association.c.node_id == node.id,
+        )
+    ).first()
+    if not exists:
+        db.session.execute(
+            classification_node_association.insert().values(
+                classification_id=classification.id,
+                node_id=node.id,
+            )
+        )
+
+
+# ── HandlingsSlag / FörvaringsenhetRel import ─────────────────────────
+
+def _build_handlingsslag_node(hs_el, parent_node, institution_id, ht, strukt_map,
+                               db, log, system_user_id, level_name='Series') -> object:
+    """Create a Series/Sub-series node from <HandlingsSlag> and link to Classification."""
+    from app.models.node import Node, NodeNote
+
+    namn      = _txt(hs_el, 'HS_Namn') or 'Untitled'
+    struktur  = _txt(hs_el, 'HS_Struktur') or ''
+    beskr     = _txt(hs_el, 'HS_Beskr') or None
+    anm       = _txt(hs_el, 'HS_Anmerkning') or None
+    placering = _txt(hs_el, 'HS_Placering') or None
+    sekretess = _txt(hs_el, 'HS_Sekretess', '0')
+    gallras   = _txt(hs_el, 'HS_Gallras', '0')
+    gallr_ar  = _txt(hs_el, 'HS_GallrasAr') or None
+    gallr_txt = _txt(hs_el, 'HS_GallrasText') or None
+
+    local_ref = _make_unique_ref(
+        struktur or namn[:20], institution_id, parent_node.id, db, Node
+    )
+
+    description_parts = []
+    if beskr:
+        description_parts.append(beskr)
+    if placering:
+        description_parts.append(f'Location: {placering}')
+    if sekretess == '1':
+        sek_text = _txt(hs_el, 'HS_SekretessText') or 'Secrecy restrictions apply'
+        description_parts.append(f'Access restrictions: {sek_text}')
+    if gallras == '1':
+        disp = 'Appraisal: scheduled for disposal'
+        if gallr_ar:
+            disp += f' ({gallr_ar})'
+        if gallr_txt:
+            disp += f' -- {gallr_txt}'
+        description_parts.append(disp)
+
+    node = Node(
+        institution_id=institution_id,
+        parent_id=parent_node.id,
+        local_ref=local_ref,
+        title=namn,
+        level_of_description=level_name,
+        hierarchy_type_id=ht.id,
+        description='\n'.join(description_parts) if description_parts else None,
+    )
+    node.ref_code = f'{parent_node.ref_code}/{local_ref}'
+    db.session.add(node)
+    db.session.flush()
+
+    if anm:
+        db.session.add(NodeNote(node_id=node.id, note_type='general', content=anm, created_by_id=system_user_id))
+
+    classification = _resolve_hs_classification(hs_el, strukt_map)
+    if classification:
+        _link_node_to_classification(node, classification, db)
+        log(f'      {level_name}: {node.ref_code} -- {namn} -> [{classification.get_full_code()}]')
+    else:
+        log(f'      {level_name}: {node.ref_code} -- {namn}')
+
+    return node
+
+
+def _import_handlingsslag_flat(hs_grupp, fonds_node, institution_id, ht, levels,
+                                strukt_map, db, log, system_user_id, stats):
+    """Import all HandlingsSlag flat under Fonds (no --parse-codes)."""
+    for hs_el in hs_grupp.findall('HandlingsSlag'):
+        serie = _build_handlingsslag_node(
+            hs_el, fonds_node, institution_id, ht, strukt_map,
+            db, log, system_user_id, level_name='Series'
+        )
+        stats['series_created'] += 1
+        for vol_idx, fe_el in enumerate(
+            hs_el.findall('.//ForvenhRelGrupp/FörvaringsenhetRel'), start=1
+        ):
+            _import_forvenhrel(fe_el, serie, institution_id, ht, db, log, vol_idx, system_user_id)
+            stats['volumes_created'] += 1
+
+
+def _import_handlingsslag_parsed(hs_grupp, fonds_node, institution_id, ht, levels,
+                                  strukt_map, db, log, system_user_id, stats):
+    """
+    Import HandlingsSlag building a tree from HS_Struktur dot-notation (--parse-codes).
+
+    HS_Struktur '1'   -> Series under Fonds
+    HS_Struktur '1.5' -> Sub-series under the '1' Series node
+    """
+    hs_list = hs_grupp.findall('HandlingsSlag')
+    struktur_nodes: dict[str, object] = {}
+
+    def _sort_key(el):
+        s = _txt(el, 'HS_Struktur', '')
+        try:
+            return tuple(float(p) for p in s.split('.'))
+        except ValueError:
+            return (0,)
+
+    for hs_el in sorted(hs_list, key=_sort_key):
+        struktur = _txt(hs_el, 'HS_Struktur', '').strip()
+
+        if '.' in struktur:
+            parent_struktur = struktur.rsplit('.', 1)[0]
+            if parent_struktur in struktur_nodes:
+                parent_node = struktur_nodes[parent_struktur]
+                level_name  = 'Sub-series'
+            else:
+                parent_node = fonds_node
+                level_name  = 'Series'
+        else:
+            parent_node = fonds_node
+            level_name  = 'Series'
+
+        node = _build_handlingsslag_node(
+            hs_el, parent_node, institution_id, ht, strukt_map,
+            db, log, system_user_id, level_name=level_name
+        )
+        stats['series_created'] += 1
+
+        if struktur:
+            struktur_nodes[struktur] = node
+
+        for vol_idx, fe_el in enumerate(
+            hs_el.findall('.//ForvenhRelGrupp/FörvaringsenhetRel'), start=1
+        ):
+            _import_forvenhrel(fe_el, node, institution_id, ht, db, log, vol_idx, system_user_id)
+            stats['volumes_created'] += 1
+
+
+def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
+                        vol_idx: int, system_user_id=None) -> object:
+    from app.models.node import Node, NodeNote
+
+    beteckning = _txt(el, 'ForvenhRel_Beteckning') or str(vol_idx)
+    tid        = _txt(el, 'ForvenhRel_Tid') or _txt(el, 'ForvenhRel_Stid') or None
+    date_from  = _txt(el, 'ForvenhRel_TidFrom') or None
+    date_to    = _txt(el, 'ForvenhRel_TidTom') or None
+    anm        = _txt(el, 'ForvenhRel_Anm') or None
+    anmerkn    = _txt(el, 'ForvenhRel_Anmerkningar') or None
+    etrad1     = _txt(el, 'ForvenhRel_Etrad1') or None
+    placering  = _txt(el, 'ForvenhRel_Placering') or None
+    sekretess  = _txt(el, 'ForvenhRel_Sekretess', '0')
+    gallr_ar   = _txt(el, 'ForvenhRel_GallrasAr') or None
+    gallr_txt  = _txt(el, 'ForvenhRel_GallrasText') or None
+    omf_enhet  = _txt(el, 'ForvenhRel_OmfEnhet') or None
+    omf_mgd    = _txt(el, 'ForvenhRel_OmfMgd', '0')
+    forvtyp    = _txt(el, 'ForvenhRel_ForvaringsenhetTyp') or None
+
+    if etrad1:
+        title = etrad1
+        if tid:
+            title += f' ({tid})'
+    else:
+        title = f'Vol. {beteckning}'
+        if tid:
+            title += f' ({tid})'
+
+    description_parts = []
+    if anm:
+        description_parts.append(anm)
+    if placering:
+        description_parts.append(f'Location: {placering}')
+    if forvtyp and forvtyp not in ('-', ''):
+        description_parts.append(f'Container type: {forvtyp}')
+    if omf_enhet and omf_enhet != '-' and omf_mgd != '0':
+        description_parts.append(f'Extent: {omf_mgd} {omf_enhet}')
+    if sekretess == '1':
+        sek_text = _txt(el, 'ForvenhRel_SekretessText') or 'Secrecy restrictions apply'
+        description_parts.append(f'Access restrictions: {sek_text}')
+    if gallr_ar or gallr_txt:
+        disp = 'Appraisal: scheduled for disposal'
+        if gallr_ar:
+            disp += f' ({gallr_ar})'
+        if gallr_txt:
+            disp += f' -- {gallr_txt}'
+        description_parts.append(disp)
+
+    ref_base  = beteckning if beteckning != '-' else str(vol_idx)
+    local_ref = _make_unique_ref(ref_base, institution_id, serie_node.id, db, Node)
+
+    node = Node(
+        institution_id=institution_id,
+        parent_id=serie_node.id,
+        local_ref=local_ref,
+        title=title,
+        level_of_description='Volume',
+        hierarchy_type_id=ht.id,
+        date_start=_year_to_date(date_from),
+        date_end=_year_to_date(date_to, end=True),
+        description='\n'.join(description_parts) if description_parts else None,
+    )
+    node.ref_code = f'{serie_node.ref_code}/{local_ref}'
+    db.session.add(node)
+    db.session.flush()
+
+    if anmerkn:
+        db.session.add(NodeNote(node_id=node.id, note_type='general', content=anmerkn, created_by_id=system_user_id))
+
+    log(f'        Volume: {node.ref_code} -- {title}')
+    return node
+
+
+# ── Agent -> Fonds link ───────────────────────────────────────────────
+
 def _link_agent_to_node(agent, fonds_node, institution_id: int, db) -> None:
-    """Link agent as creator of fonds (relation_type is a plain string column)."""
     from app.models.agent import agent_node_association
     import sqlalchemy as sa
 
@@ -473,56 +928,44 @@ def _link_agent_to_node(agent, fonds_node, institution_id: int, db) -> None:
         )
 
 
+# ── Schema detection ──────────────────────────────────────────────────
+
+def _detect_schema(arkiv_el) -> str:
+    """Return 'klass' if classification-based, else 'aa'."""
+    if arkiv_el.find('KlassStrukt') is not None:
+        return 'klass'
+    if arkiv_el.find('HandlingsslagGrupp') is not None:
+        return 'klass'
+    return 'aa'
+
+
 # ── Main iterparse walk ───────────────────────────────────────────────
 
 def _stream_import(filepath: str, institution_id: int, force_agents: bool,
-                   dry_run: bool, batch_size: int, db, log) -> dict:
-    """
-    Stream-parse the Visual Arkiv XML using iterparse.
-    Accumulates full <Arkivbildare> subtrees in memory (one at a time)
-    to handle arbitrarily large files.
-    """
-    import io
-    from xml.etree.ElementTree import Element, tostring, fromstring
-
+                   dry_run: bool, batch_size: int, parse_codes: bool, db, log) -> dict:
     stats = {
         'agents_created': 0, 'agents_skipped': 0,
-        'fonds_created': 0, 'series_created': 0, 'volumes_created': 0,
+        'fonds_created': 0,
+        'classifications_created': 0,
+        'series_created': 0, 'volumes_created': 0,
         'errors': [],
     }
 
-    # Ensure hierarchy exists
-    ht, levels = _ensure_va_hierarchy(institution_id, db, log)
+    ht, levels = _ensure_va_hierarchy(institution_id, db, log, parse_codes=parse_codes)
 
-    # We need to accumulate full <Arkivbildare> subtrees
-    # Use iterparse to find start/end of each Arkivbildare
-    # iterparse reads bytes directly — handles iso-8859-1 and utf-8
-    # We detect encoding from the XML declaration if present
-    import io
-
-    # Detect encoding from first bytes
-    with open(filepath, 'rb') as fh:
-        header = fh.read(200).decode('ascii', errors='replace')
-    enc_match = re.search(r'encoding=["\']([^"\']+)["\']', header)
-    file_encoding = enc_match.group(1) if enc_match else 'utf-8'
-
-    # lxml handles iso-8859-1 and non-ASCII tag names natively
-    # Open as binary — lxml reads encoding from the XML declaration
     from lxml import etree as lxmletree
 
     context = lxmletree.iterparse(filepath, events=('start', 'end'), recover=True)
 
-    current_arkivbildare: Element | None = None
+    current_arkivbildare = None
     depth = 0
-    target_tag = 'Arkivbildare'
     inside = False
     arkivbildare_count = 0
 
     for event, el in context:
-        # Strip namespace if present
         tag = el.tag.split('}')[-1] if '}' in el.tag else el.tag
 
-        if event == 'start' and tag == target_tag:
+        if event == 'start' and tag == 'Arkivbildare':
             inside = True
             depth = 1
             current_arkivbildare = el
@@ -534,16 +977,15 @@ def _stream_import(filepath: str, institution_id: int, force_agents: bool,
             elif event == 'end':
                 depth -= 1
                 if depth == 0:
-                    # Full Arkivbildare element is now populated
                     inside = False
                     arkivbildare_count += 1
-                    log(f'\nProcessing Arkivbildare #{arkivbildare_count}…')
+                    log(f'\nProcessing Arkivbildare #{arkivbildare_count}...')
 
                     try:
                         if not dry_run:
                             _process_arkivbildare(
                                 current_arkivbildare, institution_id,
-                                force_agents, ht, levels, db, log, stats
+                                force_agents, ht, levels, parse_codes, db, log, stats
                             )
                             if arkivbildare_count % batch_size == 0:
                                 db.session.flush()
@@ -559,15 +1001,13 @@ def _stream_import(filepath: str, institution_id: int, force_agents: bool,
                         if not dry_run:
                             db.session.rollback()
 
-                    # Free memory
                     current_arkivbildare = None
                     el.clear()
 
     return stats
 
 
-def _process_arkivbildare(el, institution_id, force_agents, ht, levels, db, log, stats):
-    """Process one complete <Arkivbildare> element."""
+def _process_arkivbildare(el, institution_id, force_agents, ht, levels, parse_codes, db, log, stats):
     system_user_id = _get_system_user_id(institution_id, db)
     agent, created = _import_agent(el, institution_id, force_agents, db, log)
     if created:
@@ -580,26 +1020,57 @@ def _process_arkivbildare(el, institution_id, force_agents, ht, levels, db, log,
         stats['fonds_created'] += 1
         _link_agent_to_node(agent, fonds, institution_id, db)
 
-        for serie_el in arkiv_el.findall('.//SerieAA'):
-            serie = _import_serie(serie_el, fonds, institution_id, ht, levels, db, log, system_user_id)
-            stats['series_created'] += 1
+        schema = _detect_schema(arkiv_el)
 
-            for vol_idx, volym_el in enumerate(serie_el.findall('.//Volym'), start=1):
-                _import_volym(volym_el, serie, institution_id, ht, db, log, vol_idx, system_user_id)
-                stats['volumes_created'] += 1
+        if schema == 'klass':
+            strukt_map = _import_klass_strukt_tree(
+                arkiv_el, institution_id, ht, db, log, system_user_id
+            )
+            stats['classifications_created'] += len(strukt_map)
+
+            hs_grupp = arkiv_el.find('HandlingsslagGrupp')
+            if hs_grupp is not None:
+                if parse_codes:
+                    _import_handlingsslag_parsed(
+                        hs_grupp, fonds, institution_id, ht, levels,
+                        strukt_map, db, log, system_user_id, stats
+                    )
+                else:
+                    _import_handlingsslag_flat(
+                        hs_grupp, fonds, institution_id, ht, levels,
+                        strukt_map, db, log, system_user_id, stats
+                    )
+
+        else:
+            if parse_codes:
+                _import_series_parsed(
+                    arkiv_el, fonds, institution_id, ht, levels, db, log, system_user_id, stats
+                )
+            else:
+                _import_series_flat(
+                    arkiv_el, fonds, institution_id, ht, levels, db, log, system_user_id, stats
+                )
 
 
 def _dry_run_arkivbildare(el, log, stats):
-    """Count what would be imported without touching DB."""
     name = _txt(el, 'Arkivb_Namn', '?')
     log(f'  Would import agent: {name}')
     stats['agents_created'] += 1
     for arkiv_el in el.findall('.//Arkiv'):
         log(f'    Would import fonds: {_txt(arkiv_el, "Arkiv_Namn", "?")}')
         stats['fonds_created'] += 1
-        for serie_el in arkiv_el.findall('.//SerieAA'):
-            stats['series_created'] += 1
-            stats['volumes_created'] += len(serie_el.findall('.//Volym'))
+        schema = _detect_schema(arkiv_el)
+        if schema == 'klass':
+            stats['classifications_created'] += len(arkiv_el.findall('.//KlassStrukt'))
+            hs_grupp = arkiv_el.find('HandlingsslagGrupp')
+            if hs_grupp is not None:
+                for hs_el in hs_grupp.findall('HandlingsSlag'):
+                    stats['series_created'] += 1
+                    stats['volumes_created'] += len(hs_el.findall('.//ForvenhRelGrupp/FörvaringsenhetRel'))
+        else:
+            for serie_el in arkiv_el.findall('.//SerieAA'):
+                stats['series_created'] += 1
+                stats['volumes_created'] += len(serie_el.findall('.//Volym'))
 
 
 # ── CLI command registration ──────────────────────────────────────────
@@ -617,8 +1088,12 @@ def register_visual_arkiv_import(app):
                   help='Flush session every N Arkivbildare (default 50)')
     @click.option('--verbose', is_flag=True, default=False,
                   help='Print every node as it is created')
+    @click.option('--parse-codes', is_flag=True, default=False,
+                  help='Build hierarchical trees from codes. '
+                       'AA: Y -> Series, Y+Z -> Sub-series, Y+Z+A -> Sub-sub-series. '
+                       'Klass: HS_Struktur dot-notation (1.5 becomes child of 1).')
     def import_visual_arkiv(institution_id, filepath, force_agents, dry_run,
-                             batch_size, verbose):
+                             batch_size, verbose, parse_codes):
         """Import a Visual Arkiv 7 XML export into Kurbits."""
         from app.extensions import db
         from app.models import Institution
@@ -633,6 +1108,7 @@ def register_visual_arkiv_import(app):
         click.echo(f'  File        : {filepath}')
         click.echo(f'  Dry run     : {dry_run}')
         click.echo(f'  Force agents: {force_agents}')
+        click.echo(f'  Parse codes : {parse_codes}')
         click.echo()
 
         def log(msg):
@@ -646,6 +1122,7 @@ def register_visual_arkiv_import(app):
                 force_agents=force_agents,
                 dry_run=dry_run,
                 batch_size=batch_size,
+                parse_codes=parse_codes,
                 db=db,
                 log=log,
             )
@@ -655,7 +1132,7 @@ def register_visual_arkiv_import(app):
                 click.echo('\nCommitted.')
             else:
                 db.session.rollback()
-                click.echo('\nDry run — no changes written.')
+                click.echo('\nDry run -- no changes written.')
 
         except Exception as e:
             db.session.rollback()
@@ -664,15 +1141,16 @@ def register_visual_arkiv_import(app):
             traceback.print_exc()
             sys.exit(1)
 
-        click.echo('\n── Import summary ─────────────────────────────')
-        click.echo(f'  Agents created : {stats["agents_created"]}')
-        click.echo(f'  Agents skipped : {stats["agents_skipped"]}')
-        click.echo(f'  Fonds created  : {stats["fonds_created"]}')
-        click.echo(f'  Series created : {stats["series_created"]}')
-        click.echo(f'  Volumes created: {stats["volumes_created"]}')
+        click.echo('\n-- Import summary -----------------------------')
+        click.echo(f'  Agents created          : {stats["agents_created"]}')
+        click.echo(f'  Agents skipped          : {stats["agents_skipped"]}')
+        click.echo(f'  Fonds created           : {stats["fonds_created"]}')
+        click.echo(f'  Classifications created : {stats["classifications_created"]}')
+        click.echo(f'  Series created          : {stats["series_created"]}')
+        click.echo(f'  Volumes created         : {stats["volumes_created"]}')
         if stats['errors']:
             click.echo(f'\n  Errors ({len(stats["errors"])}):')
             for err in stats['errors']:
-                click.echo(f'    • {err}')
+                click.echo(f'    - {err}')
         else:
             click.echo('\n  No errors.')

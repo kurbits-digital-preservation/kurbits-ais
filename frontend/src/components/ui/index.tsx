@@ -161,3 +161,4 @@ export function TypePill({ type }: { type: string }) {
     </span>
   )
 }
+export { default as PrintLabelsButton } from './PrintLabelsButton'

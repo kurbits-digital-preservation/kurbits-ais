@@ -10,3 +10,4 @@ python-dotenv>=1.0
 lxml>=5.0
 Pillow>=10.0.0
 python-magic>=0.4.27
+reportlab>=4.0

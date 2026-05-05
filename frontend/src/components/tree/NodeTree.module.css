@@ -170,3 +170,7 @@
   color: var(--color-warning);
   border-color: var(--color-warning-border);
 }
+
+.checked {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent) !important;
+}

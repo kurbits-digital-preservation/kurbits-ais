@@ -6,18 +6,19 @@ import {
   Plus, Edit2, Trash2, ChevronRight, FileText,
   Calendar, Globe, Lock, Archive, RotateCcw,
   Paperclip, StickyNote, History, Link,
-  Download, Upload, X, Save, AlertCircle, MoveRight, Zap, MapPin, Tag, Link2, Check, Flag, Search, RefreshCw
+  Download, Upload, X, Save, AlertCircle, MoveRight, Zap, MapPin, Tag, Link2, Check, Flag, Search, RefreshCw,
+  CheckSquare, Square
 } from 'lucide-react'
 import { nodesApi, exportApi, oaiApi, hierarchyApi, eadApi } from '@/api'
 import NodeTree from '@/components/tree/NodeTree'
 import NodeForm from '@/components/node/NodeForm'
 import ResizablePanels from '@/components/ui/ResizablePanels'
-import { Spinner } from '@/components/ui'
+import { Spinner, PrintLabelsButton } from '@/components/ui'
 import NodeRelationsTab, { NodeLocationsTab, NodeClassificationsTab } from '@/components/node/NodeRelationsTab'
 import { MetadataFieldValue } from '@/components/node/MetadataFieldRenderer'
 import PlacesPanel from '@/components/geo/PlacesPanel'
 import FlagsTab from '@/components/node/FlagsTab'
-import { acquisitionsApi, locationOverviewApi } from '@/api'
+import { acquisitionsApi } from '@/api'
 import TagsPanel from '@/components/geo/TagsPanel'
 import MoveNodeDialog from '@/components/node/MoveNodeDialog'
 import RapidEntryModal from '@/components/node/RapidEntryModal'
@@ -51,11 +52,27 @@ function StatusBadge({ status }: { status: NodeStatus }) {
 
 function ExportMenu({ nodeId }: { nodeId: number }) {
   const [open, setOpen] = useState(false)
+  const [loadingAid, setLoadingAid] = useState(false)
   const { data: formats } = useQuery({
     queryKey: ['export-formats'],
     queryFn: () => exportApi.listFormats().then(r => r.data.data as any[]),
     enabled: open,
   })
+
+  const handleFindingAid = async () => {
+    setLoadingAid(true)
+    setOpen(false)
+    try {
+      const res = await nodesApi.findingAid(nodeId)
+      const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `finding_aid_${nodeId}.pdf`; a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 2000)
+    } catch (e) { /* silent */ }
+    finally { setLoadingAid(false) }
+  }
+
   return (
     <div style={{ position: 'relative' }}>
       <button className="btn btn-ghost btn-sm" onClick={() => setOpen(v => !v)}>
@@ -65,6 +82,19 @@ function ExportMenu({ nodeId }: { nodeId: number }) {
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setOpen(false)} />
           <div className={styles.eadMenu} style={{ minWidth: 260 }}>
+            {/* Finding aid */}
+            <div className={styles.eadMenuSection}>
+              <div className={styles.eadMenuSectionTitle}>Reports</div>
+              <button className={styles.eadMenuItem} onClick={handleFindingAid} disabled={loadingAid}
+                style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
+                <FileText size={12} />
+                <div>
+                  <span className={styles.eadMenuItemTitle}>Finding aid (PDF)</span>
+                  <span className={styles.eadMenuItemDesc}>Full finding aid with table of contents</span>
+                </div>
+              </button>
+            </div>
+            {/* EAD exports */}
             {(formats ?? []).map((fmt: any) => (
               <div key={fmt.id} className={styles.eadMenuSection}>
                 <div className={styles.eadMenuSectionTitle}>{fmt.label}</div>
@@ -643,6 +673,7 @@ function NodeDetailPanel({
           <div className={styles.detailActions}>
             <CopyLinkButton nodeId={nodeId} refCode={data?.ref_code ?? ''} />
             <ExportMenu nodeId={nodeId} />
+            <PrintLabelsButton nodeIds={[nodeId]} />
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowMove(true)} title="Move to different parent">
               <MoveRight size={14} />
             </button>
@@ -1172,6 +1203,23 @@ export default function ResourcesPage() {
     ? parseInt(searchParams.get('node')!)
     : location.state?.selectNodeId ?? null
 
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+
+  const toggleSelectMode = () => {
+    setSelectMode(v => !v)
+    setSelectedIds(new Set())
+  }
+
+  const handleToggleSelect = (node: NodeStub) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(node.id)) next.delete(node.id)
+      else next.add(node.id)
+      return next
+    })
+  }
+
   const [selectedNode, setSelectedNode] = useState<NodeStub | null>(
     initialNodeId
       ? { id: initialNodeId, title: '', ref_code: '', local_ref: '',
@@ -1291,7 +1339,30 @@ export default function ResourcesPage() {
             ))}
           </select>
         )}
+        <button
+          className="btn btn-ghost btn-sm btn-icon"
+          onClick={toggleSelectMode}
+          title={selectMode ? 'Exit select mode' : 'Select items for bulk printing'}
+          style={{ color: selectMode ? 'var(--color-accent)' : undefined, flexShrink: 0 }}
+        >
+          {selectMode ? <CheckSquare size={14} /> : <Square size={14} />}
+        </button>
       </div>
+
+      {selectMode && selectedIds.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
+          padding: 'var(--space-2) var(--space-3)',
+          background: 'color-mix(in srgb, var(--color-accent) 10%, var(--color-surface))',
+          borderBottom: '1px solid var(--color-accent-border)',
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-accent)', flex: 1 }}>
+            {selectedIds.size} selected
+          </span>
+          <PrintLabelsButton nodeIds={[...selectedIds]} label="Print labels" />
+          <button className="btn btn-ghost btn-sm" onClick={() => setSelectedIds(new Set())}>Clear</button>
+        </div>
+      )}
 
       <div className={styles.treeScroll}>
         <NodeTree
@@ -1300,6 +1371,8 @@ export default function ResourcesPage() {
           onAddChild={handleAddChild}
           searchQuery={treeSearch}
           hierarchyTypeId={hierarchyTypeFilter ? parseInt(hierarchyTypeFilter) : undefined}
+          selectedIds={selectMode ? selectedIds : undefined}
+          onToggleSelect={selectMode ? handleToggleSelect : undefined}
         />
       </div>
     </div>

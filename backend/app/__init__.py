@@ -1,5 +1,6 @@
 import os
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 from app.extensions import db, migrate, login_manager, cors
 from config import config
 
@@ -9,6 +10,10 @@ def create_app(config_name: str = None) -> Flask:
 
     config_name = config_name or os.environ.get('FLASK_ENV', 'default')
     app.config.from_object(config[config_name])
+
+    # Trust reverse proxy headers (OpenShift route, nginx, etc.)
+    # x_for=1: trust X-Forwarded-For, x_proto=1: trust X-Forwarded-Proto (HTTPS)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
@@ -40,8 +45,10 @@ def create_app(config_name: str = None) -> Flask:
 
         from app.cli import register_commands
         from app.visual_arkiv_import import register_visual_arkiv_import
+        from app.testdata_import import register_testdata_import
         register_commands(app)
         register_visual_arkiv_import(app)
+        register_testdata_import(app)
 
         # Serve React SPA in production
         frontend_dist = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist')

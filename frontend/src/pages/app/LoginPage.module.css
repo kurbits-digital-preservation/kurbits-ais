@@ -18,6 +18,14 @@
 
 .header {
   margin-bottom: var(--space-8);
+  text-align: center;
+}
+
+.logo {
+  width: 100px;
+  height: auto;
+  margin: 0 auto var(--space-4);
+  display: block;
 }
 
 .wordmark {
