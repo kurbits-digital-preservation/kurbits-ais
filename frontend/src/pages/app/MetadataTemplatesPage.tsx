@@ -1,12 +1,14 @@
-import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Trash2, X, Save, GripVertical, ChevronDown, ChevronRight,
   Type, AlignLeft, Hash, Calendar, List, CheckSquare, Link2, Mail,
-  Layers, Copy, Pencil, AlertCircle, Upload, Check
+  Layers, Copy, Pencil, AlertCircle, Upload, Check, Plug
 } from 'lucide-react'
 import { templatesApi } from '@/api'
+import api from '@/api/client'
 import { Spinner } from '@/components/ui'
+import type { ExternalIntegration } from '@/types'
 import styles from './MetadataTemplatesPage.module.css'
 
 // ─── Field type registry ──────────────────────────────────────────────
@@ -21,19 +23,21 @@ export const FIELD_TYPES = {
   boolean:     { label: 'Checkbox',     icon: CheckSquare, hasOptions: false, hasPlaceholder: false },
   url:         { label: 'URL',          icon: Link2,       hasOptions: false, hasPlaceholder: true },
   email:       { label: 'Email',        icon: Mail,        hasOptions: false, hasPlaceholder: true },
+  integration: { label: 'Vocabulary',   icon: Plug,        hasOptions: false, hasPlaceholder: true },
 } as const
 
 export type FieldType = keyof typeof FIELD_TYPES
 
 export interface MetadataField {
-  name: string           // snake_case key
-  label: string          // display label
+  name: string
+  label: string
   type: FieldType
   required: boolean
   placeholder?: string
   help_text?: string
-  options?: string[]     // for select / multiselect
+  options?: string[]
   default_value?: string
+  integration_id?: number   // only used when type === 'integration'
 }
 
 const ENTITY_TYPES = [
@@ -51,6 +55,47 @@ function emptyField(): MetadataField {
 function FieldTypeIcon({ type, size = 14 }: { type: FieldType; size?: number }) {
   const Icon = FIELD_TYPES[type]?.icon ?? Type
   return <Icon size={size} />
+}
+
+// ─── Integration picker (used inside FieldEditor) ─────────────────────
+
+function IntegrationPicker({
+  value,
+  onChange,
+}: {
+  value: number | undefined
+  onChange: (id: number | undefined) => void
+}) {
+  const { data: integrations = [], isLoading } = useQuery<ExternalIntegration[]>({
+    queryKey: ['integrations-all'],
+    queryFn: () => api.get<{ status: string; data: ExternalIntegration[] }>('/integrations')
+      .then(r => r.data.data ?? []),
+    staleTime: 60_000,
+  })
+
+  if (isLoading) return <Spinner size={14} />
+
+  return (
+    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+      <label>Vocabulary integration *</label>
+      <select
+        value={value ?? ''}
+        onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
+        required
+      >
+        <option value="">Select an integration…</option>
+        {integrations.map(intg => (
+          <option key={intg.id} value={intg.id}>
+            {intg.name} — {intg.base_url}
+          </option>
+        ))}
+      </select>
+      <span className="form-hint">
+        The integration must have a <code>name</code> field mapping for labels to appear in search results.
+        Configure integrations under Administration → Integrations.
+      </span>
+    </div>
+  )
 }
 
 // ─── Field editor ─────────────────────────────────────────────────────
@@ -79,7 +124,6 @@ function FieldEditor({
 
   return (
     <div className={`${styles.fieldCard} ${expanded ? styles.fieldCardExpanded : ''}`}>
-      {/* Collapsed header */}
       <div className={styles.fieldHeader} onClick={() => setExpanded(v => !v)}>
         <div className={styles.fieldHeaderLeft}>
           <button className={styles.dragHandle}
@@ -96,6 +140,11 @@ function FieldEditor({
             <code className={styles.fieldName}>{field.name}</code>
           )}
           {field.required && <span className={styles.requiredBadge}>required</span>}
+          {field.type === 'integration' && field.integration_id && (
+            <span className={styles.integrationBadge}>
+              <Plug size={10} /> vocab
+            </span>
+          )}
         </div>
         <div className={styles.fieldHeaderRight} onClick={e => e.stopPropagation()}>
           <button className="btn btn-ghost btn-sm btn-icon" disabled={index === 0}
@@ -110,14 +159,13 @@ function FieldEditor({
         </div>
       </div>
 
-      {/* Expanded body */}
       {expanded && (
         <div className={styles.fieldBody}>
           <div className={styles.fieldGrid}>
             <div className="form-group">
               <label>Label *</label>
               <input value={field.label} onChange={e => handleLabelChange(e.target.value)}
-                placeholder="e.g. Production year" autoFocus={!field.name} />
+                placeholder="e.g. Subject heading" autoFocus={!field.name} />
             </div>
 
             <div className="form-group">
@@ -133,7 +181,14 @@ function FieldEditor({
 
             <div className="form-group">
               <label>Field type *</label>
-              <select value={field.type} onChange={e => onChange({ type: e.target.value as FieldType, options: [] })}>
+              <select
+                value={field.type}
+                onChange={e => onChange({
+                  type: e.target.value as FieldType,
+                  options: [],
+                  integration_id: undefined,
+                })}
+              >
                 {Object.entries(FIELD_TYPES).map(([val, { label }]) => (
                   <option key={val} value={val}>{label}</option>
                 ))}
@@ -154,7 +209,7 @@ function FieldEditor({
                 placeholder="Shown below the field to guide users" />
             </div>
 
-            {(field.type !== 'boolean') && (
+            {field.type !== 'boolean' && field.type !== 'integration' && (
               <div className="form-group">
                 <label>Default value</label>
                 <input value={field.default_value ?? ''}
@@ -170,6 +225,14 @@ function FieldEditor({
                 Required field
               </label>
             </div>
+
+            {/* Integration picker — only shown for vocabulary fields */}
+            {field.type === 'integration' && (
+              <IntegrationPicker
+                value={field.integration_id}
+                onChange={id => onChange({ integration_id: id })}
+              />
+            )}
           </div>
 
           {/* Options editor for select/multiselect */}
@@ -214,7 +277,7 @@ function FieldEditor({
   )
 }
 
-// ─── Template editor (create / edit) ─────────────────────────────────
+// ─── Template editor ──────────────────────────────────────────────────
 
 function TemplateEditor({
   initial,
@@ -246,7 +309,11 @@ function TemplateEditor({
     setFields(next)
   }
 
-  const canSave = name.trim() && fields.every(f => f.name && f.label)
+  const canSave = name.trim() && fields.every(f => {
+    if (!f.name || !f.label) return false
+    if (f.type === 'integration' && !f.integration_id) return false
+    return true
+  })
 
   return (
     <div className={styles.editor}>
@@ -260,7 +327,6 @@ function TemplateEditor({
       </div>
 
       <div className={styles.editorBody}>
-        {/* Template meta */}
         <div className={styles.templateMeta}>
           <div className={styles.metaGrid}>
             <div className="form-group">
@@ -284,7 +350,6 @@ function TemplateEditor({
           </div>
         </div>
 
-        {/* Field list */}
         <div className={styles.fieldsSection}>
           <div className={styles.fieldsSectionHeader}>
             <div>
@@ -335,7 +400,8 @@ function TemplateEditor({
       <div className={styles.editorFooter}>
         {!canSave && fields.length > 0 && (
           <span className={styles.validationHint}>
-            <AlertCircle size={13} /> All fields need a label and key
+            <AlertCircle size={13} /> All fields need a label, key
+            {fields.some(f => f.type === 'integration' && !f.integration_id) && ', and a vocabulary integration'}
           </span>
         )}
         <div className={styles.editorFooterActions}>
@@ -403,9 +469,6 @@ function TemplateCard({
     </div>
   )
 }
-
-// ─── Main page ────────────────────────────────────────────────────────
-
 
 // ─── Import modal ─────────────────────────────────────────────────────
 
@@ -484,6 +547,8 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
     </div>
   )
 }
+
+// ─── Main page ────────────────────────────────────────────────────────
 
 export default function MetadataTemplatesPage() {
   const queryClient = useQueryClient()

@@ -5,7 +5,11 @@ export interface InstitutionStub {
   slug: string
   ref_prefix: string
   role: string
-}
+  member_count?: number
+  settings?: {
+    disabled_builtins?: string[]
+  }
+}''
 
 export interface User {
   id: number
@@ -213,4 +217,16 @@ export interface ApiResponse<T> {
     total: number
     pages: number
   }
+}
+
+export interface ExternalIntegration {
+  id: number
+  name: string
+  entity_type: string
+  base_url: string
+  search_path: string
+  headers: Record<string, string>
+  result_path: string
+  field_mappings: Record<string, string>
+  is_active: boolean
 }

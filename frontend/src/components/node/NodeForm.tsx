@@ -27,7 +27,7 @@ interface NodeFormData {
   date_start: string
   date_end: string
   date_certainty: string
-  metadata_spec: Record<string, string>
+  metadata_spec: Record<string, unknown>
 }
 
 const EMPTY_FORM: NodeFormData = {
@@ -47,7 +47,7 @@ const EMPTY_FORM: NodeFormData = {
   date_start: '',
   date_end: '',
   date_certainty: '',
-  metadata_spec: {},
+  metadata_spec: {} as Record<string, unknown>,
 }
 
 function nodeToForm(node: NodeDetail): NodeFormData {
@@ -68,9 +68,7 @@ function nodeToForm(node: NodeDetail): NodeFormData {
     date_start: node.date_start ?? '',
     date_end: node.date_end ?? '',
     date_certainty: node.date_certainty ?? '',
-    metadata_spec: Object.fromEntries(
-      Object.entries(node.metadata_spec ?? {}).map(([k, v]) => [k, String(v)])
-    ),
+    metadata_spec: { ...(node.metadata_spec ?? {}) },
   }
 }
 
@@ -469,12 +467,12 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
           <MetadataFields
             fields={metadataFields}
             values={form.metadata_spec}
-            onChange={(key, value) =>
-              setForm(f => ({
-                ...f,
-                metadata_spec: { ...f.metadata_spec, [key]: value as string },
-              }))
-            }
+onChange={(key, value) =>
+  setForm(f => ({
+    ...f,
+    metadata_spec: { ...f.metadata_spec, [key]: value },
+  }))
+}
           />
         )}
 

@@ -27,6 +27,7 @@ class Institution(db.Model):
     website: so.Mapped[Optional[str]] = so.mapped_column(sa.String(200), nullable=True)
     is_active: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=True)
     created_at: so.Mapped[datetime] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
+    settings: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True)
 
     users: so.Mapped[List['User']] = so.relationship(
         'User',

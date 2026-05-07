@@ -212,6 +212,7 @@ def _serialize_institution(inst) -> dict:
         'website': inst.website,
         'is_active': inst.is_active,
         'member_count': member_count,
+        'settings': inst.settings or {},
     }
 
 
@@ -253,7 +254,7 @@ def update_current_institution():
     inst = Institution.query.get(current_user.active_institution_id)
     data = request.get_json(silent=True) or {}
 
-    updatable = ['name', 'description', 'website', 'country_code', 'institution_code']
+    updatable = ['name', 'description', 'website', 'country_code', 'institution_code','settings']
     for field in updatable:
         if field in data:
             setattr(inst, field, data[field])

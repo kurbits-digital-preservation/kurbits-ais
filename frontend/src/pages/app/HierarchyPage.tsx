@@ -8,6 +8,7 @@ import {
 import { hierarchyApi, templatesApi } from '@/api'
 import { Spinner, EmptyState } from '@/components/ui'
 import styles from './HierarchyPage.module.css'
+import api from '@/api/client'
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -143,6 +144,46 @@ function TemplateSaver({ fields, entityType }: { fields: MetadataField[]; entity
   )
 }
 
+function InlineIntegrationPicker({
+  value,
+  onChange,
+}: {
+  value: number | undefined
+  onChange: (id: number | undefined) => void
+}) {
+  // Fetch integrations scoped to 'metadata' entity type
+  const { data: integrations = [] } = useQuery({
+    queryKey:  ['integrations', 'metadata'],
+    queryFn:   () => api
+      .get<{ status: string; data: any[] }>('/integrations', { params: { entity_type: 'metadata' } })
+      .then(r => r.data.data ?? []),
+    staleTime: 60_000,
+  })
+
+  if (integrations.length === 0) {
+    return (
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)', fontStyle: 'italic' }}>
+        No vocabulary integrations — add one under Administration → Integrations
+      </span>
+    )
+  }
+
+  return (
+    <select
+      style={{ fontSize: 'var(--text-xs)' }}
+      value={value ?? ''}
+      onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
+    >
+      <option value="">Select vocabulary…</option>
+      {integrations.map((intg: any) => (
+        <option key={intg.id} value={intg.id}>{intg.name}</option>
+      ))}
+    </select>
+  )
+}
+
+// ─── MetadataSchemaEditor (full replacement) ──────────────────────────
+
 function MetadataSchemaEditor({
   fields,
   onChange,
@@ -195,42 +236,63 @@ function MetadataSchemaEditor({
             <span />
           </div>
           {fields.map((field, i) => (
-            <div key={i} className={styles.fieldRow}>
-              <input
-                className={styles.fieldInput}
-                value={field.label}
-                placeholder="Display label"
-                onChange={e => {
-                  const label = e.target.value
-                  updateField(i, {
-                    label,
-                    name: field.name || autoName(label),
-                  })
-                }}
-              />
-              <input
-                className={`${styles.fieldInput} ${styles.fieldKey}`}
-                value={field.name}
-                placeholder="field_key"
-                onChange={e => updateField(i, { name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
-              />
-              <select
-                className={styles.fieldSelect}
-                value={field.type}
-                onChange={e => updateField(i, { type: e.target.value as FieldType })}
-              >
-                {Object.entries(FIELD_TYPES).map(([val, def]) => <option key={val} value={val}>{def.label}</option>)}
-              </select>
-              <div className={styles.fieldRequired}>
+            <div key={i} className={styles.fieldRowWrapper}>
+              <div className={styles.fieldRow}>
                 <input
-                  type="checkbox"
-                  checked={field.required}
-                  onChange={e => updateField(i, { required: e.target.checked })}
+                  className={styles.fieldInput}
+                  value={field.label}
+                  placeholder="Display label"
+                  onChange={e => {
+                    const label = e.target.value
+                    updateField(i, {
+                      label,
+                      name: field.name || autoName(label),
+                    })
+                  }}
                 />
+                <input
+                  className={`${styles.fieldInput} ${styles.fieldKey}`}
+                  value={field.name}
+                  placeholder="field_key"
+                  onChange={e => updateField(i, { name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
+                />
+                <select
+                  className={styles.fieldSelect}
+                  value={field.type}
+                  onChange={e => updateField(i, {
+                    type: e.target.value as FieldType,
+                    // clear integration_id if switching away from integration type
+                    integration_id: e.target.value === 'integration' ? field.integration_id : undefined,
+                  })}
+                >
+                  {Object.entries(FIELD_TYPES).map(([val, def]) => (
+                    <option key={val} value={val}>{def.label}</option>
+                  ))}
+                </select>
+                <div className={styles.fieldRequired}>
+                  <input
+                    type="checkbox"
+                    checked={field.required}
+                    onChange={e => updateField(i, { required: e.target.checked })}
+                  />
+                </div>
+                <button className="btn btn-ghost btn-sm btn-icon" onClick={() => removeField(i)}>
+                  <X size={12} />
+                </button>
               </div>
-              <button className="btn btn-ghost btn-sm btn-icon" onClick={() => removeField(i)}>
-                <X size={12} />
-              </button>
+
+              {/* Integration picker — shown inline below the row when type is 'integration' */}
+              {field.type === 'integration' && (
+                <div className={styles.fieldIntegrationRow}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-muted)', whiteSpace: 'nowrap' }}>
+                    Vocabulary source:
+                  </span>
+                  <InlineIntegrationPicker
+                    value={field.integration_id}
+                    onChange={id => updateField(i, { integration_id: id })}
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -238,6 +300,7 @@ function MetadataSchemaEditor({
     </div>
   )
 }
+
 
 // ─── Level row ────────────────────────────────────────────────────────
 

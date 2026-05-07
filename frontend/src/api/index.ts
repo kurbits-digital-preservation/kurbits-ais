@@ -1,8 +1,9 @@
 import api from './client'
 import type {
   User, NodeStub, NodeDetail, AgentStub, AgentDetail,
-  LocationStub, LocationDetail, ClassificationStub,
+  LocationStub, LocationDetail, ClassificationStub,ApiResponse, ExternalIntegration
 } from '@/types'
+
 
 // ─── Auth ────────────────────────────────────────────────────────────
 export const authApi = {
@@ -615,4 +616,24 @@ export const checklistTemplatesApi = {
     api.patch<{ status: string; data: any }>(`/vocab/checklist-templates/${id}`, data),
   delete: (id: number) =>
     api.delete(`/vocab/checklist-templates/${id}`),
+}
+
+export const integrationsApi = {
+  list: (entity_type?: string) =>
+    api.get<ApiResponse<ExternalIntegration[]>>('/integrations', {
+      params: entity_type ? { entity_type } : {},
+    }).then(r => r.data.data!),
+
+  create: (data: Omit<ExternalIntegration, 'id'>) =>
+    api.post<ApiResponse<ExternalIntegration>>('/integrations', data).then(r => r.data.data!),
+
+  update: (id: number, data: Partial<Omit<ExternalIntegration, 'id'>>) =>
+    api.patch<ApiResponse<ExternalIntegration>>(`/integrations/${id}`, data).then(r => r.data.data!),
+
+  delete: (id: number) =>
+    api.delete(`/integrations/${id}`),
+
+  search: (id: number, q: string) =>
+    api.get<ApiResponse<Record<string, any>[]>>(`/integrations/${id}/search`, { params: { q } })
+      .then(r => r.data.data!),
 }

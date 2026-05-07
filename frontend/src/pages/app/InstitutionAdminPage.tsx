@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users, Settings, Shield, Pencil, Trash2, BookOpen, Layers,
   X, Save, Plus, ChevronDown, Check, AlertCircle,
-  UserPlus, Building2
+  UserPlus, Building2,Link
 } from 'lucide-react'
 import { institutionApi } from '@/api'
 import { useAuthStore } from '@/store/auth'
@@ -12,7 +12,7 @@ import styles from './InstitutionAdminPage.module.css'
 import VocabulariesTab from './VocabulariesTab'
 import HierarchyTab from './HierarchyTab'
 import MetadataTemplatesPage from './MetadataTemplatesPage'
-
+import IntegrationsTab from './IntegrationsTab'
 // ─── Constants ────────────────────────────────────────────────────────
 
 const ROLES = [
@@ -422,6 +422,7 @@ export default function InstitutionAdminPage() {
     { key: 'vocabularies', icon: <BookOpen size={14} />, label: 'Vocabularies' },
     { key: 'hierarchies',  icon: <Layers size={14} />,   label: 'Hierarchies' },
     { key: 'templates',    icon: <Layers size={14} />,   label: 'Field templates' },
+    { key: 'integrations', icon: <Link size={14} />, label: 'Integrations' },
   ]
 
   return (
@@ -446,6 +447,7 @@ export default function InstitutionAdminPage() {
         {tab === 'vocabularies' && <VocabulariesTab />}
         {tab === 'hierarchies'  && <HierarchyTab />}
         {tab === 'templates'    && <TemplatesTab />}
+        {tab === 'integrations' && <IntegrationsTab />}
       </div>
     </div>
   )

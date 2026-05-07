@@ -496,3 +496,18 @@
   flex: 1;
   font-size: var(--text-sm) !important;
 }
+
+/* ─── Integration badge on field card ────────────────────────────── */
+.integrationBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-border);
+  letter-spacing: 0.03em;
+}

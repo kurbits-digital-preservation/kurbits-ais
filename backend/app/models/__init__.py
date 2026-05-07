@@ -35,6 +35,8 @@ from app.models.classification import (
     classification_node_association,
 )
 
+from app.models.integration import ExternalIntegration
+
 __all__ = [
     'Institution',
     'user_institution_association',
@@ -64,9 +66,11 @@ __all__ = [
     'Classification',
     'ClassificationChange',
     'classification_node_association',
+    'ExternalIntegration',
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 
 from app.models.geo import AgentPlace, NodePlace, Tag, node_tags_table, agent_tags_table, PlaceType, TagCategory  # noqa: F401
 from app.models.flag import NodeFlag, FLAG_TYPES, SEVERITIES, STATUSES  # noqa: F401
+
 from app.models.acquisitions import SubmissionAgreement, SAAttachment, Delivery, Accession, accession_nodes, DeliveryChecklistTemplate  # noqa: F401
