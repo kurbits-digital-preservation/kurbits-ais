@@ -113,6 +113,7 @@ const AGENT_ICONS: Record<string, typeof User> = {
 // ─── Section components ───────────────────────────────────────────────
 
 function AgentsSection({ nodeId }: { nodeId: number }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [search, setSearch] = useState('')
@@ -198,13 +199,19 @@ function AgentsSection({ nodeId }: { nodeId: number }) {
         const Icon = AGENT_ICONS[agent.agent_type] ?? User
         return (
           <div key={agent.id} className={styles.linkedItem}>
-            <div className={styles.linkedItemIcon}>
-              <Icon size={14} />
-            </div>
-            <div className={styles.linkedItemBody}>
-              <span className={styles.linkedItemName}>{agent.name}</span>
-              <span className={styles.linkedItemMeta}>{agent.relation_type}</span>
-            </div>
+            <button
+              className={styles.linkedItemBtn}
+              onClick={() => navigate('/app/agents', { state: { selectAgentId: agent.id } })}
+              title="Open in Agents"
+            >
+              <div className={styles.linkedItemIcon}>
+                <Icon size={14} />
+              </div>
+              <div className={styles.linkedItemBody}>
+                <span className={styles.linkedItemName}>{agent.name}</span>
+                <span className={styles.linkedItemMeta}>{agent.relation_type}</span>
+              </div>
+            </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
               onClick={() => removeMutation.mutate(agent.id)}

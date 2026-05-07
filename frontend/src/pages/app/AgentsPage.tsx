@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Users, User, Building2, UsersRound, Bot,
   Pencil, Trash2, Link, FileText, StickyNote,
   X, Save, ExternalLink, Globe, Upload, Check, AlertCircle, Link2,
-  MapPin, Tag as Tag2
+  MapPin, Tag as Tag2, Search
 } from 'lucide-react'
-import { agentsApi, agentsImportApi } from '@/api'
+import { agentsApi, agentsImportApi, nodesApi } from '@/api'
 import PlacesPanel from '@/components/geo/PlacesPanel'
 import TagsPanel from '@/components/geo/TagsPanel'
 import {
@@ -331,34 +331,159 @@ function RelationsTab({ agent }: { agent: AgentDetail }) {
 
 function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
   const navigate = useNavigate()
+  const [search, setSearch] = useState('')
+  const [rootFilter, setRootFilter] = useState<{ id: number; label: string } | null>(null)
+  const [rootInput, setRootInput] = useState('')
+  const [rootOpen, setRootOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setRootOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   const { data, isLoading } = useQuery({
     queryKey: ['agent-nodes', agent.id],
     queryFn: () => agentsApi.getNodes(agent.id).then(r => r.data.data as any[]),
   })
 
+  const { data: roots } = useQuery({
+    queryKey: ['node-tree'],
+    queryFn: () => nodesApi.getTree().then(r => r.data.data as any[]),
+    enabled: (data?.length ?? 0) > 0,
+  })
+
+  const getRootNode = (node: any): { id: number; label: string } | null => {
+    if (!roots?.length) return null
+    const root = roots.find((r: any) =>
+      node.ref_code === r.ref_code ||
+      node.ref_code.startsWith(r.ref_code + '/') ||
+      node.ref_code.startsWith(r.ref_code + '-') ||
+      node.ref_code.startsWith(r.ref_code + ' ')
+    )
+    return root ? { id: root.id, label: root.title || root.ref_code } : null
+  }
+
+  const usedRoots: { id: number; label: string }[] = roots
+    ? Array.from(
+        new Map(
+          (data ?? [])
+            .map((n: any) => getRootNode(n))
+            .filter(Boolean)
+            .map((r: any) => [r!.id, r!])
+        ).values()
+      ) as { id: number; label: string }[]
+    : []
+
+  const rootSuggestions = rootInput
+    ? usedRoots.filter(r => r.label.toLowerCase().includes(rootInput.toLowerCase()))
+    : usedRoots
+
+  const filtered = (data ?? []).filter((node: any) => {
+    const root = getRootNode(node)
+    if (rootFilter && root?.id !== rootFilter.id) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!node.title?.toLowerCase().includes(q) && !node.ref_code?.toLowerCase().includes(q)) return false
+    }
+    return true
+  })
+
   if (isLoading) return <div className={styles.tabContent}><Spinner /></div>
 
   return (
-    <div className={styles.tabContent}>
-      {(!data || data.length === 0) && (
-        <p className={styles.emptyText}>
+    <div className={styles.tabContent} style={{ padding: 0 }}>
+      {(data?.length ?? 0) > 0 && (
+        <div className={styles.linkedNodesFilter}>
+          <div className={styles.linkedNodesSearchWrap}>
+            <Search size={12} className={styles.linkedNodesSearchIcon} />
+            <input
+              className={styles.linkedNodesSearchInput}
+              placeholder={`Search ${data?.length} resource${data?.length !== 1 ? 's' : ''}…`}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className={styles.linkedNodesSearchClear} onClick={() => setSearch('')}>
+                <X size={11} />
+              </button>
+            )}
+          </div>
+          {usedRoots.length > 1 && (
+            <div className={styles.rootTypeahead} ref={rootRef}>
+              <div className={styles.rootTypeaheadInput}>
+                <input
+                  className={styles.linkedNodesSearchInput}
+                  style={{ fontSize: 'var(--text-xs)' }}
+                  placeholder="Filter by fonds…"
+                  value={rootFilter ? rootFilter.label : rootInput}
+                  readOnly={!!rootFilter}
+                  onChange={e => { setRootInput(e.target.value); setRootOpen(true) }}
+                  onFocus={() => { if (!rootFilter) setRootOpen(true) }}
+                />
+                {(rootFilter || rootInput) && (
+                  <button className={styles.linkedNodesSearchClear} onClick={() => { setRootFilter(null); setRootInput(''); setRootOpen(false) }}>
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+              {rootOpen && rootSuggestions.length > 0 && (
+                <div className={styles.rootTypeaheadDropdown}>
+                  {rootSuggestions.map(r => (
+                    <button
+                      key={r.id}
+                      className={styles.rootTypeaheadOption}
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => { setRootFilter(r); setRootInput(''); setRootOpen(false) }}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(!data || data.length === 0) ? (
+        <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>
           No resources linked yet. Associate this agent from the Resources section.
         </p>
+      ) : filtered.length === 0 ? (
+        <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>No results.</p>
+      ) : (
+        filtered.map((node: any) => {
+          const root = getRootNode(node)
+          return (
+            <button
+              key={node.id}
+              className={styles.linkedNode}
+              onClick={() => navigate('/app/resources', { state: { selectNodeId: node.id } })}
+            >
+              <div className={styles.linkedNodeInfo}>
+                <span className={styles.linkedNodeTitle}>{node.title || node.ref_code}</span>
+                <div className={styles.linkedNodeMeta}>
+                  <span className="ref-code" style={{ fontSize: 'var(--text-xs)' }}>{node.ref_code}</span>
+                  {node.level_of_description && (
+                    <span className={styles.linkedNodeLevel}>{node.level_of_description}</span>
+                  )}
+                  {root && (
+                    <>
+                      <span style={{ color: 'var(--color-border-strong)' }}>·</span>
+                      <span className={styles.linkedNodeRoot}>{root.label}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <span className={styles.linkedNodeRelType}>{node.relation_type}</span>
+            </button>
+          )
+        })
       )}
-      {data?.map((node: any) => (
-        <button
-          key={node.id}
-          className={styles.linkedNode}
-          onClick={() => navigate('/app/resources', { state: { selectNodeId: node.id } })}
-          title="Open in Resources"
-        >
-          <div className={styles.linkedNodeInfo}>
-            <span className={styles.linkedNodeTitle}>{node.title}</span>
-            <span className="ref-code">{node.ref_code}</span>
-          </div>
-          <span className={styles.linkedNodeRelType}>{node.relation_type}</span>
-        </button>
-      ))}
     </div>
   )
 }
@@ -660,6 +785,11 @@ export default function AgentsPage() {
   )
   const [viewMode, setViewMode] = useState<ViewMode>('detail')
   const [editingAgent, setEditingAgent] = useState<AgentDetail | null>(null)
+
+  useEffect(() => {
+    const id = location.state?.selectAgentId
+    if (id) { setSelectedId(id); setViewMode('detail') }
+  }, [location.state?.selectAgentId])
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState('')
