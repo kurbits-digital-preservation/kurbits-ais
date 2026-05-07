@@ -85,9 +85,8 @@ class HierarchyLevel(db.Model):
     description: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
     sort_order: so.Mapped[int] = so.mapped_column(sa.Integer, default=0)
     can_have_location: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=False)
+    is_object_level: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=False)
 
-    # Per-level metadata schema — defines additional fields archivists fill in
-    # Format: {"fields": [{"name": "...", "label": "...", "type": "text|date|number|textarea", "required": false}]}
     metadata_schema: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True, default=dict)
 
     created_at: so.Mapped[datetime] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
@@ -132,3 +131,9 @@ class HierarchyLevel(db.Model):
         if self.hierarchy_type.entity_type != HierarchyEntityType.RESOURCE:
             return False
         return self.can_have_location
+
+    @property
+    def effective_is_object_level(self) -> bool:
+        if self.hierarchy_type.entity_type != HierarchyEntityType.RESOURCE:
+            return False
+        return self.is_object_level

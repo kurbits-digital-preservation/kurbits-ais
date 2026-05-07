@@ -24,6 +24,8 @@ import MoveNodeDialog from '@/components/node/MoveNodeDialog'
 import RapidEntryModal from '@/components/node/RapidEntryModal'
 import type { NodeStub, NodeDetail, NodeStatus } from '@/types'
 import styles from './ResourcesPage.module.css'
+import RepresentationsTab from '@/components/node/RepresentationsTab'
+import { Layers } from 'lucide-react'
 
 // ─── Status badge ─────────────────────────────────────────────────────
 
@@ -678,7 +680,7 @@ function NodeDetailPanel({
   onSelectChild: (node: NodeStub) => void
 }) {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history'>('details')
+  const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history' | 'representations'>('details')
   const [showMove, setShowMove] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -786,29 +788,34 @@ function NodeDetailPanel({
       </div>
 
       {/* Tabs */}
-      <div className={styles.tabs}>
-        {[
-          { key: 'details',     icon: <FileText size={13} />,  label: 'Details' },
-          { key: 'relations',       icon: <Link size={13} />,       label: 'Relations' },
-          { key: 'locations',       icon: <MapPin size={13} />,     label: 'Locations' },
-          { key: 'classifications', icon: <Tag size={13} />,        label: 'Classifications' },
-          { key: 'places',          icon: <MapPin size={13} />,     label: 'Places' },
-          { key: 'flags',           icon: <Flag size={13} />,       label: `Flags${data?.open_flag_count ? ` (${data.open_flag_count})` : ''}` },
-          { key: 'accessions',     icon: <Archive size={13} />,    label: 'Accessions' },
-          { key: 'tags',            icon: <Tag size={13} />,        label: 'Tags' },
-          { key: 'notes',       icon: <StickyNote size={13} />, label: `Notes${data.notes.length ? ` (${data.notes.length})` : ''}` },
-          { key: 'attachments', icon: <Paperclip size={13} />, label: `Files${data.attachments.length ? ` (${data.attachments.length})` : ''}` },
-          { key: 'history',     icon: <History size={13} />,   label: 'History' },
-        ].map(({ key, icon, label }) => (
-          <button
-            key={key}
-            className={`${styles.tab} ${activeTab === key ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab(key as typeof activeTab)}
-          >
-            {icon}{label}
-          </button>
-        ))}
-      </div>
+<div className={styles.tabs}>
+  {[
+    { key: 'details',         icon: <FileText size={13} />,   label: 'Details' },
+    { key: 'relations',       icon: <Link size={13} />,       label: 'Relations' },
+    { key: 'locations',       icon: <MapPin size={13} />,     label: 'Locations' },
+    { key: 'classifications', icon: <Tag size={13} />,        label: 'Classifications' },
+    { key: 'places',          icon: <MapPin size={13} />,     label: 'Places' },
+    { key: 'flags',           icon: <Flag size={13} />,       label: `Flags${data?.open_flag_count ? ` (${data.open_flag_count})` : ''}` },
+    { key: 'accessions',      icon: <Archive size={13} />,    label: 'Accessions' },
+    { key: 'tags',            icon: <Tag size={13} />,        label: 'Tags' },
+    { key: 'notes',           icon: <StickyNote size={13} />, label: `Notes${data.notes.length ? ` (${data.notes.length})` : ''}` },
+    { key: 'attachments',     icon: <Paperclip size={13} />,  label: `Files${data.attachments.length ? ` (${data.attachments.length})` : ''}` },
+    ...(data.is_object ? [{
+      key: 'representations',
+      icon: <Layers size={13} />,
+      label: `Objects${data.representations?.length ? ` (${data.representations.length})` : ''}`,
+    }] : []),
+    { key: 'history',         icon: <History size={13} />,   label: 'History' },
+  ].map(({ key, icon, label }) => (
+    <button
+      key={key}
+      className={`${styles.tab} ${activeTab === key ? styles.tabActive : ''}`}
+      onClick={() => setActiveTab(key as typeof activeTab)}
+    >
+      {icon}{label}
+    </button>
+  ))}
+</div>
 
       {showMove && data && (
         <MoveNodeDialog
@@ -828,6 +835,7 @@ function NodeDetailPanel({
         {activeTab === 'accessions'     && <NodeAccessionsTab nodeId={nodeId} />}
         {activeTab === 'notes'       && <NotesTab node={data} />}
         {activeTab === 'attachments' && <AttachmentsTab node={data} />}
+        {activeTab === 'representations' && <RepresentationsTab node={data} />}
         {activeTab === 'history'     && <HistoryTab nodeId={nodeId} />}
       </div>
     </div>

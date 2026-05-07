@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, X, Save, ChevronRight,
   GripVertical, Check, ArrowUpDown, Settings,
-  Database, MapPin, Tag, AlertCircle, BookOpen, Download
+  Database, MapPin, Tag, AlertCircle, BookOpen, Download, Layers
 } from 'lucide-react'
 import { hierarchyApi, templatesApi } from '@/api'
 import { Spinner, EmptyState } from '@/components/ui'
@@ -68,7 +68,7 @@ function InlineEdit({
   )
 }
 
-// ─── Metadata schema editor ───────────────────────────────────────────
+// ─── Template loader / saver ──────────────────────────────────────────
 
 function TemplateLoader({ entityType, onLoad }: { entityType: string; onLoad: (fields: MetadataField[]) => void }) {
   const [open, setOpen] = useState(false)
@@ -144,6 +144,8 @@ function TemplateSaver({ fields, entityType }: { fields: MetadataField[]; entity
   )
 }
 
+// ─── Inline integration picker ────────────────────────────────────────
+
 function InlineIntegrationPicker({
   value,
   onChange,
@@ -151,7 +153,6 @@ function InlineIntegrationPicker({
   value: number | undefined
   onChange: (id: number | undefined) => void
 }) {
-  // Fetch integrations scoped to 'metadata' entity type
   const { data: integrations = [] } = useQuery({
     queryKey:  ['integrations', 'metadata'],
     queryFn:   () => api
@@ -182,7 +183,7 @@ function InlineIntegrationPicker({
   )
 }
 
-// ─── MetadataSchemaEditor (full replacement) ──────────────────────────
+// ─── Metadata schema editor ───────────────────────────────────────────
 
 function MetadataSchemaEditor({
   fields,
@@ -261,7 +262,6 @@ function MetadataSchemaEditor({
                   value={field.type}
                   onChange={e => updateField(i, {
                     type: e.target.value as FieldType,
-                    // clear integration_id if switching away from integration type
                     integration_id: e.target.value === 'integration' ? field.integration_id : undefined,
                   })}
                 >
@@ -281,7 +281,6 @@ function MetadataSchemaEditor({
                 </button>
               </div>
 
-              {/* Integration picker — shown inline below the row when type is 'integration' */}
               {field.type === 'integration' && (
                 <div className={styles.fieldIntegrationRow}>
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-muted)', whiteSpace: 'nowrap' }}>
@@ -300,7 +299,6 @@ function MetadataSchemaEditor({
     </div>
   )
 }
-
 
 // ─── Level row ────────────────────────────────────────────────────────
 
@@ -384,6 +382,9 @@ function LevelRow({
           {entityType === 'resource' && level.can_have_location && (
             <span className={styles.locationBadge}><MapPin size={10} /> stores items</span>
           )}
+          {entityType === 'resource' && level.is_object_level && (
+            <span className={styles.objectBadge}><Layers size={10} /> object</span>
+          )}
           {level.metadata_schema?.fields?.length > 0 && (
             <span className={styles.schemaBadge}>
               <Settings size={10} /> {level.metadata_schema.fields.length} field{level.metadata_schema.fields.length !== 1 ? 's' : ''}
@@ -410,7 +411,7 @@ function LevelRow({
       {expanded && (
         <div className={styles.levelDetail}>
 
-          {/* Sort order + can_have_location */}
+          {/* Sort order + checkboxes */}
           <div className={styles.levelMeta}>
             <div className="form-group" style={{ width: 120 }}>
               <label>Sort order</label>
@@ -435,6 +436,20 @@ function LevelRow({
                   onChange={e => updateMutation.mutate({ can_have_location: e.target.checked })}
                 />
                 Can have physical location
+              </label>
+            )}
+
+            {entityType === 'resource' && (
+              <label className={styles.checkboxLabel}>
+                <input
+                  type="checkbox"
+                  defaultChecked={level.is_object_level}
+                  onChange={e => updateMutation.mutate({ is_object_level: e.target.checked })}
+                />
+                Is object level
+                <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)', fontSize: 'var(--text-xs)' }}>
+                  — enables representations tab on nodes at this level
+                </span>
               </label>
             )}
           </div>
@@ -699,7 +714,6 @@ export default function HierarchyPage() {
 
   return (
     <div className={styles.page}>
-      {/* Left — type list */}
       <div className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
           <h2 className={styles.sidebarTitle}>Hierarchy types</h2>
@@ -795,7 +809,6 @@ export default function HierarchyPage() {
         )}
       </div>
 
-      {/* Right — level editor */}
       <div className={styles.content}>
         {selectedTypeId ? (
           <HierarchyTypePanel

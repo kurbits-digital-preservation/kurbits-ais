@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Pencil, Check, X, ArrowLeftRight, ChevronRight } from 'lucide-react'
 import { Spinner } from '@/components/ui'
-import { vocabApi, checklistTemplatesApi } from '@/api'
+import { vocabApi, checklistTemplatesApi, representationsApi } from '@/api'
 import styles from './VocabulariesTab.module.css'
 
 // ─── Inline editable field ────────────────────────────────────────────
@@ -54,7 +54,7 @@ function InlineEdit({
   )
 }
 
-// ─── Editable type row ───────────────────────────────────────────────
+// ─── Editable type row ────────────────────────────────────────────────
 
 function EditableTypeRow({
   item, withComplement, onUpdate, onDelete, isDeleting,
@@ -152,7 +152,7 @@ function EditableTypeRow({
   )
 }
 
-// ─── Simple vocabulary section with optional symmetric/complementary support ───
+// ─── Simple vocabulary section ────────────────────────────────────────
 
 interface SimpleType {
   id: number
@@ -161,7 +161,7 @@ interface SimpleType {
   is_symmetric?: boolean
   complementary_name?: string | null
   complementary_id?: number | null
-  applicable_to?: string | null   // 'agent' | 'node' | 'both' — for place types & tag categories
+  applicable_to?: string | null
 }
 
 function SimpleVocabSection({
@@ -285,9 +285,7 @@ function SimpleVocabSection({
   )
 }
 
-// ─── Agent relation types section (symmetric/asymmetric) ──────────────
-
-// ─── Agent-agent editable row ────────────────────────────────────────
+// ─── Agent-agent relation types section ───────────────────────────────
 
 function AgentAgentRow({ rt, onUpdate, onDelete, isDeleting }: {
   rt: any
@@ -503,9 +501,6 @@ function AgentRelationSection() {
   )
 }
 
-// ─── Main export ─────────────────────────────────────────────────────
-
-
 // ─── Place types vocab ────────────────────────────────────────────────
 
 function PlaceTypesSection() {
@@ -548,7 +543,6 @@ function PlaceTypesSection() {
     },
   })
 
-  // Adapt to SimpleVocabSection's SimpleType shape
   const items: SimpleType[] = (types as any[]).map(t => ({
     id: t.id,
     name: t.label,
@@ -575,6 +569,7 @@ function PlaceTypesSection() {
 function TagCategoriesSection() {
   const queryClient = useQueryClient()
   const [deletingId, setDeletingId] = useState<number | null>(null)
+
   const { data: cats = [], isLoading } = useQuery({
     queryKey: ['tag-categories-vocab'],
     queryFn: () => vocabApi.listTagCategories().then(r => r.data.data),
@@ -632,18 +627,69 @@ function TagCategoriesSection() {
   )
 }
 
+// ─── Representation types vocab ───────────────────────────────────────
 
+function RepresentationTypesSection() {
+  const queryClient = useQueryClient()
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const { data: types = [], isLoading } = useQuery({
+    queryKey: ['representation-types'],
+    queryFn: () => representationsApi.listTypes().then(r => r.data.data),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (data: { name: string; desc: string; isSymmetric: boolean; complementName: string }) =>
+      representationsApi.createType({ name: data.name, description: data.desc || undefined }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['representation-types'] }),
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name, desc }: { id: number; name: string; desc?: string }) =>
+      representationsApi.updateType(id, { name, description: desc }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['representation-types'] }),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => { setDeletingId(id); return representationsApi.deleteType(id) },
+    onSuccess: () => {
+      setDeletingId(null)
+      queryClient.invalidateQueries({ queryKey: ['representation-types'] })
+    },
+    onError: () => setDeletingId(null),
+  })
+
+  const items: SimpleType[] = (types as any[]).map(t => ({
+    id: t.id,
+    name: t.name,
+    description: t.description,
+  }))
+
+  return (
+    <SimpleVocabSection
+      title="Representation types"
+      description="Types of digital representations for object-level nodes — e.g. Preservation Master, Access Copy, Thumbnail, Derivative."
+      items={items}
+      isLoading={isLoading}
+      onCreate={(name, desc) => createMutation.mutate({ name, desc, isSymmetric: true, complementName: '' })}
+      onUpdate={(id, name, desc) => updateMutation.mutate({ id, name, desc })}
+      onDelete={(id) => { if (confirm('Delete this representation type?')) deleteMutation.mutate(id) }}
+      isCreating={createMutation.isPending}
+      isDeleting={deletingId}
+    />
+  )
+}
 
 // ─── Checklist templates ──────────────────────────────────────────────
 
 const DELIVERY_METHODS_FOR_CHECKLIST = [
-  { value: '',                label: 'All delivery types (default)' },
-  { value: 'physical',        label: 'Physical' },
-  { value: 'digital_transfer',label: 'Digital transfer' },
-  { value: 'email',           label: 'Email' },
-  { value: 'sftp',            label: 'SFTP' },
-  { value: 'cloud',           label: 'Cloud' },
-  { value: 'other',           label: 'Other' },
+  { value: '',                 label: 'All delivery types (default)' },
+  { value: 'physical',         label: 'Physical' },
+  { value: 'digital_transfer', label: 'Digital transfer' },
+  { value: 'email',            label: 'Email' },
+  { value: 'sftp',             label: 'SFTP' },
+  { value: 'cloud',            label: 'Cloud' },
+  { value: 'other',            label: 'Other' },
 ]
 
 function ChecklistItemEditor({ items, onChange }: {
@@ -655,7 +701,6 @@ function ChecklistItemEditor({ items, onChange }: {
     const next = items.map((item, idx) => {
       if (idx !== i) return item
       const updated = { ...item, [field]: val }
-      // Auto-generate key from label
       if (field === 'label' && !item.key) {
         updated.key = val.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
       }
@@ -674,9 +719,11 @@ function ChecklistItemEditor({ items, onChange }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
       {items.map((item, i) => (
-        <div key={i} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start',
+        <div key={i} style={{
+          display: 'flex', gap: 'var(--space-2)', alignItems: 'flex-start',
           padding: 'var(--space-2)', background: 'var(--color-bg-subtle)',
-          borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+          borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)',
+        }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
             <button className="btn btn-ghost btn-sm btn-icon" disabled={i === 0}
               onClick={() => move(i, -1)} style={{ padding: '2px' }}>↑</button>
@@ -722,9 +769,11 @@ function ChecklistTemplateEditor({ template, onSave, onCancel, isSaving }: {
   const [items, setItems] = useState<any[]>(template?.items ?? [])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)',
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 'var(--space-4)',
       padding: 'var(--space-4)', background: 'var(--color-bg-subtle)',
-      border: '1px solid var(--color-accent-border)', borderRadius: 'var(--radius-lg)' }}>
+      border: '1px solid var(--color-accent-border)', borderRadius: 'var(--radius-lg)',
+    }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-3)' }}>
         <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
           <label>Template name *</label>
@@ -747,8 +796,10 @@ function ChecklistTemplateEditor({ template, onSave, onCancel, isSaving }: {
         </div>
       </div>
       <div>
-        <label style={{ fontSize: 'var(--text-sm)', fontWeight: 600, display: 'block',
-          marginBottom: 'var(--space-2)', color: 'var(--color-ink-muted)' }}>
+        <label style={{
+          fontSize: 'var(--text-sm)', fontWeight: 600, display: 'block',
+          marginBottom: 'var(--space-2)', color: 'var(--color-ink-muted)',
+        }}>
           Checklist items
         </label>
         <ChecklistItemEditor items={items} onChange={setItems} />
@@ -841,9 +892,11 @@ function ChecklistTemplatesSection() {
                     {methodLabel(t.delivery_method)}
                   </span>
                   {t.is_default && (
-                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-accent)',
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, color: 'var(--color-accent)',
                       background: 'var(--color-accent-bg)', border: '1px solid var(--color-accent-border)',
-                      borderRadius: 'var(--radius-sm)', padding: '1px 5px' }}>DEFAULT</span>
+                      borderRadius: 'var(--radius-sm)', padding: '1px 5px',
+                    }}>DEFAULT</span>
                   )}
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
                     {t.items.length} item{t.items.length !== 1 ? 's' : ''}
@@ -865,10 +918,11 @@ function ChecklistTemplatesSection() {
   )
 }
 
+// ─── Main export ──────────────────────────────────────────────────────
+
 export default function VocabulariesTab() {
   const queryClient = useQueryClient()
 
-  // Agent-node relation types
   const { data: agentNodeTypes, isLoading: loadingAgentNode } = useQuery({
     queryKey: ['vocab-agent-node-types'],
     queryFn: () => vocabApi.listAgentNodeRelationTypes().then(r => r.data.data),
@@ -893,7 +947,6 @@ export default function VocabulariesTab() {
     onError: () => setDeletingAgentNode(null),
   })
 
-  // Node-node relation types
   const { data: nodeNodeTypes, isLoading: loadingNodeNode } = useQuery({
     queryKey: ['vocab-node-relation-types'],
     queryFn: () => vocabApi.listNodeRelationTypes().then(r => r.data.data),
@@ -918,11 +971,12 @@ export default function VocabulariesTab() {
     onError: () => setDeletingNodeNode(null),
   })
 
-  const [vocabTab, setVocabTab] = useState<'relations' | 'geo' | 'deliveries'>('relations')
+  const [vocabTab, setVocabTab] = useState<'relations' | 'geo' | 'objects' | 'deliveries'>('relations')
 
   const VOCAB_TABS = [
-    { key: 'relations', label: 'Relation types' },
-    { key: 'geo',       label: 'Geography & tagging' },
+    { key: 'relations',  label: 'Relation types' },
+    { key: 'geo',        label: 'Geography & tagging' },
+    { key: 'objects',    label: 'Objects' },
     { key: 'deliveries', label: 'Deliveries' },
   ]
 
@@ -944,46 +998,52 @@ export default function VocabulariesTab() {
       </div>
 
       {vocabTab === 'relations' && (
-      <div className={styles.group}>
-        <AgentRelationSection />
-        <SimpleVocabSection
-          title="Agent – resource"
-          description="How agents relate to archival descriptions — e.g. creator, contributor, publisher, subject."
-          items={agentNodeTypes ?? []}
-          isLoading={loadingAgentNode}
-          onCreate={(name, desc, sym, comp) => createAgentNodeMutation.mutate({ name, desc, isSymmetric: sym, complementName: comp })}
-          withComplement
-          onUpdate={(id, name, desc, isSym, compName) => updateAgentNodeMutation.mutate({ id, name, desc, isSym, compName })}
-          onDelete={id => { if (confirm('Delete this type?')) deleteAgentNodeMutation.mutate(id) }}
-          isCreating={createAgentNodeMutation.isPending}
-          isDeleting={deletingAgentNode}
-        />
-        <SimpleVocabSection
-          title="Resource – resource"
-          description="Relationships between archival descriptions — e.g. related to, precedes, follows, is part of."
-          items={nodeNodeTypes ?? []}
-          isLoading={loadingNodeNode}
-          onCreate={(name, desc, sym, comp) => createNodeNodeMutation.mutate({ name, desc, isSymmetric: sym, complementName: comp })}
-          withComplement
-          onUpdate={(id, name, desc, isSym, compName) => updateNodeNodeMutation.mutate({ id, name, desc, isSym, compName })}
-          onDelete={id => { if (confirm('Delete this type?')) deleteNodeNodeMutation.mutate(id) }}
-          isCreating={createNodeNodeMutation.isPending}
-          isDeleting={deletingNodeNode}
-        />
-      </div>
+        <div className={styles.group}>
+          <AgentRelationSection />
+          <SimpleVocabSection
+            title="Agent – resource"
+            description="How agents relate to archival descriptions — e.g. creator, contributor, publisher, subject."
+            items={agentNodeTypes ?? []}
+            isLoading={loadingAgentNode}
+            onCreate={(name, desc, sym, comp) => createAgentNodeMutation.mutate({ name, desc, isSymmetric: sym, complementName: comp })}
+            withComplement
+            onUpdate={(id, name, desc, isSym, compName) => updateAgentNodeMutation.mutate({ id, name, desc, isSym, compName })}
+            onDelete={id => { if (confirm('Delete this type?')) deleteAgentNodeMutation.mutate(id) }}
+            isCreating={createAgentNodeMutation.isPending}
+            isDeleting={deletingAgentNode}
+          />
+          <SimpleVocabSection
+            title="Resource – resource"
+            description="Relationships between archival descriptions — e.g. related to, precedes, follows, is part of."
+            items={nodeNodeTypes ?? []}
+            isLoading={loadingNodeNode}
+            onCreate={(name, desc, sym, comp) => createNodeNodeMutation.mutate({ name, desc, isSymmetric: sym, complementName: comp })}
+            withComplement
+            onUpdate={(id, name, desc, isSym, compName) => updateNodeNodeMutation.mutate({ id, name, desc, isSym, compName })}
+            onDelete={id => { if (confirm('Delete this type?')) deleteNodeNodeMutation.mutate(id) }}
+            isCreating={createNodeNodeMutation.isPending}
+            isDeleting={deletingNodeNode}
+          />
+        </div>
       )}
 
       {vocabTab === 'geo' && (
-      <div className={styles.group}>
-        <PlaceTypesSection />
-        <TagCategoriesSection />
-      </div>
+        <div className={styles.group}>
+          <PlaceTypesSection />
+          <TagCategoriesSection />
+        </div>
+      )}
+
+      {vocabTab === 'objects' && (
+        <div className={styles.group}>
+          <RepresentationTypesSection />
+        </div>
       )}
 
       {vocabTab === 'deliveries' && (
-      <div className={styles.group}>
-        <ChecklistTemplatesSection />
-      </div>
+        <div className={styles.group}>
+          <ChecklistTemplatesSection />
+        </div>
       )}
     </div>
   )

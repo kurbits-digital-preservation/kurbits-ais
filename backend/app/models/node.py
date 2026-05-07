@@ -150,6 +150,12 @@ class Node(db.Model):
     attachments: so.Mapped[List['NodeAttachment']] = so.relationship(
         'NodeAttachment', back_populates='node', cascade='all, delete-orphan'
     )
+
+    representations: so.Mapped[List['NodeRepresentation']] = so.relationship(
+        'NodeRepresentation', back_populates='node', cascade='all, delete-orphan',
+        order_by='NodeRepresentation.created_at'
+    )
+
     notes: so.Mapped[List['NodeNote']] = so.relationship(
         'NodeNote', back_populates='node', cascade='all, delete-orphan'
     )
@@ -251,6 +257,16 @@ class Node(db.Model):
             )
         ).scalar_one_or_none()
         return level.effective_can_have_location if level else False
+
+    def is_object(self) -> bool:
+        from app.models.hierarchy import HierarchyLevel
+        level = db.session.execute(
+            sa.select(HierarchyLevel).where(
+                HierarchyLevel.hierarchy_type_id == self.hierarchy_type_id,
+                sa.func.lower(HierarchyLevel.name) == self.level_of_description.lower()
+            )
+        ).scalar_one_or_none()
+        return level.effective_is_object_level if level else False
 
     # --- Versioning ---
 
@@ -368,12 +384,20 @@ class NodeAttachment(db.Model):
     duration_seconds:so.Mapped[Optional[float]] = so.mapped_column(sa.Float,     nullable=True)
     av_codec:        so.Mapped[Optional[str]] = so.mapped_column(sa.String(100), nullable=True)
     av_bitrate:      so.Mapped[Optional[int]] = so.mapped_column(sa.Integer,     nullable=True)
-    representation:  so.Mapped[Optional[str]] = so.mapped_column(sa.String(30),  nullable=True)
+
     thumbnail_path:  so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
     tech_extracted_at: so.Mapped[Optional[datetime]] = so.mapped_column(sa.DateTime, nullable=True)
 
     node: so.Mapped['Node'] = so.relationship('Node', back_populates='attachments')
     uploaded_by: so.Mapped['User'] = so.relationship('User')
+
+    representation_id: so.Mapped[Optional[int]] = so.mapped_column(
+        sa.ForeignKey('node_representations.id', ondelete='SET NULL', name='fk_attachment_representation'),
+        nullable=True
+    )
+    representation_obj: so.Mapped[Optional['NodeRepresentation']] = so.relationship(
+        'NodeRepresentation', back_populates='files'
+    )
 
     def __repr__(self):
         return f'<NodeAttachment {self.original_filename}>'

@@ -50,11 +50,23 @@ def serialize_node_detail(node: Node) -> dict:
         'has_children': node.children.count() > 0,
         'children_count': node.children.count(),
         'can_have_location': node.can_have_location(),
+        'is_object': node.is_object(),
+        'representations': [
+            {
+                'id': r.id,
+                'rep_type_id': r.rep_type_id,
+                'rep_type_name': r.rep_type_obj.name if r.rep_type_obj else None,
+                'label': r.label,
+                'file_count': len(r.files),
+            }
+            for r in node.representations
+        ],
         'created_at': node.created_at.isoformat(),
         'updated_at': node.updated_at.isoformat(),
         'created_by': node.created_by.username if node.created_by else None,
         'updated_by': node.updated_by.username if node.updated_by else None,
-        'attachments': [serialize_attachment(a) for a in node.attachments],
+        'attachments': [serialize_attachment(a) for a in node.attachments
+                        if a.representation_id is None],
         'notes': [serialize_note(n) for n in node.notes],
     }
 
@@ -72,13 +84,15 @@ def serialize_change(change: NodeChange) -> dict:
 
 
 def serialize_attachment(attachment: NodeAttachment) -> dict:
-    d = {
+    return {
         'id': attachment.id,
         'original_filename': attachment.original_filename,
         'file_size': attachment.file_size,
         'mime_type': attachment.mime_type,
         'description': attachment.description,
-        'representation': attachment.representation,
+        'representation_id': attachment.representation_id,
+        'representation_name': attachment.representation_obj.rep_type_obj.name
+                               if attachment.representation_obj else None,
         'uploaded_at': attachment.uploaded_at.isoformat(),
         'uploaded_by': attachment.uploaded_by.username if attachment.uploaded_by else None,
         # Integrity
@@ -99,9 +113,9 @@ def serialize_attachment(attachment: NodeAttachment) -> dict:
         'av_bitrate': attachment.av_bitrate,
         # Thumbnail
         'has_thumbnail': attachment.thumbnail_path is not None,
-        'tech_extracted_at': attachment.tech_extracted_at.isoformat() if attachment.tech_extracted_at else None,
+        'tech_extracted_at': attachment.tech_extracted_at.isoformat()
+                             if attachment.tech_extracted_at else None,
     }
-    return d
 
 
 def serialize_note(note: NodeNote) -> dict:

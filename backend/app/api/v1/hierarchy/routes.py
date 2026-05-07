@@ -40,6 +40,7 @@ def _serialize_level(level: HierarchyLevel) -> dict:
         'metadata_schema': level.metadata_schema or {'fields': []},
         'allowed_parent_ids': allowed_parent_ids,
         'allowed_children_ids': allowed_children_ids,
+        'is_object_level': level.is_object_level,
     }
 
 
@@ -221,6 +222,8 @@ def update_level(type_id, level_id):
         level.save_can_have_location(data['can_have_location'])
     if 'metadata_schema' in data:
         level.metadata_schema = data['metadata_schema']
+    if 'is_object_level' in data:
+        level.is_object_level = bool(data['is_object_level'])
 
     db.session.commit()
     return success(_serialize_level(level))

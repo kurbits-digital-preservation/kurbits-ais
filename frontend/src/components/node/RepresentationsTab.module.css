@@ -1,0 +1,240 @@
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tabHeader {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Rep card ── */
+
+.repCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.repHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
+  background: var(--color-surface-raised);
+  cursor: pointer;
+  user-select: none;
+}
+
+.repChevron {
+  flex-shrink: 0;
+  color: var(--color-ink-faint);
+  transition: transform 150ms ease;
+}
+
+.repChevronOpen {
+  transform: rotate(90deg);
+}
+
+.repTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.repTypeName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.repLabel {
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+}
+
+.repFileCount {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+  flex-shrink: 0;
+}
+
+.repActions {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.repEditForm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1;
+}
+
+.repBody {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.repNote {
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  font-style: italic;
+  margin: 0 0 var(--space-1);
+}
+
+.repEmpty {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+}
+
+/* ── File card ── */
+
+.fileCard {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.fileThumb {
+  background: var(--color-surface-sunken);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-2);
+}
+
+.fileThumbImg {
+  max-height: 120px;
+  object-fit: contain;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.fileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+}
+
+.fileInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.fileName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+}
+
+.fileTechPanel {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-3);
+  background: var(--color-surface-sunken);
+}
+
+.fileTechGrid {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 2px var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.fileTechGrid dt {
+  color: var(--color-ink-faint);
+  font-weight: 500;
+}
+
+.fileTechGrid dd {
+  color: var(--color-ink);
+  margin: 0;
+}
+
+/* ── Upload row ── */
+
+.uploadRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.uploadError {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+}
+
+/* ── New rep form ── */
+
+.newRepForm {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.newRepActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ── Empty state ── */
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-ink-muted);
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--color-border);
+}
+
+/* ── No types warning ── */
+
+.noTypesWarning {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-ink-muted);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}

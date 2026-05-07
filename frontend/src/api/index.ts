@@ -637,3 +637,42 @@ export const integrationsApi = {
     api.get<ApiResponse<Record<string, any>[]>>(`/integrations/${id}/search`, { params: { q } })
       .then(r => r.data.data!),
 }
+
+export const representationsApi = {
+  // Vocabulary (admin)
+  listTypes: () =>
+    api.get('/representation-types'),
+  createType: (data: { name: string; description?: string; sort_order?: number }) =>
+    api.post('/representation-types', data),
+  updateType: (id: number, data: Partial<{ name: string; description: string; sort_order: number }>) =>
+    api.patch(`/representation-types/${id}`, data),
+  deleteType: (id: number) =>
+    api.delete(`/representation-types/${id}`),
+
+  // Per-node representations
+  list: (nodeId: number) =>
+    api.get(`/nodes/${nodeId}/representations`),
+  create: (nodeId: number, data: { rep_type_id: number; label?: string; note?: string }) =>
+    api.post(`/nodes/${nodeId}/representations`, data),
+  update: (nodeId: number, repId: number, data: Partial<{ rep_type_id: number; label: string; note: string }>) =>
+    api.patch(`/nodes/${nodeId}/representations/${repId}`, data),
+  delete: (nodeId: number, repId: number) =>
+    api.delete(`/nodes/${nodeId}/representations/${repId}`),
+
+  // Upload a file into a representation
+  uploadFile: (nodeId: number, repId: number, formData: FormData) =>
+    api.post(`/nodes/${nodeId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      params: { representation_id: repId },
+    }),
+
+  getDownloadUrl: (nodeId: number, fileId: number) =>
+    `/api/v1/nodes/${nodeId}/attachments/${fileId}/download`,
+  getThumbnailUrl: (nodeId: number, fileId: number) =>
+    `/api/v1/nodes/${nodeId}/attachments/${fileId}/thumbnail`,
+
+  deleteFile: (nodeId: number, fileId: number) =>
+    api.delete(`/nodes/${nodeId}/attachments/${fileId}`),
+  reextractFile: (nodeId: number, fileId: number) =>
+    api.post(`/nodes/${nodeId}/attachments/${fileId}/extract`),
+}

@@ -46,6 +46,7 @@ export interface HierarchyLevel {
   description: string | null
   sort_order: number
   can_have_location: boolean
+  is_object_level: boolean
   metadata_schema: { fields: MetadataField[] } | null
 }
 
@@ -118,6 +119,8 @@ export interface NodeDetail extends NodeStub {
   updated_by: string | null
   attachments: NodeAttachment[]
   notes: NodeNote[]
+  is_object: boolean
+  representations: RepresentationStub[] 
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────
@@ -229,4 +232,57 @@ export interface ExternalIntegration {
   result_path: string
   field_mappings: Record<string, string>
   is_active: boolean
+}
+
+// ─── Representations ─────────────────────────────────────────────────
+
+export interface RepresentationType {
+  id: number
+  name: string
+  description: string | null
+  sort_order: number
+}
+
+export interface RepresentationFile {
+  id: number
+  original_filename: string
+  file_size: number
+  mime_type: string
+  description: string | null
+  uploaded_at: string
+  uploaded_by: string | null
+  checksum_md5: string | null
+  checksum_sha256: string | null
+  pronom_id: string | null
+  image_width: number | null
+  image_height: number | null
+  image_dpi_x: number | null
+  image_dpi_y: number | null
+  image_mode: string | null
+  image_bit_depth: number | null
+  duration_seconds: number | null
+  av_codec: string | null
+  av_bitrate: number | null
+  has_thumbnail: boolean
+  tech_extracted_at: string | null
+}
+
+export interface NodeRepresentation {
+  id: number
+  node_id: number
+  rep_type_id: number
+  rep_type_name: string | null
+  label: string | null
+  note: string | null
+  created_at: string
+  created_by: string | null
+  files: RepresentationFile[]
+}
+
+export interface RepresentationStub {
+  id: number
+  rep_type_id: number
+  rep_type_name: string | null
+  label: string | null
+  file_count: number
 }

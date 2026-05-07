@@ -36,6 +36,7 @@ from app.models.classification import (
 )
 
 from app.models.integration import ExternalIntegration
+from app.models.representation import RepresentationType, NodeRepresentation
 
 __all__ = [
     'Institution',
@@ -67,6 +68,8 @@ __all__ = [
     'ClassificationChange',
     'classification_node_association',
     'ExternalIntegration',
+    'RepresentationType',
+    'NodeRepresentation',
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 

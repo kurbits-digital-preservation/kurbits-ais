@@ -790,9 +790,15 @@ def upload_attachment(node_id):
         file_size=file_size,
         mime_type=mime_type,
         description=request.form.get('description'),
-        representation=request.form.get('representation', 'original'),
         uploaded_by_id=current_user.id,
     )
+
+    rep_id = request.args.get('representation_id', type=int) or request.form.get('representation_id', type=int)
+    if rep_id:
+        from app.models.representation import NodeRepresentation
+        rep = NodeRepresentation.query.filter_by(id=rep_id, node_id=node_id).first()
+        if rep:
+            attachment.representation_id = rep.id
     db.session.add(attachment)
     db.session.flush()
 

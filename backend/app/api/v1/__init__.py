@@ -12,7 +12,7 @@ from app.api.v1.ead import routes                    # noqa: F401
 from app.api.v1.export import routes                 # noqa: F401
 from app.api.v1.acquisitions import routes           # noqa: F401
 from app.api.v1 import integration  # noqa: F401
-
+from app.api.v1.representations import routes # noqa: F401
 # Search
 from app.api.v1 import search  # noqa: F401
 
