@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import {
   Plus, X, User, Building2, UsersRound, Bot,
   MapPin, Tag, Link, Search, ChevronDown
@@ -362,6 +363,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
 }
 
 function ClassificationsSection({ nodeId }: { nodeId: number }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [selectedScheme, setSelectedScheme] = useState<any>(null)
@@ -473,13 +475,19 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
 
       {linked?.map((c: any) => (
         <div key={c.id} className={styles.linkedItem}>
-          <div className={styles.linkedItemIcon}>
-            <Tag size={14} />
-          </div>
-          <div className={styles.linkedItemBody}>
-            <span className={styles.linkedItemCode}>{c.full_code}</span>
-            <span className={styles.linkedItemName}>{c.name}</span>
-          </div>
+          <button
+            className={styles.linkedItemBtn}
+            onClick={() => navigate('/app/classifications', { state: { selectClassificationId: c.id } })}
+            title="Open in Classifications"
+          >
+            <div className={styles.linkedItemIcon}>
+              <Tag size={14} />
+            </div>
+            <div className={styles.linkedItemBody}>
+              <span className={styles.linkedItemCode}>{c.full_code}</span>
+              <span className={styles.linkedItemName}>{c.name}</span>
+            </div>
+          </button>
           <button
             className="btn btn-ghost btn-sm btn-icon"
             onClick={() => removeMutation.mutate(c.id)}

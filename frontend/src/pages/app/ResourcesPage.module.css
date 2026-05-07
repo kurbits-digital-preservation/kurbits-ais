@@ -830,3 +830,198 @@
   width: auto !important;
   flex-shrink: 0;
 }
+/* ─── Bulk actions bar ───────────────────────────────────────────── */
+.bulkActionsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) var(--space-3);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+  border-bottom: 1px solid var(--color-accent-border);
+  flex-shrink: 0;
+}
+
+.bulkCount {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.bulkActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* ─── Children / Content panel ───────────────────────────────────── */
+.childrenPanel {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-4);
+}
+
+.childrenToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  font-family: var(--font-sans);
+  text-align: left;
+  transition: color 0.1s;
+}
+.childrenToggle:hover { color: var(--color-ink); }
+
+.childrenChevron {
+  transition: transform 0.15s;
+  flex-shrink: 0;
+  color: var(--color-ink-faint);
+}
+.childrenChevronOpen { transform: rotate(90deg); }
+
+.childrenCount {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-ink-faint);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0 6px;
+  line-height: 1.6;
+}
+
+.childrenBody {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: var(--space-4);
+}
+
+.childrenFilterRow {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+}
+
+.childrenSearchWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 3px 8px;
+}
+.childrenSearchWrap:focus-within { border-color: var(--color-accent); }
+
+.childrenSearchIcon { color: var(--color-ink-faint); flex-shrink: 0; }
+
+.childrenSearchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  padding: 0;
+}
+.childrenSearchInput::placeholder { color: var(--color-ink-faint); }
+
+.childrenSearchClear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+
+.childrenLoading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.childrenEmpty {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.childRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  font-family: var(--font-sans);
+  transition: background 0.08s;
+}
+.childRow:last-child { border-bottom: none; }
+.childRow:hover { background: var(--color-bg-subtle); }
+
+.childRowInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.childRowTitle {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.childRowMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.childRowLevel {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  font-style: italic;
+}
+
+.childRowArrow {
+  color: var(--color-ink-faint);
+  flex-shrink: 0;
+}
+
+.childrenPagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+}
+
+.childrenPaginationInfo {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  min-width: 40px;
+  text-align: center;
+}

@@ -5,6 +5,8 @@ import { classificationsApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import type { ClassificationStub } from '@/types'
 import styles from './ClassificationTree.module.css'
+import { useAuthStore } from '@/store/auth'
+
 
 interface ClassificationTreeProps {
   selectedId: number | null
@@ -92,8 +94,11 @@ function Row({ node, depth, selectedId, onSelect }: RowProps) {
 }
 
 export default function ClassificationTree({ selectedId, onSelect, hierarchyTypeId }: ClassificationTreeProps) {
+
+  const { user } = useAuthStore()
+  const institutionId = user?.active_institution?.id
   const { data, isLoading, error } = useQuery({
-    queryKey: ['classification-tree', hierarchyTypeId],
+    queryKey: ['classification-tree', hierarchyTypeId, institutionId],
     queryFn: () => classificationsApi.getTree(hierarchyTypeId).then(r => r.data.data),
   })
 

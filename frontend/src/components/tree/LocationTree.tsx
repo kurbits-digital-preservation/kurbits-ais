@@ -5,10 +5,12 @@ import { locationsApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import type { LocationStub } from '@/types'
 import styles from './LocationTree.module.css'
+import { useAuthStore } from '@/store/auth'
 
 interface LocationTreeProps {
   selectedId: number | null
   onSelect: (location: LocationStub) => void
+  search?: string
 }
 
 interface LocationRowProps {
@@ -17,6 +19,8 @@ interface LocationRowProps {
   selectedId: number | null
   onSelect: (location: LocationStub) => void
 }
+
+
 
 function CapacityBar({ stored, capacity }: { stored: number; capacity: number | null }) {
   if (capacity === null) return null
@@ -119,18 +123,52 @@ function LocationRow({ location, depth, selectedId, onSelect }: LocationRowProps
   )
 }
 
-export default function LocationTree({ selectedId, onSelect }: LocationTreeProps) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['location-tree'],
-    queryFn: () => locationsApi.getTree().then(r => r.data.data),
+export default function LocationTree({ selectedId, onSelect, search = '' }: LocationTreeProps) {
+  // When search is active, show flat search results instead of the tree
+  const { user } = useAuthStore()
+  const institutionId = user?.active_institution?.id
+  const { data: searchResults, isLoading: searchLoading } = useQuery({
+    queryKey: ['locations-search-tree', search],
+    queryFn: () => locationsApi.search(search, false).then(r => r.data.data),
+    enabled: search.trim().length > 1,
   })
 
-  if (isLoading) return (
-    <div className={styles.state}><Spinner /><span>Loading…</span></div>
-  )
-  if (error) return (
-    <div className={styles.state}><span className="text-muted">Failed to load</span></div>
-  )
+  const { data, isLoading, error } = useQuery({
+     queryKey: ['location-tree', institutionId],
+    queryFn: () => locationsApi.getTree().then(r => r.data.data),
+    enabled: search.trim().length <= 1,
+  })
+
+  if (search.trim().length > 1) {
+    if (searchLoading) return <div className={styles.state}><Spinner /><span>Searching…</span></div>
+    if (!searchResults?.length) return <div className={styles.empty}><p>No locations found.</p></div>
+    return (
+      <div className={styles.tree}>
+        {searchResults.map((loc: any) => (
+          <div
+            key={loc.id}
+            className={`${styles.locationRow} ${selectedId === loc.id ? styles.selected : ''}`}
+            style={{ paddingLeft: '12px' }}
+            onClick={() => onSelect(loc)}
+          >
+            <span className={styles.levelIcon}><LevelIcon level={loc.level_name} /></span>
+            <div className={styles.info}>
+              <div className={styles.nameRow}>
+                <span className={styles.name}>{loc.name}</span>
+                <span className={styles.code}>{loc.code}</span>
+              </div>
+              <div className={styles.meta}>
+                <span className={styles.level}>{loc.level_name}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (isLoading) return <div className={styles.state}><Spinner /><span>Loading…</span></div>
+  if (error) return <div className={styles.state}><span className="text-muted">Failed to load</span></div>
   if (!data?.length) return (
     <div className={styles.empty}>
       <p>No locations defined.</p>
@@ -141,13 +179,7 @@ export default function LocationTree({ selectedId, onSelect }: LocationTreeProps
   return (
     <div className={styles.tree}>
       {data.map(loc => (
-        <LocationRow
-          key={loc.id}
-          location={loc}
-          depth={0}
-          selectedId={selectedId}
-          onSelect={onSelect}
-        />
+        <LocationRow key={loc.id} location={loc} depth={0} selectedId={selectedId} onSelect={onSelect} />
       ))}
     </div>
   )

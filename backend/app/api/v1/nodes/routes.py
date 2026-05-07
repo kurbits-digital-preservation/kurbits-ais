@@ -107,6 +107,10 @@ def list_nodes():
     if hierarchy_type_id:
         query = query.where(Node.hierarchy_type_id == hierarchy_type_id)
 
+    parent_id_filter = request.args.get('parent_id', type=int)
+    if parent_id_filter is not None:
+        query = query.where(Node.parent_id == parent_id_filter)
+
     query = query.order_by(Node.ref_code)
     paginated = db.paginate(query, page=page, per_page=per_page, error_out=False)
 
@@ -302,6 +306,82 @@ def delete_node(node_id):
     db.session.delete(node)
     db.session.commit()
     return success({'message': 'Node deleted'})
+
+
+# POST /api/v1/nodes/bulk-move
+@bp.route('/nodes/bulk-move', methods=['POST'])
+@login_required
+@require_write
+def bulk_move_nodes():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+    node_ids = data.get('node_ids', [])
+    parent_id = data.get('parent_id', None)
+
+    if not node_ids:
+        return error('node_ids is required', 400)
+
+    target = None
+    if parent_id is not None:
+        target = _get_node_or_404(parent_id, institution_id)
+        if not target:
+            return error('Target node not found', 404)
+
+    moved = []
+    errors = []
+    for nid in node_ids:
+        node = _get_node_or_404(nid, institution_id)
+        if not node:
+            errors.append({'id': nid, 'error': 'Not found'})
+            continue
+        if parent_id is not None:
+            ancestor = target
+            while ancestor:
+                if ancestor.id == nid:
+                    errors.append({'id': nid, 'error': 'Cannot move node into itself or a descendant'})
+                    break
+                ancestor = ancestor.parent
+            else:
+                node.parent_id = parent_id
+                _refresh_subtree_refs(node)
+                moved.append(nid)
+        else:
+            node.parent_id = None
+            _refresh_subtree_refs(node)
+            moved.append(nid)
+
+    db.session.commit()
+    return success({'moved': moved, 'errors': errors})
+
+
+# POST /api/v1/nodes/bulk-delete
+@bp.route('/nodes/bulk-delete', methods=['POST'])
+@login_required
+@require_write
+def bulk_delete_nodes():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+    node_ids = data.get('node_ids', [])
+    force = bool(data.get('force', False))
+
+    if not node_ids:
+        return error('node_ids is required', 400)
+
+    deleted = []
+    errors = []
+    for nid in node_ids:
+        node = _get_node_or_404(nid, institution_id)
+        if not node:
+            errors.append({'id': nid, 'error': 'Not found'})
+            continue
+        if not force and node.children.count() > 0:
+            errors.append({'id': nid, 'error': f'"{node.title or node.ref_code}" has children — use force delete to remove with all descendants'})
+            continue
+        db.session.delete(node)
+        deleted.append(nid)
+
+    db.session.commit()
+    return success({'deleted': deleted, 'errors': errors})
 
 
 # ---------------------------------------------------------------------------

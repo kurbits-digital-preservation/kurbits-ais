@@ -46,6 +46,7 @@ function LocationForm({
   isSaving: boolean
 }) {
   const [form, setForm] = useState<LocationFormData>({ ...EMPTY_FORM, ...initial })
+
   const set = (field: keyof LocationFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [field]: e.target.value }))
@@ -788,6 +789,7 @@ export default function LocationsPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('detail')
   const [editingLocation, setEditingLocation] = useState<LocationDetail | null>(null)
   const [addingChildOf, setAddingChildOf] = useState<number | null>(null)
+  const [treeSearch, setTreeSearch] = useState('')
 
   const { data: parentLocation } = useQuery({
     queryKey: ['location', addingChildOf],
@@ -847,16 +849,39 @@ export default function LocationsPage() {
             </button>
           }
         >
-          <div className={styles.treeWrap}>
-            <LocationTree
-              selectedId={selectedId}
-              onSelect={(loc) => {
-                setSelectedId(loc.id)
-                setSelectedStub(loc)
-                setViewMode('detail')
-              }}
-            />
-          </div>
+<div className={styles.treeWrap}>
+  <div style={{ padding: 'var(--space-2) var(--space-3)', borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <svg style={{ position: 'absolute', left: 8, color: 'var(--color-ink-faint)', pointerEvents: 'none' }} width="13" height="13" viewBox="0 0 16 16" fill="none">
+        <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/>
+        <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      </svg>
+      <input
+        style={{ paddingLeft: 28, width: '100%', fontSize: 'var(--text-sm)' }}
+        value={treeSearch}
+        onChange={e => setTreeSearch(e.target.value)}
+        placeholder="Filter locations…"
+      />
+      {treeSearch && (
+        <button
+          style={{ position: 'absolute', right: 4, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-ink-faint)', display: 'flex', padding: 4 }}
+          onClick={() => setTreeSearch('')}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+        </button>
+      )}
+    </div>
+  </div>
+  <LocationTree
+    selectedId={selectedId}
+    onSelect={(loc) => {
+      setSelectedId(loc.id)
+      setSelectedStub(loc)
+      setViewMode('detail')
+    }}
+    search={treeSearch}
+  />
+</div>
         </SidebarPanel>
       }
 

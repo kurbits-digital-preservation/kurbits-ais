@@ -56,6 +56,22 @@
 }
 .linkedItem:hover { border-color: var(--color-border-strong); }
 
+.linkedItemBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  padding: 0;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+.linkedItemBtn:hover .linkedItemName { color: var(--color-accent); }
+
 .linkedItemIcon {
   width: 28px; height: 28px;
   border-radius: var(--radius-md);

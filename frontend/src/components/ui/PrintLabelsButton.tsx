@@ -4,9 +4,9 @@ import { nodesApi } from '@/api'
 
 const FORMATS = [
   { value: 'standard_90x45', label: 'Standard arkivetikett (12 per ark, 90×45 mm)' },
-  { value: 'single',             label: 'Enskild etikett (A4 helsida)' },
-  { value: 'avery_l7163',        label: 'Avery L7163 (14 per ark, 99×38 mm)' },
-  { value: 'avery_l7160',        label: 'Avery L7160 (21 per ark, 64×38 mm)' },
+  { value: 'single',          label: 'Enskild etikett (A4 helsida)' },
+  { value: 'avery_l7163',     label: 'Avery L7163 (14 per ark, 99×38 mm)' },
+  { value: 'avery_l7160',     label: 'Avery L7160 (21 per ark, 64×38 mm)' },
 ]
 
 interface Props {
@@ -18,16 +18,14 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
   const [open, setOpen] = useState(false)
   const [format, setFormat] = useState('standard_90x45')
   const [copies, setCopies] = useState(1)
+  const [includeDescendants, setIncludeDescendants] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -38,7 +36,7 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
     setLoading(true)
     setError('')
     try {
-      const res = await nodesApi.printLabels(nodeIds, format, copies)
+      const res = await nodesApi.printLabels(nodeIds, format, copies, includeDescendants)
       const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -112,10 +110,17 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
             />
           </div>
 
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={includeDescendants}
+              onChange={e => setIncludeDescendants(e.target.checked)}
+            />
+            Include all descendants
+          </label>
+
           {error && (
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', margin: 0 }}>
-              {error}
-            </p>
+            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-danger)', margin: 0 }}>{error}</p>
           )}
 
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
@@ -126,7 +131,8 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
           </div>
 
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)', margin: 0 }}>
-            {nodeIds.length} label{nodeIds.length !== 1 ? 's' : ''} will be generated.
+            {nodeIds.length} node{nodeIds.length !== 1 ? 's' : ''} selected
+            {includeDescendants ? ' + descendants' : ''}.
             PDF opens for printing or download.
           </p>
         </div>

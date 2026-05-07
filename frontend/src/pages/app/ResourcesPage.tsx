@@ -618,12 +618,64 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
   )
 }
 
+// ─── Bulk delete dialog ───────────────────────────────────────────────
+
+function BulkDeleteDialog({ count, onConfirm, onClose, isPending }: {
+  count: number
+  onConfirm: (force: boolean) => void
+  onClose: () => void
+  isPending: boolean
+}) {
+  const [force, setForce] = useState(false)
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className={styles.modalHeader}>
+          <h3 className={styles.modalTitle}><Trash2 size={15} /> Delete {count} node{count !== 1 ? 's' : ''}</h3>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><X size={14} /></button>
+        </div>
+        <div className={styles.modalBody}>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)' }}>
+            This will permanently delete the selected {count} node{count !== 1 ? 's' : ''}. This cannot be undone.
+          </p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 'var(--space-4)', fontSize: 'var(--text-sm)', cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} />
+            <span>Also delete all descendants recursively</span>
+          </label>
+          {force && (
+            <p style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-xs)', color: 'var(--color-error)', display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+              <AlertCircle size={12} />
+              All child nodes at every level will be permanently removed.
+            </p>
+          )}
+        </div>
+        <div className={styles.modalFooter}>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-sm"
+            style={{ background: 'var(--color-error)', color: '#fff' }}
+            onClick={() => onConfirm(force)}
+            disabled={isPending}
+          >
+            {isPending ? <Spinner size={13} /> : <Trash2 size={13} />}
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Node detail panel ────────────────────────────────────────────────
+
 function NodeDetailPanel({
   nodeId,
   onEdit,
+  onSelectChild,
 }: {
   nodeId: number
   onEdit: (node: NodeDetail) => void
+  onSelectChild: (node: NodeStub) => void
 }) {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history'>('details')
@@ -766,7 +818,7 @@ function NodeDetailPanel({
         />
       )}
       <div className={styles.detailContent}>
-        {activeTab === 'details'     && <DetailsTab node={data} />}
+        {activeTab === 'details'     && <DetailsTab node={data} onSelectChild={onSelectChild} />}
         {activeTab === 'relations'       && <NodeRelationsTab nodeId={nodeId} />}
         {activeTab === 'locations'       && <NodeLocationsTab nodeId={nodeId} />}
         {activeTab === 'classifications' && <NodeClassificationsTab nodeId={nodeId} />}
@@ -778,12 +830,93 @@ function NodeDetailPanel({
         {activeTab === 'attachments' && <AttachmentsTab node={data} />}
         {activeTab === 'history'     && <HistoryTab nodeId={nodeId} />}
       </div>
-    {showMove && data && (
-        <MoveDialog
-          node={data}
-          onMoved={() => queryClient.invalidateQueries({ queryKey: ['node-tree'] })}
-          onClose={() => setShowMove(false)}
-        />
+    </div>
+  )
+}
+
+// ─── Children / Content panel ─────────────────────────────────────────
+
+function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: NodeStub) => void }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PER_PAGE = 20
+
+  useEffect(() => { setPage(1) }, [search])
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['node-children-list', nodeId, search, page],
+    queryFn: () => nodesApi.list({ parent_id: nodeId, q: search || undefined, page, per_page: PER_PAGE }).then(r => r.data),
+    enabled: open,
+  })
+
+  const children: NodeStub[] = (data as any)?.data ?? []
+  const total: number = (data as any)?.meta?.total ?? 0
+  const pages: number = (data as any)?.meta?.pages ?? 1
+
+  return (
+    <div className={styles.childrenPanel}>
+      <button className={styles.childrenToggle} onClick={() => setOpen(v => !v)}>
+        <ChevronRight size={14} className={`${styles.childrenChevron} ${open ? styles.childrenChevronOpen : ''}`} />
+        <span>Content</span>
+        {total > 0 && <span className={styles.childrenCount}>{total}</span>}
+      </button>
+
+      {open && (
+        <div className={styles.childrenBody}>
+          <div className={styles.childrenFilterRow}>
+            <div className={styles.childrenSearchWrap}>
+              <Search size={12} className={styles.childrenSearchIcon} />
+              <input
+                className={styles.childrenSearchInput}
+                placeholder="Filter…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+              {search && (
+                <button className={styles.childrenSearchClear} onClick={() => setSearch('')}>
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {isLoading && <div className={styles.childrenLoading}><Spinner size={13} /></div>}
+
+          {!isLoading && children.length === 0 && (
+            <p className={styles.childrenEmpty}>
+              {search ? `No results for "${search}"` : 'No immediate children.'}
+            </p>
+          )}
+
+          {!isLoading && children.map(child => (
+            <button key={child.id} className={styles.childRow} onClick={() => onSelect(child)}>
+              <div className={styles.childRowInfo}>
+                <span className={styles.childRowTitle}>{child.title || child.ref_code}</span>
+                <div className={styles.childRowMeta}>
+                  <span className="ref-code" style={{ fontSize: 'var(--text-xs)' }}>{child.ref_code}</span>
+                  {child.level_of_description && (
+                    <span className={styles.childRowLevel}>{child.level_of_description}</span>
+                  )}
+                  {child.status !== 'published' && (
+                    <span className={`badge badge-${child.status}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
+                      {child.status}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <ChevronRight size={12} className={styles.childRowArrow} />
+            </button>
+          ))}
+
+          {pages > 1 && (
+            <div className={styles.childrenPagination}>
+              <button className="btn btn-ghost btn-sm btn-icon" disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹</button>
+              <span className={styles.childrenPaginationInfo}>{page} / {pages}</span>
+              <button className="btn btn-ghost btn-sm btn-icon" disabled={page === pages} onClick={() => setPage(p => p + 1)}>›</button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
@@ -791,7 +924,7 @@ function NodeDetailPanel({
 
 // ─── Details tab ──────────────────────────────────────────────────────
 
-function DetailsTab({ node }: { node: NodeDetail }) {
+function DetailsTab({ node, onSelectChild }: { node: NodeDetail; onSelectChild: (node: NodeStub) => void }) {
   const fields = [
     { label: 'Description',             value: node.description },
     { label: 'Scope & Content',         value: node.scope_and_content },
@@ -835,6 +968,7 @@ function DetailsTab({ node }: { node: NodeDetail }) {
         <span>Created by {node.created_by || '—'}</span>
         <span>Updated {new Date(node.updated_at).toLocaleDateString()}</span>
       </div>
+      <ChildrenTab nodeId={node.id} onSelect={onSelectChild} />
     </div>
   )
 }
@@ -1205,6 +1339,22 @@ export default function ResourcesPage() {
 
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [bulkMoveOpen, setBulkMoveOpen] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+
+  const queryClient = useQueryClient()
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (force: boolean) => nodesApi.bulkDelete([...selectedIds], force),
+    onSuccess: (res) => {
+      const errors: any[] = (res.data as any)?.data?.errors ?? []
+      queryClient.invalidateQueries({ queryKey: ['node-tree'] })
+      queryClient.invalidateQueries({ queryKey: ['node-children'] })
+      setSelectedIds(new Set())
+      setBulkDeleteOpen(false)
+      if (errors.length > 0) alert('Some nodes were not deleted:\n' + errors.map((e: any) => e.error).join('\n'))
+    },
+  })
 
   const toggleSelectMode = () => {
     setSelectMode(v => !v)
@@ -1350,17 +1500,25 @@ export default function ResourcesPage() {
       </div>
 
       {selectMode && selectedIds.size > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-          padding: 'var(--space-2) var(--space-3)',
-          background: 'color-mix(in srgb, var(--color-accent) 10%, var(--color-surface))',
-          borderBottom: '1px solid var(--color-accent-border)',
-          flexShrink: 0,
-        }}>
-          <span style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-accent)', flex: 1 }}>
-            {selectedIds.size} selected
-          </span>
-          <PrintLabelsButton nodeIds={[...selectedIds]} label="Print labels" />
-          <button className="btn btn-ghost btn-sm" onClick={() => setSelectedIds(new Set())}>Clear</button>
+        <div className={styles.bulkActionsBar}>
+          <span className={styles.bulkCount}>{selectedIds.size} selected</span>
+          <div className={styles.bulkActions}>
+            <PrintLabelsButton nodeIds={[...selectedIds]} label="" />
+            <button className="btn btn-ghost btn-sm btn-icon" title="Move selected" onClick={() => setBulkMoveOpen(true)}>
+              <MoveRight size={13} />
+            </button>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              title="Delete selected"
+              style={{ color: 'var(--color-error)' }}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 size={13} />
+            </button>
+            <button className="btn btn-ghost btn-sm btn-icon" title="Clear selection" onClick={() => setSelectedIds(new Set())}>
+              <X size={13} />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1393,6 +1551,7 @@ export default function ResourcesPage() {
       key={selectedNode.id}
       nodeId={selectedNode.id}
       onEdit={handleEdit}
+      onSelectChild={handleSelect}
     />
   ) : (
     <div className={styles.emptyState}>
@@ -1424,6 +1583,26 @@ export default function ResourcesPage() {
         <ImportModal
           onClose={() => setShowImport(false)}
           onImported={() => setShowImport(false)}
+        />
+      )}
+      {bulkDeleteOpen && (
+        <BulkDeleteDialog
+          count={selectedIds.size}
+          onConfirm={(force) => bulkDeleteMutation.mutate(force)}
+          onClose={() => setBulkDeleteOpen(false)}
+          isPending={bulkDeleteMutation.isPending}
+        />
+      )}
+      {bulkMoveOpen && (
+        <MoveNodeDialog
+          nodeIds={[...selectedIds]}
+          onClose={() => setBulkMoveOpen(false)}
+          onMoved={() => {
+            setBulkMoveOpen(false)
+            setSelectedIds(new Set())
+            queryClient.invalidateQueries({ queryKey: ['node-tree'] })
+            queryClient.invalidateQueries({ queryKey: ['node-children'] })
+          }}
         />
       )}
     </>

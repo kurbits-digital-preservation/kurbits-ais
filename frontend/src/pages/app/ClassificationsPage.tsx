@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Plus, Tag, Pencil, Trash2, X, Save,
   History, FileText, Globe, ChevronRight,
   CalendarRange, RotateCcw,
-  Eye, Archive, BarChart2, Upload, Check, GitCommit
+  Eye, Archive, BarChart2, Upload, Check, GitCommit, Search
 } from 'lucide-react'
-import { classificationsApi, hierarchyApi } from '@/api'
+import { classificationsApi, hierarchyApi, nodesApi } from '@/api'
 import ClassificationTree from '@/components/tree/ClassificationTree'
 import { PageShell, SidebarPanel, EmptyState, Tabs, FieldList, Spinner } from '@/components/ui'
 import HierarchyLevelSelect from '@/components/ui/HierarchyLevelSelect'
@@ -150,7 +151,24 @@ function DetailsTab({ classification }: { classification: any }) {
 // ─── Linked nodes tab ─────────────────────────────────────────────────
 
 function LinkedNodesTab({ classification }: { classification: any }) {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [rootFilter, setRootFilter] = useState<{ id: number; label: string } | null>(null)
+  const [rootInput, setRootInput] = useState('')
+  const [rootOpen, setRootOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setRootOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   const { data, isLoading } = useQuery({
     queryKey: ['classification-nodes', classification.id],
@@ -166,34 +184,164 @@ function LinkedNodesTab({ classification }: { classification: any }) {
     },
   })
 
+  const { data: roots } = useQuery({
+    queryKey: ['node-tree'],
+    queryFn: () => nodesApi.getTree().then(r => r.data.data as any[]),
+    enabled: (data?.length ?? 0) > 0,
+  })
+
+  const getRootNode = (node: any): { id: number; label: string } | null => {
+    if (!roots?.length) return null
+    const root = roots.find((r: any) =>
+      node.ref_code === r.ref_code ||
+      node.ref_code.startsWith(r.ref_code + '/') ||
+      node.ref_code.startsWith(r.ref_code + '-') ||
+      node.ref_code.startsWith(r.ref_code + ' ')
+    )
+    return root ? { id: root.id, label: root.title || root.ref_code } : null
+  }
+
+  // Unique roots among linked nodes
+  const usedRoots: { id: number; label: string }[] = roots
+    ? Array.from(
+        new Map(
+          (data ?? [])
+            .map((n: any) => getRootNode(n))
+            .filter(Boolean)
+            .map((r: any) => [r!.id, r!])
+        ).values()
+      ) as { id: number; label: string }[]
+    : []
+
+  // Typeahead suggestions filtered by rootInput
+  const rootSuggestions = rootInput
+    ? usedRoots.filter(r => r.label.toLowerCase().includes(rootInput.toLowerCase()))
+    : usedRoots
+
+  const filtered = (data ?? []).filter((node: any) => {
+    const root = getRootNode(node)
+    if (rootFilter && root?.id !== rootFilter.id) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (
+        !node.title?.toLowerCase().includes(q) &&
+        !node.ref_code?.toLowerCase().includes(q)
+      ) return false
+    }
+    return true
+  })
+
   if (isLoading) return <div className={styles.tabContent}><Spinner /></div>
 
   return (
-    <div className={styles.tabContent}>
+    <div className={styles.tabContent} style={{ padding: 0 }}>
+
+      {(data?.length ?? 0) > 0 && (
+        <div className={styles.linkedNodesFilter}>
+          <div className={styles.linkedNodesSearchWrap}>
+            <Search size={12} className={styles.linkedNodesSearchIcon} />
+            <input
+              className={styles.linkedNodesSearchInput}
+              placeholder={`Search ${data?.length} resource${data?.length !== 1 ? 's' : ''}…`}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className={styles.linkedNodesSearchClear} onClick={() => setSearch('')}>
+                <X size={11} />
+              </button>
+            )}
+          </div>
+
+          {usedRoots.length > 1 && (
+            <div className={styles.rootTypeahead} ref={rootRef}>
+              <div className={styles.rootTypeaheadInput}>
+                <input
+                  className={styles.linkedNodesSearchInput}
+                  style={{ fontSize: 'var(--text-xs)' }}
+                  placeholder="Filter by fonds…"
+                  value={rootFilter ? rootFilter.label : rootInput}
+                  readOnly={!!rootFilter}
+                  onChange={e => { setRootInput(e.target.value); setRootOpen(true) }}
+                  onFocus={() => { if (!rootFilter) setRootOpen(true) }}
+                />
+                {rootFilter ? (
+                  <button
+                    className={styles.linkedNodesSearchClear}
+                    onClick={() => { setRootFilter(null); setRootInput(''); setRootOpen(false) }}
+                  >
+                    <X size={11} />
+                  </button>
+                ) : rootInput ? (
+                  <button className={styles.linkedNodesSearchClear} onClick={() => { setRootInput(''); setRootOpen(false) }}>
+                    <X size={11} />
+                  </button>
+                ) : null}
+              </div>
+              {rootOpen && rootSuggestions.length > 0 && (
+                <div className={styles.rootTypeaheadDropdown}>
+                  {rootSuggestions.map(r => (
+                    <button
+                      key={r.id}
+                      className={styles.rootTypeaheadOption}
+                      onMouseDown={e => e.preventDefault()}
+                      onClick={() => { setRootFilter(r); setRootInput(''); setRootOpen(false) }}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {(!data || data.length === 0) ? (
-        <p className={styles.emptyText}>
+        <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>
           No resources linked. Associate from the Resources section.
         </p>
+      ) : filtered.length === 0 ? (
+        <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>
+          No results.
+        </p>
       ) : (
-        data.map((node: any) => (
-          <div key={node.id} className={styles.linkedNode}>
-            <div className={styles.linkedNodeInfo}>
-              <span className={styles.linkedNodeTitle}>{node.title}</span>
-              <span className="ref-code">{node.ref_code}</span>
-            </div>
-            <div className={styles.linkedNodeActions}>
-              <span className={`badge badge-${node.status}`}>{node.status}</span>
+        filtered.map((node: any) => {
+          const root = getRootNode(node)
+          return (
+            <div key={node.id} className={styles.linkedNode}>
               <button
-                className="btn btn-ghost btn-sm btn-icon"
-                onClick={() => {
-                  if (confirm('Remove this link?')) removeMutation.mutate(node.id)
-                }}
+                className={styles.linkedNodeBtn}
+                onClick={() => navigate('/app/resources', { state: { selectNodeId: node.id } })}
               >
-                <X size={12} />
+                <div className={styles.linkedNodeInfo}>
+                  <span className={styles.linkedNodeTitle}>{node.title || node.ref_code}</span>
+                  <div className={styles.linkedNodeMeta}>
+                    <span className="ref-code" style={{ fontSize: 'var(--text-xs)' }}>{node.ref_code}</span>
+                    {node.level_of_description && (
+                      <span className={styles.linkedNodeLevel}>{node.level_of_description}</span>
+                    )}
+                    {root && (
+                      <>
+                        <span style={{ color: 'var(--color-border-strong)' }}>·</span>
+                        <span className={styles.linkedNodeRoot}>{root.label}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </button>
+              <div className={styles.linkedNodeActions}>
+                <span className={`badge badge-${node.status}`}>{node.status}</span>
+                <button
+                  className="btn btn-ghost btn-sm btn-icon"
+                  onClick={() => { if (confirm('Remove this link?')) removeMutation.mutate(node.id) }}
+                >
+                  <X size={12} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))
+          )
+        })
       )}
     </div>
   )
@@ -765,11 +913,23 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
 
 export default function ClassificationsPage() {
   const queryClient = useQueryClient()
-  const [selectedId, setSelectedId] = useState<number | null>(null)
+  const location = useLocation()
+  const [selectedId, setSelectedId] = useState<number | null>(
+    location.state?.selectClassificationId ?? null
+  )
   const [showImport, setShowImport] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('detail')
   const [editingItem, setEditingItem] = useState<any>(null)
   const [addingChildOf, setAddingChildOf] = useState<number | null>(null)
+
+  // Pick up selectClassificationId if navigated here from another page
+  useEffect(() => {
+    const id = location.state?.selectClassificationId
+    if (id) {
+      setSelectedId(id)
+      setViewMode('detail')
+    }
+  }, [location.state?.selectClassificationId])
 
   const { data: parentData } = useQuery({
     queryKey: ['classification', addingChildOf],

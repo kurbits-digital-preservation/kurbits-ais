@@ -46,6 +46,12 @@ export const nodesApi = {
   move: (nodeId: number, parent_id: number | null) =>
     api.patch<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}/move`, { parent_id }),
 
+  bulkMove: (node_ids: number[], parent_id: number | null) =>
+  api.post<{ status: string; data: { moved: number[]; errors: any[] } }>('/nodes/bulk-move', { node_ids, parent_id }),
+
+bulkDelete: (node_ids: number[], force = false) =>
+  api.post<{ status: string; data: { deleted: number[]; errors: any[] } }>('/nodes/bulk-delete', { node_ids, force }),
+
   getHistory: (nodeId: number) =>
     api.get(`/nodes/${nodeId}/history`),
 
@@ -84,9 +90,9 @@ export const nodesApi = {
   getDownloadUrl: (nodeId: number, attachmentId: number) =>
     `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/download`,
 
-  printLabels: (nodeIds: number[], format: string, copies: number) =>
-    api.post('/nodes/labels', { node_ids: nodeIds, format, copies },
-      { responseType: 'blob' }),
+
+  printLabels: (nodeIds: number[], format: string, copies: number, includeDescendants = false) =>
+  api.post('/nodes/labels', { node_ids: nodeIds, format, copies, include_descendants: includeDescendants }, { responseType: 'arraybuffer' }),
 
   findingAid: (nodeId: number) =>
     api.get(`/nodes/${nodeId}/finding-aid`, { responseType: 'blob' }),

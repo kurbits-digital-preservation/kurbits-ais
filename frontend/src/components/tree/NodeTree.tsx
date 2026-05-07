@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { nodesApi } from '@/api'
 import type { NodeStub } from '@/types'
 import styles from './NodeTree.module.css'
+import { useAuthStore } from '@/store/auth'
 
 interface NodeTreeProps {
   selectedId: number | null
@@ -128,9 +129,11 @@ function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onA
 
 export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery, hierarchyTypeId, selectedIds, onToggleSelect }: NodeTreeProps) {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
+  const { user } = useAuthStore()
+  const institutionId = user?.active_institution?.id
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['node-tree'],
+    queryKey: ['node-tree', institutionId],
     queryFn: () => nodesApi.getTree().then(r => r.data.data),
   })
 
