@@ -1,0 +1,1 @@
+from app.api.v1.saved_searches import routes

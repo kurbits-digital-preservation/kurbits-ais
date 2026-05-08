@@ -37,6 +37,7 @@ from app.models.classification import (
 
 from app.models.integration import ExternalIntegration
 from app.models.representation import RepresentationType, NodeRepresentation
+from app.models.saved_search import SavedSearch
 
 __all__ = [
     'Institution',
@@ -69,7 +70,8 @@ __all__ = [
     'classification_node_association',
     'ExternalIntegration',
     'RepresentationType',
-    'NodeRepresentation',
+    'NodeRepresentation'
+    'SavedSearch',
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 
