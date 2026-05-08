@@ -76,14 +76,21 @@
   overflow: hidden;
 }
 
-/* ─── Filter panel ───────────────────────────────────────────────── */
-.filterPanel {
-  width: 260px;
+/* ─── Sidebar (filters + saved searches) ────────────────────────── */
+.sidebar {
+  width: 240px;
   flex-shrink: 0;
   border-right: 1px solid var(--color-border);
   background: var(--color-surface);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ─── Filter panel ───────────────────────────────────────────────── */
+.filterPanel {
   padding: var(--space-5);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .filters {
@@ -136,6 +143,142 @@
   font-family: var(--font-sans);
 }
 .clearFilters:hover { text-decoration: underline; }
+
+/* ─── Saved searches panel ───────────────────────────────────────── */
+.savedPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-4) 0;
+}
+
+.savedHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  padding: 0 var(--space-5) var(--space-3);
+}
+
+.saveCurrentBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--space-2) var(--space-5);
+  font-family: var(--font-sans);
+  width: 100%;
+  text-align: left;
+  border-radius: 0;
+  transition: background 0.08s;
+}
+.saveCurrentBtn:hover { background: var(--color-accent-bg); }
+
+.saveForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-5) var(--space-3);
+}
+
+.saveInput {
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-bg);
+}
+
+.saveError {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+}
+
+.saveActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.savedList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto;
+  padding-top: var(--space-1);
+}
+
+.savedEmpty {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  padding: var(--space-2) var(--space-5);
+}
+
+.savedItem {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+.savedItem:hover .savedItemDelete { opacity: 1; }
+
+.savedItemBtn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-5);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: background 0.06s;
+  border-radius: 0;
+}
+.savedItemBtn:hover { background: var(--color-bg-subtle); }
+
+.savedItemName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.savedItemSummary {
+  font-size: 11px;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.savedItemDelete {
+  opacity: 0;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-ink-faint);
+  transition: opacity 0.1s, color 0.1s;
+}
+.savedItemDelete:hover { color: var(--color-error); }
 
 /* ─── Results ────────────────────────────────────────────────────── */
 .results {
@@ -214,9 +357,7 @@
 }
 
 /* ─── Result list ────────────────────────────────────────────────── */
-.resultList {
-  flex: 1;
-}
+.resultList { flex: 1; }
 
 .resultRow {
   display: flex;

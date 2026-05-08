@@ -676,3 +676,15 @@ export const representationsApi = {
   reextractFile: (nodeId: number, fileId: number) =>
     api.post(`/nodes/${nodeId}/attachments/${fileId}/extract`),
 }
+
+// ─── Saved searches ───────────────────────────────────────────────────
+export const savedSearchesApi = {
+  list: () =>
+    api.get<{ status: string; data: any[] }>('/saved-searches'),
+
+  create: (name: string, params: Record<string, string>) =>
+    api.post<{ status: string; data: any }>('/saved-searches', { name, params }),
+
+  delete: (id: number) =>
+    api.delete(`/saved-searches/${id}`),
+}

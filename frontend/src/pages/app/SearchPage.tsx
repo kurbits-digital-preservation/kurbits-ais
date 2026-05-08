@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, FileText, User, Building2, UsersRound, Bot,
-  SlidersHorizontal, X, ChevronLeft, ChevronRight
+  SlidersHorizontal, X, ChevronLeft, ChevronRight,
+  Bookmark, BookmarkCheck, Trash2,
 } from 'lucide-react'
-import { searchApi, hierarchyApi } from '@/api'
+import { searchApi, hierarchyApi, savedSearchesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import styles from './SearchPage.module.css'
 
@@ -14,6 +15,30 @@ const AGENT_ICONS: Record<string, typeof User> = {
 }
 const NODE_STATUSES = ['draft', 'published', 'restricted']
 const AGENT_TYPES = ['person', 'organization', 'family', 'software']
+const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types']
+
+// ─── Helpers ──────────────────────────────────────────────────────────
+
+function paramsToObject(params: URLSearchParams): Record<string, string> {
+  const obj: Record<string, string> = {}
+  for (const [k, v] of params.entries()) {
+    if (k !== 'page') obj[k] = v
+  }
+  return obj
+}
+
+function summariseParams(params: Record<string, string>): string {
+  const parts: string[] = []
+  if (params.q) parts.push(`"${params.q}"`)
+  if (params.status) parts.push(params.status)
+  if (params.level) parts.push(params.level)
+  if (params.date_from || params.date_to) parts.push(`${params.date_from ?? '…'}–${params.date_to ?? '…'}`)
+  if (params.agent_type) parts.push(params.agent_type)
+  if (params.types && params.types !== 'nodes,agents') parts.push(params.types.replace(',', ' & '))
+  return parts.join(', ')
+}
+
+// ─── Result rows ──────────────────────────────────────────────────────
 
 function NodeRow({ item, onClick }: { item: any; onClick: () => void }) {
   return (
@@ -55,6 +80,8 @@ function AgentRow({ item, onClick }: { item: any; onClick: () => void }) {
     </button>
   )
 }
+
+// ─── Filter panel ─────────────────────────────────────────────────────
 
 function FilterPanel({ params, setParam, clearParam, levels }: {
   params: URLSearchParams
@@ -118,15 +145,123 @@ function FilterPanel({ params, setParam, clearParam, levels }: {
           </select>
         </div>
       )}
-      {['status', 'level', 'date_from', 'date_to', 'agent_type'].some(k => params.has(k)) && (
+      {FILTER_KEYS.filter(k => k !== 'types').some(k => params.has(k)) && (
         <button className={styles.clearFilters}
-          onClick={() => ['status', 'level', 'date_from', 'date_to', 'agent_type'].forEach(clearParam)}>
+          onClick={() => FILTER_KEYS.filter(k => k !== 'types').forEach(clearParam)}>
           <X size={12} /> Clear filters
         </button>
       )}
     </div>
   )
 }
+
+// ─── Saved searches panel ─────────────────────────────────────────────
+
+function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string>) => void }) {
+  const queryClient = useQueryClient()
+  const [saving, setSaving] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const [nameError, setNameError] = useState('')
+
+  const { data: savedSearches = [], isLoading } = useQuery({
+    queryKey: ['saved-searches'],
+    queryFn: () => savedSearchesApi.list().then(r => r.data.data),
+  })
+
+  const [searchParams] = useSearchParams()
+  const currentParams = paramsToObject(searchParams)
+  const hasAnything = Object.keys(currentParams).length > 0
+
+  const createMutation = useMutation({
+    mutationFn: ({ name, params }: { name: string; params: Record<string, string> }) =>
+      savedSearchesApi.create(name, params),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['saved-searches'] })
+      setSaving(false)
+      setNameInput('')
+      setNameError('')
+    },
+    onError: (err: any) => {
+      setNameError(err?.response?.data?.message ?? 'Could not save')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => savedSearchesApi.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['saved-searches'] }),
+  })
+
+  const handleSave = () => {
+    const name = nameInput.trim()
+    if (!name) { setNameError('Enter a name'); return }
+    setNameError('')
+    createMutation.mutate({ name, params: currentParams })
+  }
+
+  return (
+    <div className={styles.savedPanel}>
+      <div className={styles.savedHeader}>
+        <Bookmark size={13} />
+        Saved searches
+      </div>
+
+      {hasAnything && (
+        saving ? (
+          <div className={styles.saveForm}>
+            <input
+              className={styles.saveInput}
+              value={nameInput}
+              onChange={e => setNameInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setSaving(false) }}
+              placeholder="Name this search…"
+              autoFocus
+            />
+            {nameError && <span className={styles.saveError}>{nameError}</span>}
+            <div className={styles.saveActions}>
+              <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={createMutation.isPending}>
+                {createMutation.isPending ? <Spinner size={12} /> : 'Save'}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setSaving(false); setNameError('') }}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <button className={styles.saveCurrentBtn} onClick={() => setSaving(true)}>
+            <BookmarkCheck size={13} />
+            Save current search
+          </button>
+        )
+      )}
+
+      <div className={styles.savedList}>
+        {isLoading && <span className={styles.savedEmpty}><Spinner size={13} /></span>}
+        {!isLoading && savedSearches.length === 0 && (
+          <span className={styles.savedEmpty}>No saved searches yet</span>
+        )}
+        {savedSearches.map((s: any) => (
+          <div key={s.id} className={styles.savedItem}>
+            <button
+              className={styles.savedItemBtn}
+              onClick={() => onLoad(s.params)}
+              title={summariseParams(s.params)}
+            >
+              <span className={styles.savedItemName}>{s.name}</span>
+              <span className={styles.savedItemSummary}>{summariseParams(s.params)}</span>
+            </button>
+            <button
+              className={styles.savedItemDelete}
+              onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteMutation.mutate(s.id) }}
+              title="Delete"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Pagination ───────────────────────────────────────────────────────
 
 function Pagination({ page, pages, total, perPage, onPage }: {
   page: number; pages: number; total: number; perPage: number; onPage: (p: number) => void
@@ -148,6 +283,8 @@ function Pagination({ page, pages, total, perPage, onPage }: {
     </div>
   )
 }
+
+// ─── Page ─────────────────────────────────────────────────────────────
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -208,6 +345,16 @@ export default function SearchPage() {
     else navigate('/app/agents', { state: { selectAgentId: item.id } })
   }
 
+  const handleLoadSaved = (params: Record<string, string>) => {
+    const next = new URLSearchParams(params)
+    next.set('page', '1')
+    setSearchParams(next)
+    if (params.q) setInputValue(params.q)
+    if (['status', 'level', 'date_from', 'date_to', 'agent_type'].some(k => params[k])) {
+      setShowFilters(true)
+    }
+  }
+
   const hasFilters = ['status', 'level', 'date_from', 'date_to', 'agent_type'].some(k => searchParams.has(k))
   const results: any[] = data?.results ?? []
   const total: number = data?.total ?? 0
@@ -244,11 +391,15 @@ export default function SearchPage() {
       </div>
 
       <div className={styles.body}>
-        {showFilters && (
-          <aside className={styles.filterPanel}>
-            <FilterPanel params={searchParams} setParam={setParam} clearParam={clearParam} levels={allLevels ?? []} />
-          </aside>
-        )}
+        {/* ── Left sidebar: filters + saved searches ── */}
+        <aside className={styles.sidebar}>
+          {showFilters && (
+            <div className={styles.filterPanel}>
+              <FilterPanel params={searchParams} setParam={setParam} clearParam={clearParam} levels={allLevels ?? []} />
+            </div>
+          )}
+          <SavedSearchesPanel onLoad={handleLoadSaved} />
+        </aside>
 
         <div className={styles.results}>
           {q.length >= 2 && (
