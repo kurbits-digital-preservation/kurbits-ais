@@ -27,6 +27,7 @@ import styles from './ResourcesPage.module.css'
 import RepresentationsTab from '@/components/node/RepresentationsTab'
 import { Layers } from 'lucide-react'
 import BookmarkButton from '@/components/layout/BookmarkButton'
+import { Copy } from 'lucide-react'
 
 // ─── Status badge ─────────────────────────────────────────────────────
 
@@ -675,10 +676,12 @@ function NodeDetailPanel({
   nodeId,
   onEdit,
   onSelectChild,
+  onSelectDuplicate,
 }: {
   nodeId: number
   onEdit: (node: NodeDetail) => void
   onSelectChild: (node: NodeStub) => void
+  onSelectDuplicate: (node: NodeDetail) => void
 }) {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history' | 'representations'>('details')
@@ -704,7 +707,15 @@ function NodeDetailPanel({
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
     },
   })
-
+const duplicateMutation = useMutation({
+  mutationFn: () => nodesApi.duplicate(nodeId),
+  onSuccess: (res) => {
+    const newNode = res.data.data
+    queryClient.invalidateQueries({ queryKey: ['node-tree'] })
+    queryClient.invalidateQueries({ queryKey: ['node-children'] })
+    onSelectDuplicate(newNode)
+  },
+})
   if (isLoading) return <div className={styles.detailLoading}>Loading…</div>
   if (!data) return null
 
@@ -738,6 +749,18 @@ function NodeDetailPanel({
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowMove(true)} title="Move to different parent">
               <MoveRight size={14} />
             </button>
+            <button
+  className="btn btn-ghost btn-sm btn-icon"
+  onClick={() => {
+    if (confirm(`Duplicate "${data.title}"? A copy will be created as a sibling in draft status.`))
+      duplicateMutation.mutate()
+  }}
+  title="Duplicate node"
+  disabled={duplicateMutation.isPending}
+>
+  {duplicateMutation.isPending ? <Spinner size={14} /> : <Copy size={14} />}
+</button>
+
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(data)} title="Edit">
               <Edit2 size={14} />
             </button>
@@ -1567,6 +1590,9 @@ export default function ResourcesPage() {
       nodeId={selectedNode.id}
       onEdit={handleEdit}
       onSelectChild={handleSelect}
+        onSelectDuplicate={(newNode) => {
+    handleSelect(newNode)   // select it in the tree
+  }}
     />
   ) : (
     <div className={styles.emptyState}>

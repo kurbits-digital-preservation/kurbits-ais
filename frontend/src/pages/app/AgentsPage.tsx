@@ -18,7 +18,7 @@ import type { AgentDetail, AgentStub, AgentType } from '@/types'
 import styles from './AgentsPage.module.css'
 import AuthorityLookup from '@/components/ui/AuthorityLookup'
 import type { AuthorityResult } from '@/components/ui/AuthorityLookup'
-
+import BookmarkButton from '@/components/layout/BookmarkButton'
 // ─── Constants ───────────────────────────────────────────────────────
 
 const AGENT_TYPE_ICONS: Record<AgentType, typeof User> = {
@@ -649,6 +649,12 @@ function AgentDetailPanel({
           </div>
           <div className={styles.detailHeaderActions}>
             <TypePill type={agent.agent_type} />
+            <BookmarkButton
+  entityType="agent"
+  entityId={agent.id}
+  title={agent.name ?? agent.authorized_form}
+  subtitle={agent.agent_type}
+/>
             <CopyAgentLinkButton agentId={agentId} agentName={agent.name} />
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(agent)} title="Edit">
               <Pencil size={14} />

@@ -1,0 +1,1 @@
+from app.api.v1.ai import routes  # noqa: F401

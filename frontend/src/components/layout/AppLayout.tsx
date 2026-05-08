@@ -8,6 +8,8 @@ import { useAuthStore } from '@/store/auth'
 import { authApi } from '@/api'
 import styles from './AppLayout.module.css'
 import { GlobalSearchModal, SearchTrigger } from './GlobalSearch'
+import { Clock } from 'lucide-react'
+import HistoryPopover from './HistoryPopover'
 
 const NAV_ITEMS = [
   { to: '/app/resources',          icon: FolderOpen,  label: 'Resources' },
@@ -119,7 +121,7 @@ export default function AppLayout() {
               )}
             </div>
           )}
-
+            <HistoryPopover />
           <NavLink
             to="/app/administration"
             className={({ isActive }) =>

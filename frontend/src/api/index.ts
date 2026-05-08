@@ -103,6 +103,8 @@ bulkDelete: (node_ids: number[], force = false) =>
 
   getAttachmentUrl: (nodeId: number, attachmentId: number) =>
     `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/download`,
+    duplicate: (nodeId: number) =>
+  api.post<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}/duplicate`),
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────
@@ -688,3 +690,49 @@ export const savedSearchesApi = {
   delete: (id: number) =>
     api.delete(`/saved-searches/${id}`),
 }
+
+// ─── Recent / Bookmarks ───────────────────────────────────────────────
+export const historyApi = {
+  listRecent: () =>
+    api.get<{ status: string; data: any[] }>('/recent'),
+
+  trackRecent: (item: { entity_type: 'node' | 'agent'; entity_id: number; title: string; subtitle?: string }) =>
+    api.post('/recent', item),
+
+  listBookmarks: () =>
+    api.get<{ status: string; data: any[] }>('/bookmarks'),
+
+  addBookmark: (item: { entity_type: 'node' | 'agent'; entity_id: number; title: string; subtitle?: string }) =>
+    api.post<{ status: string; data: any }>('/bookmarks', item),
+
+  removeBookmark: (entity_type: 'node' | 'agent', entity_id: number) =>
+    api.delete('/bookmarks', { data: { entity_type, entity_id } }),
+
+  checkBookmark: (entity_type: 'node' | 'agent', entity_id: number) =>
+    api.get<{ status: string; data: { bookmarked: boolean } }>('/bookmarks/check', {
+      params: { entity_type, entity_id },
+    }),
+}
+
+
+// ─── AI ───────────────────────────────────────────────────────────────
+export const aiApi = {
+  getConfig: () =>
+    api.get<{ status: string; data: any }>('/ai/config'),
+
+  saveConfig: (data: {
+    provider: string
+    model: string
+    base_url?: string
+    api_key?: string
+    options?: Record<string, unknown>
+    is_enabled?: boolean
+  }) => api.put<{ status: string; data: any }>('/ai/config', data),
+
+  testConfig: () =>
+    api.post<{ status: string; data: { ok: boolean; message: string } }>('/ai/test'),
+
+  getStatus: () =>
+    api.get<{ status: string; data: { enabled: boolean; provider: string | null; model: string | null } }>('/ai/status'),
+}
+

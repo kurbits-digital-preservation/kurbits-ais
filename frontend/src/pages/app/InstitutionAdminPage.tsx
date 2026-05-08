@@ -13,6 +13,8 @@ import VocabulariesTab from './VocabulariesTab'
 import HierarchyTab from './HierarchyTab'
 import MetadataTemplatesPage from './MetadataTemplatesPage'
 import IntegrationsTab from './IntegrationsTab'
+import AIConfigTab from './AIConfigTab'
+import { Bot } from 'lucide-react'
 // ─── Constants ────────────────────────────────────────────────────────
 
 const ROLES = [
@@ -423,6 +425,7 @@ export default function InstitutionAdminPage() {
     { key: 'hierarchies',  icon: <Layers size={14} />,   label: 'Hierarchies' },
     { key: 'templates',    icon: <Layers size={14} />,   label: 'Field templates' },
     { key: 'integrations', icon: <Link size={14} />, label: 'Integrations' },
+    { key: 'ai', icon: <Bot size={14} />, label: 'AI' },
   ]
 
   return (
@@ -448,6 +451,7 @@ export default function InstitutionAdminPage() {
         {tab === 'hierarchies'  && <HierarchyTab />}
         {tab === 'templates'    && <TemplatesTab />}
         {tab === 'integrations' && <IntegrationsTab />}
+        {tab === 'ai' && <AIConfigTab />}
       </div>
     </div>
   )

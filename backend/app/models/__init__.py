@@ -38,7 +38,8 @@ from app.models.classification import (
 from app.models.integration import ExternalIntegration
 from app.models.representation import RepresentationType, NodeRepresentation
 from app.models.saved_search import SavedSearch
-
+from app.models.history import RecentItem, Bookmark
+from app.models.ai_config import InstitutionAIConfig
 __all__ = [
     'Institution',
     'user_institution_association',
@@ -72,6 +73,9 @@ __all__ = [
     'RepresentationType',
     'NodeRepresentation'
     'SavedSearch',
+    'RecentItem',
+    'Bookmark',
+    'InstitutionAIConfig'
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 

@@ -2073,3 +2073,96 @@ def print_finding_aid(node_id):
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'inline; filename="{safe_title}_finding_aid.pdf"'
     return response
+
+# POST /api/v1/nodes/<id>/duplicate
+@bp.route('/nodes/<int:node_id>/duplicate', methods=['POST'])
+@login_required
+@require_write
+def duplicate_node(node_id):
+    from app.models.node import Node, NodeNote, NodeStatus
+    from app.models.geo import Tag
+    import sqlalchemy as sa
+
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    source = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
+    if not source:
+        return error('Node not found', 404)
+
+    # ── Build a unique local_ref ──────────────────────────────────────
+    base_ref = f'{source.local_ref}-copy'
+    existing_refs = {
+        r[0] for r in Node.query
+        .filter_by(institution_id=institution_id, parent_id=source.parent_id)
+        .with_entities(Node.local_ref).all()
+    }
+    candidate = base_ref
+    i = 1
+    while candidate in existing_refs:
+        candidate = f'{base_ref}-{i}'
+        i += 1
+    local_ref = candidate
+
+    # ── Compute ref_code ──────────────────────────────────────────────
+    if source.parent:
+        ref_code = f'{source.parent.ref_code}/{local_ref}'
+    else:
+        ref_code = f'{source.institution.ref_prefix}/{local_ref}'
+
+    # ── Create the duplicate ──────────────────────────────────────────
+    duplicate = Node(
+        institution_id=institution_id,
+        parent_id=source.parent_id,
+        local_ref=local_ref,
+        ref_code=ref_code,
+        title=source.title,
+        level_of_description=source.level_of_description,
+        hierarchy_type_id=source.hierarchy_type_id,
+        description=source.description,
+        date_start=source.date_start,
+        date_end=source.date_end,
+        date_certainty=source.date_certainty,
+        extent=source.extent,
+        scope_and_content=source.scope_and_content,
+        arrangement=source.arrangement,
+        access_conditions=source.access_conditions,
+        reproduction_conditions=source.reproduction_conditions,
+        language=source.language,
+        finding_aids=source.finding_aids,
+        metadata_spec=dict(source.metadata_spec) if source.metadata_spec else {},
+        status=NodeStatus.DRAFT,
+        created_by_id=current_user.id,
+        updated_by_id=current_user.id,
+    )
+    db.session.add(duplicate)
+    db.session.flush()
+
+    # ── Copy notes ────────────────────────────────────────────────────
+    for note in source.notes:
+        db.session.add(NodeNote(
+            node_id=duplicate.id,
+            note_type=note.note_type,
+            content=note.content,
+            is_public=note.is_public,
+            created_by_id=current_user.id,
+        ))
+
+    # Provenance note
+    db.session.add(NodeNote(
+        node_id=duplicate.id,
+        note_type='general',
+        content=f'Duplicated from {source.ref_code} ("{source.title}").',
+        is_public=False,
+        created_by_id=current_user.id,
+    ))
+
+    # ── Copy tags ─────────────────────────────────────────────────────
+    for tag in source.tags.all():
+        duplicate.tags.append(tag)
+
+    db.session.commit()
+
+    from app.api.v1.nodes.serializers import serialize_node_detail
+    return success(serialize_node_detail(duplicate), 201)
