@@ -26,6 +26,7 @@ import type { NodeStub, NodeDetail, NodeStatus } from '@/types'
 import styles from './ResourcesPage.module.css'
 import RepresentationsTab from '@/components/node/RepresentationsTab'
 import { Layers } from 'lucide-react'
+import BookmarkButton from '@/components/layout/BookmarkButton'
 
 // ─── Status badge ─────────────────────────────────────────────────────
 
@@ -725,6 +726,12 @@ function NodeDetailPanel({
             ))}
           </div>
           <div className={styles.detailActions}>
+            <BookmarkButton
+  entityType="node"
+  entityId={data.id}
+  title={data.title}
+  subtitle={data.ref_code}
+/>
             <CopyLinkButton nodeId={nodeId} refCode={data?.ref_code ?? ''} />
             <ExportMenu nodeId={nodeId} />
             <PrintLabelsButton nodeIds={[nodeId]} />
