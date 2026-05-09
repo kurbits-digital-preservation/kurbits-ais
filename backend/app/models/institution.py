@@ -71,6 +71,10 @@ class Institution(db.Model):
     def ref_prefix(self) -> str:
         return f'{self.country_code.upper()}-{self.institution_code.upper()}'
 
+    @property
+    def index_attachment_text(self) -> bool:
+        return bool((self.settings or {}).get('index_attachment_text', False))
+
     def get_user_role(self, user: 'User') -> Optional[str]:
         row = db.session.execute(
             sa.select(user_institution_association.c.role).where(

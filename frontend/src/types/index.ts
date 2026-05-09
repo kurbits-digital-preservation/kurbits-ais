@@ -265,6 +265,8 @@ export interface RepresentationFile {
   av_bitrate: number | null
   has_thumbnail: boolean
   tech_extracted_at: string | null
+  extracted_text?: string | null
+  extracted_text_at?: string | null
 }
 
 export interface NodeRepresentation {

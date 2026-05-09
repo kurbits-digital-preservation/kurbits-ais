@@ -107,6 +107,9 @@ def serialize_attachment(attachment: NodeAttachment) -> dict:
         'image_mode': attachment.image_mode,
         'image_bit_depth': attachment.image_bit_depth,
         'exif_data': attachment.exif_data,
+        # OCR
+        'extracted_text': bool(attachment.extracted_text),
+        'extracted_text_at': attachment.extracted_text_at.isoformat() if attachment.extracted_text_at else None,
         # AV
         'duration_seconds': attachment.duration_seconds,
         'av_codec': attachment.av_codec,

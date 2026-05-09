@@ -1,0 +1,95 @@
+.panel {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.typeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.typeBtn {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all 0.08s;
+  white-space: nowrap;
+}
+.typeBtn:hover { border-color: var(--color-accent-border); color: var(--color-accent); }
+.typeBtnActive {
+  background: var(--color-accent-bg) !important;
+  border-color: var(--color-accent) !important;
+  color: var(--color-accent) !important;
+  font-weight: 600;
+}
+
+.error {
+  font-size: var(--text-xs);
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+.draftWrap {
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
+}
+
+.draftHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-accent-bg);
+  border-bottom: 1px solid var(--color-accent-border);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.draftTextarea {
+  width: 100%;
+  border: none;
+  background: var(--color-surface);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  line-height: 1.5;
+  min-height: 100px;
+}
+
+.draftActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-accent-border);
+  background: var(--color-accent-bg);
+}

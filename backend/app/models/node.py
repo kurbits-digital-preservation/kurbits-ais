@@ -387,6 +387,8 @@ class NodeAttachment(db.Model):
 
     thumbnail_path:  so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
     tech_extracted_at: so.Mapped[Optional[datetime]] = so.mapped_column(sa.DateTime, nullable=True)
+    extracted_text: so.Mapped[Optional[str]] = so.mapped_column(sa.Text, nullable=True)
+    extracted_text_at: so.Mapped[Optional[datetime]] = so.mapped_column(sa.DateTime, nullable=True)
 
     node: so.Mapped['Node'] = so.relationship('Node', back_populates='attachments')
     uploaded_by: so.Mapped['User'] = so.relationship('User')

@@ -4,10 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Users, User, Building2, UsersRound, Bot,
   Pencil, Trash2, Link, FileText, StickyNote,
-  X, Save, ExternalLink, Globe, Upload, Check, AlertCircle, Link2,
+  X, Save, ExternalLink, Globe, Upload, Check, AlertCircle,
   MapPin, Tag as Tag2, Search
 } from 'lucide-react'
-import { agentsApi, agentsImportApi, nodesApi } from '@/api'
+import { agentsApi, agentsImportApi, nodesApi, aiApi } from '@/api'
 import PlacesPanel from '@/components/geo/PlacesPanel'
 import TagsPanel from '@/components/geo/TagsPanel'
 import {
@@ -19,6 +19,7 @@ import styles from './AgentsPage.module.css'
 import AuthorityLookup from '@/components/ui/AuthorityLookup'
 import type { AuthorityResult } from '@/components/ui/AuthorityLookup'
 import BookmarkButton from '@/components/layout/BookmarkButton'
+
 // ─── Constants ───────────────────────────────────────────────────────
 
 const AGENT_TYPE_ICONS: Record<AgentType, typeof User> = {
@@ -154,7 +155,7 @@ function AgentForm({
         <div className="form-group">
           <label>External identifier</label>
           <input value={form.identifier} onChange={set('identifier')}
-            placeholder="ISNI, VIAF, local ID…" />
+            placeholder="ISNI, VIAF, Wikidata QID…" />
         </div>
 
         <div className="form-group">
@@ -488,11 +489,19 @@ function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
   )
 }
 
+// ─── Notes tab ────────────────────────────────────────────────────────
+
 function NotesTab({ agent }: { agent: AgentDetail }) {
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [content, setContent] = useState('')
   const [noteType, setNoteType] = useState('general')
+  const [draft, setDraft] = useState<{
+    text: string
+    sources: { label: string; url: string | null }[]
+  } | null>(null)
+  const [useWikipedia, setUseWikipedia] = useState(false)
+  const [useAttachments, setUseAttachments] = useState(false)
 
   const addMutation = useMutation({
     mutationFn: () => agentsApi.addNote(agent.id, { content, note_type: noteType }),
@@ -508,20 +517,139 @@ function NotesTab({ agent }: { agent: AgentDetail }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent', agent.id] }),
   })
 
+  const draftMutation = useMutation({
+    mutationFn: () => aiApi.draftHistoryNote(
+      agent.id,
+      useWikipedia ? ['wikipedia'] : [],
+      useAttachments,
+    ),
+    onSuccess: (res) => {
+      const data = res.data.data
+      setDraft({ text: data.draft, sources: data.sources })
+    },
+  })
+
+  const saveDraftMutation = useMutation({
+    mutationFn: () => {
+      const sourceLines = draft!.sources
+        .map(s => s.url ? `${s.label}: ${s.url}` : s.label)
+        .join(', ')
+      return agentsApi.addNote(agent.id, {
+        content: draft!.text + `\n\n[Sources: ${sourceLines}]`,
+        note_type: 'history',
+      })
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
+      setDraft(null)
+    },
+  })
+
+  const hasIdentifier = !!agent.identifier
+  const identifierPrefix = agent.identifier?.split(':')[0]?.toUpperCase() ?? ''
+
   return (
     <div className={styles.tabContent}>
       <div className={styles.tabActions}>
+        {hasIdentifier && (
+          <div className={styles.draftControls}>
+            <div className={styles.draftSourcePicker}>
+              <span className={styles.draftSourceLabel}>Sources:</span>
+              <span className={styles.draftSourceBadge}>{identifierPrefix}</span>
+              <label className={styles.draftSourceToggle}>
+                <input
+                  type="checkbox"
+                  checked={useWikipedia}
+                  onChange={e => setUseWikipedia(e.target.checked)}
+                />
+                Wikipedia
+              </label>
+              <label className={styles.draftSourceToggle}>
+                <input
+                  type="checkbox"
+                  checked={useAttachments}
+                  onChange={e => setUseAttachments(e.target.checked)}
+                />
+                Attachment text
+              </label>
+            </div>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => draftMutation.mutate()}
+              disabled={draftMutation.isPending}
+              title={`Draft history note from ${agent.identifier}`}
+            >
+              {draftMutation.isPending
+                ? <><Spinner size={13} /> Drafting…</>
+                : <><Bot size={13} /> Draft history note</>}
+            </button>
+          </div>
+        )}
         <button className="btn btn-secondary btn-sm" onClick={() => setAdding(!adding)}>
           <Plus size={13} /> Add note
         </button>
       </div>
+
+      {draftMutation.isError && (
+        <div style={{
+          display: 'flex', gap: 'var(--space-2)', padding: 'var(--space-3)',
+          background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)',
+          borderRadius: 'var(--radius-md)', color: 'var(--color-error)',
+          fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)',
+        }}>
+          <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+          {(draftMutation.error as any)?.response?.data?.message ?? 'Could not draft history note'}
+        </div>
+      )}
+
+      {draft && (
+        <div className={styles.draftPreview}>
+          <div className={styles.draftHeader}>
+            <Bot size={13} />
+            <span>AI draft — review before saving</span>
+            <div className={styles.draftSourceLinks}>
+              {draft.sources.map(s => (
+                s.url
+                  ? <a key={s.label} href={s.url} target="_blank" rel="noreferrer" className={styles.draftSource}>
+                      {s.label} <ExternalLink size={10} />
+                    </a>
+                  : <span key={s.label} className={styles.draftSource}>{s.label}</span>
+              ))}
+            </div>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => setDraft(null)}
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <textarea
+            className={styles.draftTextarea}
+            value={draft.text}
+            onChange={e => setDraft(d => d ? { ...d, text: e.target.value } : null)}
+            rows={5}
+          />
+          <div className={styles.draftActions}>
+            <button className="btn btn-ghost btn-sm" onClick={() => setDraft(null)}>Discard</button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => saveDraftMutation.mutate()}
+              disabled={saveDraftMutation.isPending || !draft.text.trim()}
+            >
+              {saveDraftMutation.isPending ? <Spinner size={13} /> : <Check size={13} />}
+              Save as history note
+            </button>
+          </div>
+        </div>
+      )}
 
       {adding && (
         <div className={styles.addForm}>
           <div className="form-group">
             <label>Note type</label>
             <select value={noteType} onChange={e => setNoteType(e.target.value)}>
-              {['general', 'sources', 'maintenance', 'internal'].map(t => (
+              {['general', 'history', 'sources', 'maintenance', 'internal'].map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
@@ -543,8 +671,11 @@ function NotesTab({ agent }: { agent: AgentDetail }) {
         </div>
       )}
 
-      {agent.notes.length === 0 && !adding && (
-        <p className={styles.emptyText}>No notes yet.</p>
+      {agent.notes.length === 0 && !adding && !draft && (
+        <p className={styles.emptyText}>
+          No notes yet.
+          {hasIdentifier && ' Use "Draft history note" to generate one from the linked source.'}
+        </p>
       )}
 
       {agent.notes.map(note => (
@@ -569,7 +700,7 @@ function NotesTab({ agent }: { agent: AgentDetail }) {
   )
 }
 
-// ─── Copy link button / Detail panel ───────────────────────────────
+// ─── Copy link button ─────────────────────────────────────────────────
 
 function CopyAgentLinkButton({ agentId, agentName }: { agentId: number; agentName: string }) {
   const [copied, setCopied] = useState(false)
@@ -589,6 +720,8 @@ function CopyAgentLinkButton({ agentId, agentName }: { agentId: number; agentNam
     </button>
   )
 }
+
+// ─── Detail panel ─────────────────────────────────────────────────────
 
 function AgentDetailPanel({
   agentId,
@@ -633,7 +766,6 @@ function AgentDetailPanel({
 
   return (
     <div className={styles.detailPanel}>
-      {/* Header */}
       <div className={styles.detailHeader}>
         <div className={styles.detailHeaderRow}>
           <div className={styles.detailTitleGroup}>
@@ -650,11 +782,11 @@ function AgentDetailPanel({
           <div className={styles.detailHeaderActions}>
             <TypePill type={agent.agent_type} />
             <BookmarkButton
-  entityType="agent"
-  entityId={agent.id}
-  title={agent.name ?? agent.authorized_form}
-  subtitle={agent.agent_type}
-/>
+              entityType="agent"
+              entityId={agent.id}
+              title={agent.name ?? agent.authorized_form}
+              subtitle={agent.agent_type}
+            />
             <CopyAgentLinkButton agentId={agentId} agentName={agent.name} />
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(agent)} title="Edit">
               <Pencil size={14} />
@@ -689,7 +821,6 @@ function AgentDetailPanel({
 // ─── Main page ────────────────────────────────────────────────────────
 
 type ViewMode = 'detail' | 'create' | 'edit'
-
 
 // ─── EAC-CPF import modal ─────────────────────────────────────────────
 
@@ -797,7 +928,6 @@ export default function AgentsPage() {
     if (id) { setSelectedId(id); setViewMode('detail') }
   }, [location.state?.selectAgentId])
 
-  // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState('')
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
@@ -864,7 +994,6 @@ export default function AgentsPage() {
             </div>
           }
         >
-          {/* Filter bar */}
           <SearchInput value={search} onChange={setSearch} placeholder="Search agents…" />
           <div className={styles.typeFilter}>
             <button
@@ -882,7 +1011,6 @@ export default function AgentsPage() {
             ))}
           </div>
 
-          {/* List */}
           {isLoading ? (
             <div className={styles.loadingList}><Spinner /></div>
           ) : agents.length === 0 ? (

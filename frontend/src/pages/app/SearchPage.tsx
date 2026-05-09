@@ -4,18 +4,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, FileText, User, Building2, UsersRound, Bot,
   SlidersHorizontal, X, ChevronLeft, ChevronRight,
-  Bookmark, BookmarkCheck, Trash2,
+  Bookmark, BookmarkCheck, Trash2, Sparkles, Wand2,
 } from 'lucide-react'
-import { searchApi, hierarchyApi, savedSearchesApi } from '@/api'
+import { searchApi, hierarchyApi, savedSearchesApi, aiApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import styles from './SearchPage.module.css'
+
+// ─── Constants ────────────────────────────────────────────────────────
 
 const AGENT_ICONS: Record<string, typeof User> = {
   person: User, organization: Building2, family: UsersRound, software: Bot,
 }
 const NODE_STATUSES = ['draft', 'published', 'restricted']
-const AGENT_TYPES = ['person', 'organization', 'family', 'software']
-const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types']
+const AGENT_TYPES   = ['person', 'organization', 'family', 'software']
+const FILTER_KEYS   = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types']
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -81,6 +83,46 @@ function AgentRow({ item, onClick }: { item: any; onClick: () => void }) {
   )
 }
 
+// ─── Smart result row (unified shape from smart-search) ───────────────
+
+function SmartNodeRow({ item, onClick }: { item: any; onClick: () => void }) {
+  return (
+    <button className={styles.resultRow} onClick={onClick}>
+      <div className={styles.resultIconWrap}><FileText size={15} /></div>
+      <div className={styles.resultBody}>
+        <div className={styles.resultTitle}>{item.title}</div>
+        <div className={styles.resultMeta}>
+          {item.subtitle && <span className={styles.resultRef}>{item.subtitle}</span>}
+          {item.subtitle && item.meta && <span className={styles.dot}>·</span>}
+          {item.meta && <span className={styles.resultLevel}>{item.meta}</span>}
+          {item.status && item.status !== 'published' && (
+            <><span className={styles.dot}>·</span>
+            <span className={styles.statusBadge} data-status={item.status}>{item.status}</span></>
+          )}
+        </div>
+      </div>
+      <span className={styles.resultType}>Resource</span>
+    </button>
+  )
+}
+
+function SmartAgentRow({ item, onClick }: { item: any; onClick: () => void }) {
+  const Icon = AGENT_ICONS[item.subtitle] ?? User
+  return (
+    <button className={styles.resultRow} onClick={onClick}>
+      <div className={styles.resultIconWrap}><Icon size={15} /></div>
+      <div className={styles.resultBody}>
+        <div className={styles.resultTitle}>{item.title}</div>
+        <div className={styles.resultMeta}>
+          <span className={styles.resultLevel}>{item.subtitle}</span>
+          {item.meta && <><span className={styles.dot}>·</span><span>{item.meta}</span></>}
+        </div>
+      </div>
+      <span className={styles.resultType}>Agent</span>
+    </button>
+  )
+}
+
 // ─── Filter panel ─────────────────────────────────────────────────────
 
 function FilterPanel({ params, setParam, clearParam, levels }: {
@@ -90,19 +132,22 @@ function FilterPanel({ params, setParam, clearParam, levels }: {
   levels: string[]
 }) {
   const types = params.get('types') ?? 'nodes,agents'
-  const showNodeFilters = types.includes('nodes')
+  const showNodeFilters  = types.includes('nodes')
   const showAgentFilters = types.includes('agents')
   return (
     <div className={styles.filters}>
       <div className={styles.filterGroup}>
         <label className={styles.filterLabel}>Record type</label>
-        {[{ value: 'nodes,agents', label: 'All' }, { value: 'nodes', label: 'Resources only' }, { value: 'agents', label: 'Agents only' }]
-          .map(opt => (
-            <label key={opt.value} className={styles.radioLabel}>
-              <input type="radio" checked={types === opt.value} onChange={() => setParam('types', opt.value)} />
-              {opt.label}
-            </label>
-          ))}
+        {[
+          { value: 'nodes,agents', label: 'All' },
+          { value: 'nodes',        label: 'Resources only' },
+          { value: 'agents',       label: 'Agents only' },
+        ].map(opt => (
+          <label key={opt.value} className={styles.radioLabel}>
+            <input type="radio" checked={types === opt.value} onChange={() => setParam('types', opt.value)} />
+            {opt.label}
+          </label>
+        ))}
       </div>
       {showNodeFilters && (<>
         <div className={styles.filterGroup}>
@@ -159,7 +204,7 @@ function FilterPanel({ params, setParam, clearParam, levels }: {
 
 function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string>) => void }) {
   const queryClient = useQueryClient()
-  const [saving, setSaving] = useState(false)
+  const [saving, setSaving]     = useState(false)
   const [nameInput, setNameInput] = useState('')
   const [nameError, setNameError] = useState('')
 
@@ -170,20 +215,16 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
 
   const [searchParams] = useSearchParams()
   const currentParams = paramsToObject(searchParams)
-  const hasAnything = Object.keys(currentParams).length > 0
+  const hasAnything   = Object.keys(currentParams).length > 0
 
   const createMutation = useMutation({
     mutationFn: ({ name, params }: { name: string; params: Record<string, string> }) =>
       savedSearchesApi.create(name, params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['saved-searches'] })
-      setSaving(false)
-      setNameInput('')
-      setNameError('')
+      setSaving(false); setNameInput(''); setNameError('')
     },
-    onError: (err: any) => {
-      setNameError(err?.response?.data?.message ?? 'Could not save')
-    },
+    onError: (err: any) => setNameError(err?.response?.data?.message ?? 'Could not save'),
   })
 
   const deleteMutation = useMutation({
@@ -200,10 +241,7 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
 
   return (
     <div className={styles.savedPanel}>
-      <div className={styles.savedHeader}>
-        <Bookmark size={13} />
-        Saved searches
-      </div>
+      <div className={styles.savedHeader}><Bookmark size={13} /> Saved searches</div>
 
       {hasAnything && (
         saving ? (
@@ -226,8 +264,7 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
           </div>
         ) : (
           <button className={styles.saveCurrentBtn} onClick={() => setSaving(true)}>
-            <BookmarkCheck size={13} />
-            Save current search
+            <BookmarkCheck size={13} /> Save current search
           </button>
         )
       )}
@@ -239,11 +276,7 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
         )}
         {savedSearches.map((s: any) => (
           <div key={s.id} className={styles.savedItem}>
-            <button
-              className={styles.savedItemBtn}
-              onClick={() => onLoad(s.params)}
-              title={summariseParams(s.params)}
-            >
+            <button className={styles.savedItemBtn} onClick={() => onLoad(s.params)} title={summariseParams(s.params)}>
               <span className={styles.savedItemName}>{s.name}</span>
               <span className={styles.savedItemSummary}>{summariseParams(s.params)}</span>
             </button>
@@ -268,7 +301,7 @@ function Pagination({ page, pages, total, perPage, onPage }: {
 }) {
   if (pages <= 1) return null
   const from = (page - 1) * perPage + 1
-  const to = Math.min(page * perPage, total)
+  const to   = Math.min(page * perPage, total)
   return (
     <div className={styles.pagination}>
       <span className={styles.paginationInfo}>{from}–{to} of {total}</span>
@@ -288,16 +321,31 @@ function Pagination({ page, pages, total, perPage, onPage }: {
 
 export default function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
+  const navigate    = useNavigate()
   const [inputValue, setInputValue] = useState(searchParams.get('q') ?? '')
   const [showFilters, setShowFilters] = useState(false)
 
-  const q = searchParams.get('q') ?? ''
-  const page = parseInt(searchParams.get('page') ?? '1')
+  // Smart search state
+  const [smartResults, setSmartResults]             = useState<any[] | null>(null)
+  const [smartInterpretation, setSmartInterpretation] = useState('')
+  const [smartTotal, setSmartTotal]                 = useState(0)
+  const [smartErrors, setSmartErrors]               = useState<string[]>([])
+
+  const q       = searchParams.get('q') ?? ''
+  const page    = parseInt(searchParams.get('page') ?? '1')
   const perPage = 25
 
   useEffect(() => { setInputValue(searchParams.get('q') ?? '') }, [searchParams])
 
+  // ── AI status ──────────────────────────────────────────────────────
+  const { data: aiStatus } = useQuery({
+    queryKey: ['ai-status'],
+    queryFn: () => aiApi.getStatus().then(r => r.data.data),
+    staleTime: 60_000,
+  })
+  const aiEnabled = aiStatus?.enabled ?? false
+
+  // ── Hierarchy levels for filter panel + LLM context ───────────────
   const { data: hierarchyTypes } = useQuery({
     queryKey: ['hierarchy-types-search'],
     queryFn: () => hierarchyApi.listTypes().then((r: any) => r.data.data as any[]),
@@ -315,6 +363,7 @@ export default function SearchPage() {
     enabled: !!hierarchyTypes?.length,
   })
 
+  // ── Normal search ──────────────────────────────────────────────────
   const { data, isFetching } = useQuery({
     queryKey: ['full-search', Object.fromEntries(searchParams)],
     queryFn: () => {
@@ -324,10 +373,30 @@ export default function SearchPage() {
       }
       return searchApi.search(params).then(r => r.data.data)
     },
-    enabled: q.length >= 2,
+    enabled: q.length >= 2 && smartResults === null,
     staleTime: 10_000,
   })
 
+  // ── Smart search ───────────────────────────────────────────────────
+  const smartMutation = useMutation({
+    mutationFn: () => aiApi.smartSearch(inputValue.trim(), allLevels ?? []),
+    onSuccess: (res) => {
+      const d = res.data.data
+      setSmartResults(d.results)
+      setSmartInterpretation(d.interpretation)
+      setSmartTotal(d.total)
+      setSmartErrors(d.errors ?? [])
+    },
+  })
+
+  const clearSmartSearch = () => {
+    setSmartResults(null)
+    setSmartInterpretation('')
+    setSmartTotal(0)
+    setSmartErrors([])
+  }
+
+  // ── Handlers ───────────────────────────────────────────────────────
   const setParam = (k: string, v: string) => {
     const next = new URLSearchParams(searchParams)
     next.set(k, v); next.set('page', '1'); setSearchParams(next)
@@ -337,31 +406,37 @@ export default function SearchPage() {
     next.delete(k); next.set('page', '1'); setSearchParams(next)
   }
   const handleSearch = () => {
+    clearSmartSearch()
     const next = new URLSearchParams(searchParams)
     next.set('q', inputValue.trim()); next.set('page', '1'); setSearchParams(next)
+  }
+  const handleSmartSearch = () => {
+    if (inputValue.trim().length < 2) return
+    clearSmartSearch()
+    smartMutation.mutate()
   }
   const handleResultClick = (item: any) => {
     if (item.type === 'node') navigate('/app/resources', { state: { selectNodeId: item.id } })
     else navigate('/app/agents', { state: { selectAgentId: item.id } })
   }
-
   const handleLoadSaved = (params: Record<string, string>) => {
+    clearSmartSearch()
     const next = new URLSearchParams(params)
     next.set('page', '1')
     setSearchParams(next)
     if (params.q) setInputValue(params.q)
-    if (['status', 'level', 'date_from', 'date_to', 'agent_type'].some(k => params[k])) {
-      setShowFilters(true)
-    }
+    if (['status', 'level', 'date_from', 'date_to', 'agent_type'].some(k => params[k])) setShowFilters(true)
   }
 
-  const hasFilters = ['status', 'level', 'date_from', 'date_to', 'agent_type'].some(k => searchParams.has(k))
-  const results: any[] = data?.results ?? []
-  const total: number = data?.total ?? 0
-  const pages: number = data?.pages ?? 0
+  const hasFilters = FILTER_KEYS.some(k => searchParams.has(k))
+  const results: any[]  = data?.results ?? []
+  const total: number   = data?.total ?? 0
+  const pages: number   = data?.pages ?? 0
 
   return (
     <div className={styles.page}>
+
+      {/* ── Search bar ── */}
       <div className={styles.searchBar}>
         <div className={styles.searchForm}>
           <Search size={18} className={styles.searchIcon} />
@@ -373,9 +448,21 @@ export default function SearchPage() {
             placeholder="Search resources and agents…"
             autoFocus
           />
-          {isFetching && <Spinner size={14} />}
+          {(isFetching || smartMutation.isPending) && <Spinner size={14} />}
         </div>
         <button type="button" onClick={handleSearch} className="btn btn-primary">Search</button>
+        {aiEnabled && (
+          <button
+            type="button"
+            onClick={handleSmartSearch}
+            className={`btn btn-secondary ${styles.nlBtn} ${smartResults !== null ? styles.nlBtnActive : ''}`}
+            disabled={smartMutation.isPending}
+            title="Search using natural language"
+          >
+            {smartMutation.isPending ? <Spinner size={14} /> : <Sparkles size={14} />}
+            <span className={styles.nlBtnLabel}>AI Search</span>
+          </button>
+        )}
         <button
           className={`btn btn-secondary ${hasFilters ? styles.filterBtnActive : ''}`}
           onClick={() => setShowFilters(v => !v)}
@@ -384,14 +471,15 @@ export default function SearchPage() {
           Filters
           {hasFilters && (
             <span className={styles.filterCount}>
-              {['status', 'level', 'date_from', 'date_to', 'agent_type'].filter(k => searchParams.has(k)).length}
+              {FILTER_KEYS.filter(k => searchParams.has(k)).length}
             </span>
           )}
         </button>
       </div>
 
       <div className={styles.body}>
-        {/* ── Left sidebar: filters + saved searches ── */}
+
+        {/* ── Sidebar: filters + saved searches ── */}
         <aside className={styles.sidebar}>
           {showFilters && (
             <div className={styles.filterPanel}>
@@ -401,57 +489,104 @@ export default function SearchPage() {
           <SavedSearchesPanel onLoad={handleLoadSaved} />
         </aside>
 
-        <div className={styles.results}>
-          {q.length >= 2 && (
-            <div className={styles.statsBar}>
-              {isFetching ? (
-                <span className={styles.searching}><Spinner size={13} /> Searching…</span>
-              ) : data ? (
-                <div className={styles.statsLeft}>
-                  <span className={styles.totalCount}>
-                    {total === 0 ? 'No results' : `${total.toLocaleString()} result${total !== 1 ? 's' : ''}`}
-                    {' for '}<strong>"{q}"</strong>
-                  </span>
-                  {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
-                  {data.node_total > 0 && <span className={styles.typeStat}>{data.node_total} resource{data.node_total !== 1 ? 's' : ''}</span>}
-                  {data.agent_total > 0 && <span className={styles.typeStat}>{data.agent_total} agent{data.agent_total !== 1 ? 's' : ''}</span>}
-                </div>
-              ) : null}
+        {/* ── Smart search results ── */}
+        {smartResults !== null && (
+          <div className={styles.results}>
+            <div className={styles.smartBar}>
+              <Wand2 size={13} className={styles.smartIcon} />
+              <span className={styles.smartInterpretation}>{smartInterpretation}</span>
+              <span className={styles.smartCount}>{smartTotal} result{smartTotal !== 1 ? 's' : ''}</span>
+              <button className={styles.smartClear} onClick={clearSmartSearch}>
+                <X size={12} /> Clear AI search
+              </button>
             </div>
-          )}
 
-          {!q && (
-            <div className={styles.emptyState}>
-              <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
-              <p>Enter a search term above to get started</p>
-              <p className={styles.emptyHint}>Searches across titles, descriptions, scope notes, and custom metadata fields</p>
-            </div>
-          )}
+            {smartErrors.length > 0 && (
+              <div style={{ padding: 'var(--space-3) var(--space-6)', fontSize: 'var(--text-xs)', color: 'var(--color-warning)' }}>
+                {smartErrors.map((e, i) => <span key={i}>{e}</span>)}
+              </div>
+            )}
 
-          {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>Type at least 2 characters…</p></div>}
+            {smartResults.length === 0 ? (
+              <div className={styles.emptyState}>
+                <Sparkles size={32} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
+                <p>No results found</p>
+                <p className={styles.emptyHint}>Try rephrasing your question</p>
+              </div>
+            ) : (
+              <div className={styles.resultList}>
+                {smartResults.map((item: any) =>
+                  item.type === 'node'
+                    ? <SmartNodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                    : <SmartAgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-          {q.length >= 2 && !isFetching && results.length === 0 && (
-            <div className={styles.emptyState}>
-              <p>No results for <strong>"{q}"</strong></p>
-              <p className={styles.emptyHint}>Try different keywords or adjust your filters.</p>
-            </div>
-          )}
+        {/* ── Normal search results ── */}
+        {smartResults === null && (
+          <div className={styles.results}>
+            {q.length >= 2 && (
+              <div className={styles.statsBar}>
+                {isFetching ? (
+                  <span className={styles.searching}><Spinner size={13} /> Searching…</span>
+                ) : data ? (
+                  <div className={styles.statsLeft}>
+                    <span className={styles.totalCount}>
+                      {total === 0 ? 'No results' : `${total.toLocaleString()} result${total !== 1 ? 's' : ''}`}
+                      {' for '}<strong>"{q}"</strong>
+                    </span>
+                    {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
+                    {data.node_total > 0 && <span className={styles.typeStat}>{data.node_total} resource{data.node_total !== 1 ? 's' : ''}</span>}
+                    {data.agent_total > 0 && <span className={styles.typeStat}>{data.agent_total} agent{data.agent_total !== 1 ? 's' : ''}</span>}
+                  </div>
+                ) : null}
+              </div>
+            )}
 
-          {results.length > 0 && (
-            <div className={styles.resultList}>
-              {results.map((item: any) =>
-                item.type === 'node'
-                  ? <NodeRow key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                  : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-              )}
-            </div>
-          )}
+            {!q && (
+              <div className={styles.emptyState}>
+                <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
+                <p>Enter a search term above to get started</p>
+                {aiEnabled ? (
+                  <p className={styles.emptyHint}>
+                    Use <Sparkles size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> AI Search
+                    to ask in plain language — e.g. <em>"agents with a website"</em> or <em>"fonds from the 1920s"</em>
+                  </p>
+                ) : (
+                  <p className={styles.emptyHint}>Searches across titles, descriptions, scope notes, and custom metadata fields</p>
+                )}
+              </div>
+            )}
 
-          {pages > 1 && (
-            <Pagination page={page} pages={pages} total={total} perPage={perPage}
-              onPage={p => { const next = new URLSearchParams(searchParams); next.set('page', String(p)); setSearchParams(next) }} />
-          )}
-        </div>
+            {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>Type at least 2 characters…</p></div>}
+
+            {q.length >= 2 && !isFetching && results.length === 0 && (
+              <div className={styles.emptyState}>
+                <p>No results for <strong>"{q}"</strong></p>
+                <p className={styles.emptyHint}>Try different keywords or adjust your filters.</p>
+              </div>
+            )}
+
+            {results.length > 0 && (
+              <div className={styles.resultList}>
+                {results.map((item: any) =>
+                  item.type === 'node'
+                    ? <NodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                    : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                )}
+              </div>
+            )}
+
+            {pages > 1 && (
+              <Pagination page={page} pages={pages} total={total} perPage={perPage}
+                onPage={p => { const next = new URLSearchParams(searchParams); next.set('page', String(p)); setSearchParams(next) }} />
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   )

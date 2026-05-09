@@ -575,3 +575,101 @@
   font-size: var(--text-sm);
   color: var(--color-ink-faint);
 }
+
+.draftPreview {
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-accent-bg);
+  overflow: hidden;
+  margin-bottom: var(--space-3);
+}
+.draftHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent);
+  border-bottom: 1px solid var(--color-accent-border);
+  background: var(--color-surface);
+}
+.draftSource {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  text-decoration: none;
+  font-weight: 400;
+}
+.draftSource:hover { text-decoration: underline; }
+.draftTextarea {
+  width: 100%;
+  border: none;
+  background: var(--color-accent-bg);
+  padding: var(--space-3);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  line-height: 1.5;
+}
+.draftActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-accent-border);
+  background: var(--color-surface);
+}
+.draftControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.draftSourcePicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+}
+
+.draftSourceLabel {
+  color: var(--color-ink-faint);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.draftSourceBadge {
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.draftSourceToggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+  color: var(--color-ink-muted);
+}
+
+.draftSourceLinks {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}

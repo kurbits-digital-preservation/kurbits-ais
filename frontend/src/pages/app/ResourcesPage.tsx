@@ -25,9 +25,11 @@ import RapidEntryModal from '@/components/node/RapidEntryModal'
 import type { NodeStub, NodeDetail, NodeStatus } from '@/types'
 import styles from './ResourcesPage.module.css'
 import RepresentationsTab from '@/components/node/RepresentationsTab'
-import { Layers } from 'lucide-react'
+import { Layers, Sparkles, Copy } from 'lucide-react'
 import BookmarkButton from '@/components/layout/BookmarkButton'
-import { Copy } from 'lucide-react'
+import DraftNodeNoteButton from '@/components/node/DraftNodeNoteButton'
+import OcrButton from '@/components/node/OcrButton'
+import AttachmentSummarisePanel from '@/components/node/AttachmentSummarisePanel'
 
 // ─── Status badge ─────────────────────────────────────────────────────
 
@@ -676,12 +678,10 @@ function NodeDetailPanel({
   nodeId,
   onEdit,
   onSelectChild,
-  onSelectDuplicate,
 }: {
   nodeId: number
   onEdit: (node: NodeDetail) => void
   onSelectChild: (node: NodeStub) => void
-  onSelectDuplicate: (node: NodeDetail) => void
 }) {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history' | 'representations'>('details')
@@ -707,15 +707,7 @@ function NodeDetailPanel({
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
     },
   })
-const duplicateMutation = useMutation({
-  mutationFn: () => nodesApi.duplicate(nodeId),
-  onSuccess: (res) => {
-    const newNode = res.data.data
-    queryClient.invalidateQueries({ queryKey: ['node-tree'] })
-    queryClient.invalidateQueries({ queryKey: ['node-children'] })
-    onSelectDuplicate(newNode)
-  },
-})
+
   if (isLoading) return <div className={styles.detailLoading}>Loading…</div>
   if (!data) return null
 
@@ -737,30 +729,12 @@ const duplicateMutation = useMutation({
             ))}
           </div>
           <div className={styles.detailActions}>
-            <BookmarkButton
-  entityType="node"
-  entityId={data.id}
-  title={data.title}
-  subtitle={data.ref_code}
-/>
             <CopyLinkButton nodeId={nodeId} refCode={data?.ref_code ?? ''} />
             <ExportMenu nodeId={nodeId} />
             <PrintLabelsButton nodeIds={[nodeId]} />
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowMove(true)} title="Move to different parent">
               <MoveRight size={14} />
             </button>
-            <button
-  className="btn btn-ghost btn-sm btn-icon"
-  onClick={() => {
-    if (confirm(`Duplicate "${data.title}"? A copy will be created as a sibling in draft status.`))
-      duplicateMutation.mutate()
-  }}
-  title="Duplicate node"
-  disabled={duplicateMutation.isPending}
->
-  {duplicateMutation.isPending ? <Spinner size={14} /> : <Copy size={14} />}
-</button>
-
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(data)} title="Edit">
               <Edit2 size={14} />
             </button>
@@ -1161,6 +1135,7 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [showSummariseId, setShowSummariseId] = useState<number | null>(null)
 
   const deleteMutation = useMutation({
     mutationFn: (attachmentId: number) => nodesApi.deleteAttachment(node.id, attachmentId),
@@ -1255,7 +1230,23 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                   )}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 'var(--space-1)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 'var(--space-1)', flexShrink: 0, alignItems: 'center' }}>
+                <OcrButton
+                  nodeId={node.id}
+                  attachmentId={att.id}
+                  mimeType={att.mime_type}
+                  hasText={att.extracted_text === true}
+                />
+                {att.extracted_text === true && (
+                  <button
+                    className="btn btn-ghost btn-sm btn-icon"
+                    onClick={() => setShowSummariseId(showSummariseId === att.id ? null : att.id)}
+                    title="Summarise extracted text"
+                    style={{ color: showSummariseId === att.id ? 'var(--color-accent)' : undefined }}
+                  >
+                    <Sparkles size={12} />
+                  </button>
+                )}
                 <button className="btn btn-ghost btn-sm btn-icon"
                   onClick={() => setExpandedId(isExpanded ? null : att.id)}
                   title="Technical metadata">
@@ -1265,12 +1256,30 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                   className="btn btn-ghost btn-sm btn-icon" title="View / download">
                   <Download size={12} />
                 </a>
+                {att.extracted_text === true && (
+                  <a
+                    href={nodesApi.getTextUrl(node.id, att.id)}
+                    download={att.original_filename.replace(/\.[^.]+$/, '') + '_text.txt'}
+                    className="btn btn-ghost btn-sm btn-icon"
+                    title="Download extracted text"
+                  >
+                    <FileText size={12} />
+                  </a>
+                )}
                 <button className="btn btn-ghost btn-sm btn-icon"
                   onClick={() => deleteMutation.mutate(att.id)} title="Delete">
                   <Trash2 size={12} />
                 </button>
               </div>
             </div>
+
+            {showSummariseId === att.id && (
+              <AttachmentSummarisePanel
+                nodeId={node.id}
+                filename={att.original_filename}
+                onClose={() => setShowSummariseId(null)}
+              />
+            )}
 
             {/* Expanded technical metadata panel */}
             {isExpanded && (
@@ -1590,9 +1599,6 @@ export default function ResourcesPage() {
       nodeId={selectedNode.id}
       onEdit={handleEdit}
       onSelectChild={handleSelect}
-        onSelectDuplicate={(newNode) => {
-    handleSelect(newNode)   // select it in the tree
-  }}
     />
   ) : (
     <div className={styles.emptyState}>

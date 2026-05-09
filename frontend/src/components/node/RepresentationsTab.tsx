@@ -1,13 +1,24 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Plus, Trash2, Upload, Download, ChevronRight,
-  Edit2, X, Save, AlertCircle, Layers
+  Plus,
+  Trash2,
+  Upload,
+  Download,
+  Sparkles,
+  Edit2,
+  X,
+  Save,
+  AlertCircle,
+  Layers,
+  FileText,
 } from 'lucide-react'
 import { representationsApi, nodesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import type { NodeDetail, NodeRepresentation, RepresentationFile } from '@/types'
 import styles from './RepresentationsTab.module.css'
+import OcrButton from '@/components/node/OcrButton'
+import FileSummarisePanel from '@/components/node/FileSummarisePanel'
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -16,7 +27,13 @@ function fmtSize(bytes: number): string {
   return (bytes / 1048576).toFixed(1) + ' MB'
 }
 
-function TechRow({ label, children }: { label: string; children: React.ReactNode }) {
+function TechRow({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
   return (
     <div style={{ display: 'contents' }}>
       <dt>{label}</dt>
@@ -38,9 +55,12 @@ function FileCard({
 }) {
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(false)
+  const [showSummarise, setShowSummarise] = useState(false)
 
   const downloadUrl = representationsApi.getDownloadUrl(nodeId, file.id)
   const thumbUrl = representationsApi.getThumbnailUrl(nodeId, file.id)
+  const textUrl = nodesApi.getTextUrl(nodeId, file.id)
+  const hasText = !!(file as any).extracted_text
 
   const deleteMutation = useMutation({
     mutationFn: () => representationsApi.deleteFile(nodeId, file.id),
@@ -52,7 +72,27 @@ function FileCard({
 
   const reextractMutation = useMutation({
     mutationFn: () => nodesApi.reextractMetadata(nodeId, file.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['representations', nodeId] }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['representations', nodeId] }),
+  })
+
+  const saveNoteMutation = useMutation({
+    mutationFn: ({
+      content,
+      noteType,
+    }: {
+      content: string
+      noteType: string
+    }) =>
+      nodesApi.addNote(nodeId, {
+        content,
+        note_type: noteType,
+        is_public: false,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['node', nodeId] })
+      setShowSummarise(false)
+    },
   })
 
   return (
@@ -79,45 +119,91 @@ function FileCard({
                 href={'https://www.nationalarchives.gov.uk/pronom/' + file.pronom_id}
                 target="_blank"
                 rel="noreferrer"
-                style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-mono)', fontSize: 10 }}
+                style={{
+                  color: 'var(--color-accent)',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 10,
+                }}
               >
                 {file.pronom_id}
               </a>
             )}
             {file.image_width && file.image_height && (
-              <span>{file.image_width} x {file.image_height}px{file.image_dpi_x ? ' · ' + Math.round(file.image_dpi_x) + ' DPI' : ''}</span>
+              <span>
+                {file.image_width} x {file.image_height}px
+                {file.image_dpi_x ? ' · ' + Math.round(file.image_dpi_x) + ' DPI' : ''}
+              </span>
             )}
             {file.checksum_sha256 && (
               <span
                 title={'SHA-256: ' + file.checksum_sha256}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 10, cursor: 'help' }}
               >
-                {'✓ ' + file.checksum_sha256.slice(0, 8) + '…'}
+                {file.checksum_sha256.slice(0, 8) + '...'}
               </span>
             )}
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: 'var(--space-1)', flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 'var(--space-1)', flexShrink: 0, alignItems: 'center' }}>
+          {/* OCR / extract text */}
+          <OcrButton
+            nodeId={nodeId}
+            attachmentId={file.id}
+            mimeType={file.mime_type}
+            hasText={hasText}
+          />
+
+          {/* Summarise toggle */}
+          {hasText && (
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              onClick={() => setShowSummarise((v) => !v)}
+              title="Summarise extracted text into a note"
+              style={{ color: showSummarise ? 'var(--color-accent)' : undefined }}
+            >
+              <Sparkles size={12} />
+            </button>
+          )}
+
+          {/* Tech metadata toggle */}
           <button
             className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => setExpanded(v => !v)}
+            onClick={() => setExpanded((v) => !v)}
             title="Technical metadata"
           >
             <AlertCircle size={12} />
           </button>
+
+          {/* Download file */}
           <a
             href={downloadUrl}
             target="_blank"
             rel="noreferrer"
             className="btn btn-ghost btn-sm btn-icon"
-            title="Download"
+            title="Download file"
           >
             <Download size={12} />
           </a>
+
+          {/* Download raw text — only when extracted text exists */}
+          {hasText && (
+            <a
+              href={textUrl}
+              download={file.original_filename.replace(/\.[^.]+$/, '') + '_text.txt'}
+              className="btn btn-ghost btn-sm btn-icon"
+              title="Download extracted text as .txt"
+            >
+              <FileText size={12} />
+            </a>
+          )}
+
+          {/* Delete */}
           <button
             className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => { if (confirm('Delete this file?')) deleteMutation.mutate() }}
+            onClick={() => {
+              if (confirm('Delete this file?')) deleteMutation.mutate()
+            }}
             title="Delete"
           >
             <Trash2 size={12} />
@@ -125,17 +211,34 @@ function FileCard({
         </div>
       </div>
 
+      {/* Summarise panel */}
+      {showSummarise && (
+        <FileSummarisePanel
+          nodeId={nodeId}
+          filename={file.original_filename}
+          onSaveNote={(content, noteType) =>
+            saveNoteMutation.mutate({ content, noteType })
+          }
+          isSavingNote={saveNoteMutation.isPending}
+        />
+      )}
+
+      {/* Tech metadata panel */}
       {expanded && (
         <div className={styles.fileTechPanel}>
           <div className={styles.fileTechGrid}>
             {file.checksum_md5 && (
               <TechRow label="MD5">
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{file.checksum_md5}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>
+                  {file.checksum_md5}
+                </span>
               </TechRow>
             )}
             {file.checksum_sha256 && (
               <TechRow label="SHA-256">
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', wordBreak: 'break-all' }}>{file.checksum_sha256}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', wordBreak: 'break-all' }}>
+                  {file.checksum_sha256}
+                </span>
               </TechRow>
             )}
             {file.pronom_id && (
@@ -151,10 +254,15 @@ function FileCard({
               </TechRow>
             )}
             {file.image_width && (
-              <TechRow label="Dimensions">{file.image_width} x {file.image_height} px</TechRow>
+              <TechRow label="Dimensions">
+                {file.image_width} x {file.image_height} px
+              </TechRow>
             )}
             {file.image_dpi_x && (
-              <TechRow label="Resolution">{Math.round(file.image_dpi_x)} x {Math.round(file.image_dpi_y ?? file.image_dpi_x)} DPI</TechRow>
+              <TechRow label="Resolution">
+                {Math.round(file.image_dpi_x)} x{' '}
+                {Math.round(file.image_dpi_y ?? file.image_dpi_x)} DPI
+              </TechRow>
             )}
             {file.image_mode && (
               <TechRow label="Colour mode">{file.image_mode}</TechRow>
@@ -163,16 +271,25 @@ function FileCard({
               <TechRow label="Bit depth">{file.image_bit_depth}-bit</TechRow>
             )}
             {file.duration_seconds && (
-              <TechRow label="Duration">{new Date(file.duration_seconds * 1000).toISOString().slice(11, 19)}</TechRow>
+              <TechRow label="Duration">
+                {new Date(file.duration_seconds * 1000).toISOString().slice(11, 19)}
+              </TechRow>
             )}
-            {file.av_codec && (
-              <TechRow label="Codec">{file.av_codec}</TechRow>
-            )}
+            {file.av_codec && <TechRow label="Codec">{file.av_codec}</TechRow>}
             {file.av_bitrate && (
-              <TechRow label="Bitrate">{Math.round(file.av_bitrate / 1000)} kbps</TechRow>
+              <TechRow label="Bitrate">
+                {Math.round(file.av_bitrate / 1000)} kbps
+              </TechRow>
+            )}
+            {(file as any).extracted_text_at && (
+              <TechRow label="Text extracted">
+                {new Date((file as any).extracted_text_at).toLocaleString()}
+              </TechRow>
             )}
             {file.tech_extracted_at && (
-              <TechRow label="Extracted">{new Date(file.tech_extracted_at).toLocaleString()}</TechRow>
+              <TechRow label="Tech extracted">
+                {new Date(file.tech_extracted_at).toLocaleString()}
+              </TechRow>
             )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--space-2)' }}>
@@ -223,59 +340,53 @@ function RepresentationCard({
   })
 
   const updateMutation = useMutation({
-    mutationFn: () => representationsApi.update(nodeId, rep.id, {
-      rep_type_id: editTypeId,
-      label: editLabel || undefined,
-      note: editNote || undefined,
-    }),
+    mutationFn: () =>
+      representationsApi.update(nodeId, rep.id, {
+        rep_type_id: editTypeId,
+        label: editLabel || undefined,
+        note: editNote || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representations', nodeId] })
       setEditing(false)
-      onChanged()
     },
   })
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setUploadError('')
     setUploading(true)
+    setUploadError('')
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('representation_id', String(rep.id))
-      await representationsApi.uploadFile(nodeId, rep.id, formData)
+      const fd = new FormData()
+      fd.append('file', file)
+      await representationsApi.uploadFile(nodeId, rep.id, fd)
       queryClient.invalidateQueries({ queryKey: ['representations', nodeId] })
-      onChanged()
     } catch (err: any) {
-      setUploadError(err.response?.data?.message ?? 'Upload failed.')
+      setUploadError(err?.response?.data?.message ?? 'Upload failed')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  const chevronClass = styles.repChevron + (expanded ? ' ' + styles.repChevronOpen : '')
-
   return (
     <div className={styles.repCard}>
-      <div className={styles.repHeader} onClick={() => { if (!editing) setExpanded(v => !v) }}>
-        <ChevronRight size={14} className={chevronClass} />
-
+      <div className={styles.repHeader} onClick={() => setExpanded((v) => !v)}>
         {editing ? (
-          <div className={styles.repEditForm} onClick={e => e.stopPropagation()}>
+          <div className={styles.repEditForm} onClick={(e) => e.stopPropagation()}>
             <select
               value={editTypeId}
-              onChange={e => setEditTypeId(Number(e.target.value))}
+              onChange={(e) => setEditTypeId(Number(e.target.value))}
               style={{ fontSize: 'var(--text-sm)' }}
             >
-              {repTypes.map(rt => (
+              {repTypes.map((rt) => (
                 <option key={rt.id} value={rt.id}>{rt.name}</option>
               ))}
             </select>
             <input
               value={editLabel}
-              onChange={e => setEditLabel(e.target.value)}
+              onChange={(e) => setEditLabel(e.target.value)}
               placeholder="Label (optional)"
               style={{ fontSize: 'var(--text-sm)', flex: 1 }}
             />
@@ -301,7 +412,7 @@ function RepresentationCard({
         )}
 
         {!editing && (
-          <div className={styles.repActions} onClick={e => e.stopPropagation()}>
+          <div className={styles.repActions} onClick={(e) => e.stopPropagation()}>
             <button
               className="btn btn-ghost btn-sm btn-icon"
               onClick={() => setEditing(true)}
@@ -311,7 +422,10 @@ function RepresentationCard({
             </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
-              onClick={() => { if (confirm('Delete this representation and all its files?')) deleteMutation.mutate() }}
+              onClick={() => {
+                if (confirm('Delete this representation and all its files?'))
+                  deleteMutation.mutate()
+              }}
               title="Delete"
             >
               <Trash2 size={12} />
@@ -324,22 +438,17 @@ function RepresentationCard({
         <div className={styles.repBody}>
           {rep.note && <p className={styles.repNote}>{rep.note}</p>}
 
-          {rep.files.map(file => (
-            <FileCard
-              key={file.id}
-              nodeId={nodeId}
-              file={file}
-              onDeleted={onChanged}
-            />
+          {rep.files.map((file) => (
+            <FileCard key={file.id} nodeId={nodeId} file={file} onDeleted={onChanged} />
           ))}
 
           {rep.files.length === 0 && (
-            <p className={styles.repEmpty}>No files yet — upload one below.</p>
+            <p className={styles.repEmpty}>No files yet - upload one below.</p>
           )}
 
           <div className={styles.uploadRow}>
             <label className="btn btn-secondary btn-sm">
-              <Upload size={12} /> {uploading ? 'Uploading…' : 'Upload file'}
+              <Upload size={12} /> {uploading ? 'Uploading...' : 'Upload file'}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -376,11 +485,12 @@ function NewRepresentationForm({
   const [note, setNote] = useState('')
 
   const createMutation = useMutation({
-    mutationFn: () => representationsApi.create(nodeId, {
-      rep_type_id: repTypeId,
-      label: label.trim() || undefined,
-      note: note.trim() || undefined,
-    }),
+    mutationFn: () =>
+      representationsApi.create(nodeId, {
+        rep_type_id: repTypeId,
+        label: label.trim() || undefined,
+        note: note.trim() || undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['representations', nodeId] })
       onCreated()
@@ -400,23 +510,29 @@ function NewRepresentationForm({
     <div className={styles.newRepForm}>
       <div className="form-group">
         <label>Type *</label>
-        <select value={repTypeId} onChange={e => setRepTypeId(Number(e.target.value))}>
-          {repTypes.map(rt => (
+        <select value={repTypeId} onChange={(e) => setRepTypeId(Number(e.target.value))}>
+          {repTypes.map((rt) => (
             <option key={rt.id} value={rt.id}>{rt.name}</option>
           ))}
         </select>
       </div>
       <div className="form-group">
-        <label>Label <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>(optional)</span></label>
+        <label>
+          Label{' '}
+          <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>(optional)</span>
+        </label>
         <input
           value={label}
-          onChange={e => setLabel(e.target.value)}
+          onChange={(e) => setLabel(e.target.value)}
           placeholder="e.g. Recto, Side A, 2024 scan"
         />
       </div>
       <div className="form-group">
-        <label>Note <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>(optional)</span></label>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} />
+        <label>
+          Note{' '}
+          <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>(optional)</span>
+        </label>
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
       </div>
       <div className={styles.newRepActions}>
         <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
@@ -441,15 +557,18 @@ export default function RepresentationsTab({ node }: { node: NodeDetail }) {
 
   const { data: representations, isLoading: repsLoading } = useQuery({
     queryKey: ['representations', node.id],
-    queryFn: () => representationsApi.list(node.id).then(r => r.data.data as NodeRepresentation[]),
+    queryFn: () =>
+      representationsApi.list(node.id).then((r) => r.data.data as NodeRepresentation[]),
   })
 
   const { data: repTypes, isLoading: typesLoading } = useQuery({
     queryKey: ['representation-types'],
-    queryFn: () => representationsApi.listTypes().then(r => r.data.data as { id: number; name: string }[]),
+    queryFn: () =>
+      representationsApi.listTypes().then((r) => r.data.data as { id: number; name: string }[]),
   })
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['representations', node.id] })
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ['representations', node.id] })
 
   if (repsLoading || typesLoading) {
     return <div style={{ padding: 'var(--space-4)' }}><Spinner /></div>
@@ -458,7 +577,7 @@ export default function RepresentationsTab({ node }: { node: NodeDetail }) {
   return (
     <div className={styles.tab}>
       <div className={styles.tabHeader}>
-        <button className="btn btn-secondary btn-sm" onClick={() => setAdding(v => !v)}>
+        <button className="btn btn-secondary btn-sm" onClick={() => setAdding((v) => !v)}>
           <Plus size={13} /> Add representation
         </button>
       </div>
@@ -482,7 +601,7 @@ export default function RepresentationsTab({ node }: { node: NodeDetail }) {
         </div>
       )}
 
-      {representations?.map(rep => (
+      {representations?.map((rep) => (
         <RepresentationCard
           key={rep.id}
           nodeId={node.id}

@@ -323,3 +323,8 @@ hr {
 .truncate   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .text-muted { color: var(--color-ink-muted); }
 .text-faint { color: var(--color-ink-faint); }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

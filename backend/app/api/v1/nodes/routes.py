@@ -89,6 +89,11 @@ def list_nodes():
     status_filter = request.args.get('status')
     level_filter = request.args.get('level')
     hierarchy_type_id = request.args.get('hierarchy_type_id', type=int)
+    has_scope_note = request.args.get('has_scope_note')
+    has_agents = request.args.get('has_agents')
+    has_attachments = request.args.get('has_attachments')
+    has_description = request.args.get('has_description')
+    no_date = request.args.get('no_date')
 
     query = sa.select(Node).where(Node.institution_id == institution_id)
 
@@ -106,6 +111,27 @@ def list_nodes():
         query = query.where(sa.func.lower(Node.level_of_description) == level_filter.lower())
     if hierarchy_type_id:
         query = query.where(Node.hierarchy_type_id == hierarchy_type_id)
+
+    if has_scope_note == 'true':
+        query = query.where(Node.scope_and_content.isnot(None), Node.scope_and_content != '')
+    if has_scope_note == 'false':
+        query = query.where(sa.or_(Node.scope_and_content.is_(None), Node.scope_and_content == ''))
+    if has_description == 'true':
+        query = query.where(Node.description.isnot(None), Node.description != '')
+    if has_description == 'false':
+        query = query.where(sa.or_(Node.description.is_(None), Node.description == ''))
+    if has_agents == 'true':
+        from app.models.agent import agent_node_association as ana
+        query = query.where(
+            sa.exists(sa.select(ana.c.node_id).where(ana.c.node_id == Node.id))
+        )
+    if has_attachments == 'true':
+        from app.models.node import NodeAttachment
+        query = query.where(
+            sa.exists(sa.select(NodeAttachment.id).where(NodeAttachment.node_id == Node.id))
+        )
+    if no_date == 'true':
+        query = query.where(Node.date_start.is_(None), Node.date_end.is_(None))
 
     parent_id_filter = request.args.get('parent_id', type=int)
     if parent_id_filter is not None:
@@ -2166,3 +2192,55 @@ def duplicate_node(node_id):
 
     from app.api.v1.nodes.serializers import serialize_node_detail
     return success(serialize_node_detail(duplicate), 201)
+
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/ocr', methods=['POST'])
+@login_required
+@require_write
+def ocr_attachment(node_id, attachment_id):
+    from app.models.background_task import BackgroundTask
+    from app.tasks.runner import run_in_background
+    from app.tasks.ocr import can_ocr
+    from flask import current_app
+
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+
+    if not can_ocr(attachment.mime_type):
+        return error(
+            f'Text extraction not supported for {attachment.mime_type}. '
+            'Supported: images (JPEG, PNG, TIFF) and PDF.', 400
+        )
+
+    data = request.get_json(silent=True) or {}
+    force_ocr = data.get('force_ocr', False)
+
+    existing = BackgroundTask.query.filter_by(
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        task_type='ocr',
+        status='running',
+    ).first()
+    if existing:
+        return error('Text extraction already running for this attachment', 409)
+
+    task = BackgroundTask(
+        institution_id=institution_id,
+        created_by_id=current_user.id,
+        task_type='ocr',
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        result={'force_ocr': force_ocr},   # passes options to worker
+    )
+    db.session.add(task)
+    db.session.commit()
+
+    from app.tasks.ocr import run_ocr
+    run_in_background(current_app._get_current_object(), task.id, run_ocr)
+
+    return success({'task_id': task.id, 'status': 'pending'}, 201)

@@ -18,6 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxslt1.1 \
         libpq5 \
         curl \
+        tesseract-ocr \
+        tesseract-ocr-swe \
+        tesseract-ocr-eng \
+        poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

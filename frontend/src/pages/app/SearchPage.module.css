@@ -69,6 +69,15 @@
   padding: 0 5px;
 }
 
+/* ─── AI search button ───────────────────────────────────────────── */
+.nlBtn { gap: var(--space-1); white-space: nowrap; }
+.nlBtnLabel { font-size: var(--text-sm); }
+.nlBtnActive {
+  border-color: var(--color-accent) !important;
+  color: var(--color-accent) !important;
+  background: var(--color-accent-bg) !important;
+}
+
 /* ─── Body ───────────────────────────────────────────────────────── */
 .body {
   display: flex;
@@ -76,7 +85,7 @@
   overflow: hidden;
 }
 
-/* ─── Sidebar (filters + saved searches) ────────────────────────── */
+/* ─── Sidebar ────────────────────────────────────────────────────── */
 .sidebar {
   width: 240px;
   flex-shrink: 0;
@@ -178,7 +187,6 @@
   font-family: var(--font-sans);
   width: 100%;
   text-align: left;
-  border-radius: 0;
   transition: background 0.08s;
 }
 .saveCurrentBtn:hover { background: var(--color-accent-bg); }
@@ -201,10 +209,7 @@
   box-shadow: 0 0 0 3px var(--color-accent-bg);
 }
 
-.saveError {
-  font-size: var(--text-xs);
-  color: var(--color-error);
-}
+.saveError { font-size: var(--text-xs); color: var(--color-error); }
 
 .saveActions {
   display: flex;
@@ -228,7 +233,6 @@
 .savedItem {
   display: flex;
   align-items: stretch;
-  gap: 0;
 }
 .savedItem:hover .savedItemDelete { opacity: 1; }
 
@@ -245,7 +249,6 @@
   text-align: left;
   font-family: var(--font-sans);
   transition: background 0.06s;
-  border-radius: 0;
 }
 .savedItemBtn:hover { background: var(--color-bg-subtle); }
 
@@ -280,7 +283,7 @@
 }
 .savedItemDelete:hover { color: var(--color-error); }
 
-/* ─── Results ────────────────────────────────────────────────────── */
+/* ─── Results area ───────────────────────────────────────────────── */
 .results {
   flex: 1;
   overflow-y: auto;
@@ -288,6 +291,53 @@
   flex-direction: column;
 }
 
+/* ─── Smart search bar ───────────────────────────────────────────── */
+.smartBar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-accent-bg);
+  border-bottom: 1px solid var(--color-accent-border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.smartIcon { color: var(--color-accent); flex-shrink: 0; }
+
+.smartInterpretation {
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  font-style: italic;
+  flex: 1;
+  min-width: 0;
+}
+
+.smartCount {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  background: var(--color-surface);
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-sm);
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.smartClear {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}
+.smartClear:hover { color: var(--color-error); }
+
+/* ─── Stats bar ──────────────────────────────────────────────────── */
 .statsBar {
   display: flex;
   align-items: center;

@@ -40,6 +40,7 @@ from app.models.representation import RepresentationType, NodeRepresentation
 from app.models.saved_search import SavedSearch
 from app.models.history import RecentItem, Bookmark
 from app.models.ai_config import InstitutionAIConfig
+from app.models.background_task import BackgroundTask  # noqa: F401
 __all__ = [
     'Institution',
     'user_institution_association',
@@ -75,7 +76,8 @@ __all__ = [
     'SavedSearch',
     'RecentItem',
     'Bookmark',
-    'InstitutionAIConfig'
+    'InstitutionAIConfig',
+    'BackgroundTask',
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 

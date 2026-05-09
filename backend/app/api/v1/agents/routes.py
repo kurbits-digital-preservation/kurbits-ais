@@ -21,18 +21,22 @@ def _get_agent_or_404(agent_id: int, institution_id: int):
 # Agents CRUD
 # ---------------------------------------------------------------------------
 
-# GET /api/v1/agents
 @bp.route('/agents', methods=['GET'])
 @login_required
 def list_agents():
-    if not current_user.active_institution_id:
+    institution_id = current_user.active_institution_id
+    if not institution_id:
         return error('No active institution', 400)
 
-    institution_id = current_user.active_institution_id
-    page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 25, type=int), 100)
-    search = request.args.get('q', '').strip()
-    type_filter = request.args.get('type')
+    page     = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 25, type=int), 200)
+    search       = request.args.get('q', '').strip()
+    type_filter  = request.args.get('type')
+    has_website  = request.args.get('has_website')
+    has_identifier = request.args.get('has_identifier')
+    has_description = request.args.get('has_description')
+    date_from    = request.args.get('date_from')
+    date_to      = request.args.get('date_to')
 
     query = sa.select(Agent).where(Agent.institution_id == institution_id)
 
@@ -46,6 +50,22 @@ def list_agents():
         )
     if type_filter:
         query = query.where(Agent.agent_type == type_filter)
+    if has_website == 'true':
+        query = query.where(Agent.website.isnot(None), Agent.website != '')
+    if has_website == 'false':
+        query = query.where(sa.or_(Agent.website.is_(None), Agent.website == ''))
+    if has_identifier == 'true':
+        query = query.where(Agent.identifier.isnot(None), Agent.identifier != '')
+    if has_identifier == 'false':
+        query = query.where(sa.or_(Agent.identifier.is_(None), Agent.identifier == ''))
+    if has_description == 'true':
+        query = query.where(Agent.description.isnot(None), Agent.description != '')
+    if has_description == 'false':
+        query = query.where(sa.or_(Agent.description.is_(None), Agent.description == ''))
+    if date_from:
+        query = query.where(Agent.date_from >= date_from)
+    if date_to:
+        query = query.where(sa.or_(Agent.date_to <= date_to, Agent.date_to.is_(None)))
 
     query = query.order_by(Agent.name)
     paginated = db.paginate(query, page=page, per_page=per_page, error_out=False)

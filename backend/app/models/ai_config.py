@@ -24,6 +24,9 @@ class InstitutionAIConfig(db.Model):
     # Base URL — required for Ollama and Azure, optional override for others
     base_url: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
 
+    # Add this field to InstitutionAIConfig
+    language: so.Mapped[str] = so.mapped_column(sa.String(10), nullable=False, default='en')
+
     # Encrypted API key — empty string for Ollama (no auth needed)
     _api_key_encrypted: so.Mapped[str] = so.mapped_column(
         'api_key_encrypted', sa.Text, nullable=False, default=''

@@ -54,6 +54,8 @@ def _serialize_rep_file(attachment: NodeAttachment) -> dict:
         'av_bitrate': attachment.av_bitrate,
         'has_thumbnail': attachment.thumbnail_path is not None,
         'tech_extracted_at': attachment.tech_extracted_at.isoformat() if attachment.tech_extracted_at else None,
+        'extracted_text': bool(attachment.extracted_text),
+        'extracted_text_at': attachment.extracted_text_at.isoformat() if attachment.extracted_text_at else None,
     }
 
 
@@ -300,3 +302,29 @@ def assign_attachment_to_representation(node_id, attachment_id):
     attachment.representation_id = rep_id
     db.session.commit()
     return success({'id': attachment.id, 'representation_id': attachment.representation_id})
+
+# GET /api/v1/nodes/<id>/attachments/<attachment_id>/text
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/text', methods=['GET'])
+@login_required
+def get_attachment_text(node_id, attachment_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+
+    if not attachment.extracted_text:
+        return error('No extracted text available', 404)
+
+    from flask import Response
+    filename = attachment.original_filename.rsplit('.', 1)[0] + '_extracted.txt'
+    return Response(
+        attachment.extracted_text,
+        mimetype='text/plain; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+        }
+    )

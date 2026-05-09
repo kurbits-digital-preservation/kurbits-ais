@@ -105,6 +105,13 @@ bulkDelete: (node_ids: number[], force = false) =>
     `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/download`,
     duplicate: (nodeId: number) =>
   api.post<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}/duplicate`),
+ocr: (nodeId: number, attachmentId: number, forceOcr: boolean = false) =>
+  api.post<{ status: string; data: { task_id: string; status: string } }>(
+    `/nodes/${nodeId}/attachments/${attachmentId}/ocr`,
+    { force_ocr: forceOcr }
+  ),
+getTextUrl: (nodeId: number, attachmentId: number) =>
+  `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/text`,
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────
@@ -727,6 +734,7 @@ export const aiApi = {
     api_key?: string
     options?: Record<string, unknown>
     is_enabled?: boolean
+    language?: string
   }) => api.put<{ status: string; data: any }>('/ai/config', data),
 
   testConfig: () =>
@@ -734,5 +742,66 @@ export const aiApi = {
 
   getStatus: () =>
     api.get<{ status: string; data: { enabled: boolean; provider: string | null; model: string | null } }>('/ai/status'),
+
+  fetchSources: (query: string, sources?: string[]) =>
+    api.post<{ status: string; data: any }>('/ai/fetch-sources', {
+      query,
+      sources: sources ?? ['wikidata', 'wikipedia'],
+    }),
+
+  generateAgent: (payload: {
+    query: string
+    agent_type: string
+    current_form?: Record<string, string>
+    sources?: string[]
+  }) => api.post<{ status: string; data: any }>('/ai/generate-agent', payload),
+
+draftHistoryNote: (agentId: number, extraSources?: string[], includeAttachments?: boolean) =>
+  api.post<{ status: string; data: {
+    draft: string
+    sources: { label: string; url: string | null }[]
+    errors: any[]
+  }}>('/ai/draft-history-note', {
+    agent_id: agentId,
+    extra_sources: extraSources ?? [],
+    include_attachments: includeAttachments ?? false,
+  }),
+parseSearch: (query: string, levels?: string[]) =>
+  api.post<{ status: string; data: Record<string, string> }>(
+    '/ai/parse-search',
+    { query, levels: levels ?? [] }
+  ),
+smartSearch: (query: string, levels?: string[]) =>
+  api.post<{ status: string; data: {
+    results: Array<{
+      type: 'node' | 'agent'
+      id: number
+      title: string
+      subtitle: string
+      meta: string | null
+      status: string | null
+    }>
+    total: number
+    interpretation: string
+    plan: any[]
+    errors: string[]
+  }}>('/ai/smart-search', { query, levels: levels ?? [] }),
+draftNodeNote: (nodeId: number, noteType: 'scope_and_content' | 'arrangement' | 'general') =>
+  api.post<{ status: string; data: {
+    draft: string
+    note_type: string
+    sources: { label: string; url: string | null }[]
+    char_count: number
+  }}>('/ai/draft-node-note', { node_id: nodeId, note_type: noteType }),
 }
 
+// ─── Background tasks ─────────────────────────────────────────────────
+export const tasksApi = {
+  get: (taskId: string) =>
+    api.get<{ status: string; data: any }>(`/tasks/${taskId}`),
+
+  listForEntity: (entityType: string, entityId: number) =>
+    api.get<{ status: string; data: any[] }>('/tasks', {
+      params: { entity_type: entityType, entity_id: entityId },
+    }),
+}

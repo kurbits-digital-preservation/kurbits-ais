@@ -60,6 +60,7 @@ export default function AIConfigTab() {
     base_url: string
     api_key: string
     is_enabled: boolean
+    language: string
     options: Record<string, string>
   }>({
     provider: '',
@@ -67,6 +68,7 @@ export default function AIConfigTab() {
     base_url: '',
     api_key: '',
     is_enabled: true,
+    language: 'en',
     options: {},
   })
 
@@ -80,6 +82,7 @@ export default function AIConfigTab() {
         base_url: config.base_url ?? '',
         api_key: '',   // never pre-filled — write-only
         is_enabled: config.is_enabled ?? true,
+        language:   config.language ?? 'en',
         options: config.options ?? {},
       })
     }
@@ -102,6 +105,7 @@ export default function AIConfigTab() {
       base_url: form.base_url || undefined,
       api_key: form.api_key || undefined,
       is_enabled: form.is_enabled,
+      language:   form.language,
       options: form.options,
     }),
     onSuccess: () => {
@@ -270,6 +274,23 @@ export default function AIConfigTab() {
               Enable AI features for this institution
             </label>
           </div>
+          <div className="form-group">
+  <label>Preferred language</label>
+  <select value={form.options.language ?? 'en'}
+    onChange={e => setForm(f => ({ ...f, language: e.target.value }))}>
+    <option value="en">English</option>
+    <option value="sv">Swedish</option>
+    <option value="de">German</option>
+    <option value="fr">French</option>
+    <option value="nl">Dutch</option>
+    <option value="no">Norwegian</option>
+    <option value="da">Danish</option>
+    <option value="fi">Finnish</option>
+  </select>
+  <span className="form-hint">
+    Used when fetching from Wikidata and Wikipedia. Falls back to English if content unavailable.
+  </span>
+</div>
 
           <TestResult result={testResult} />
 
