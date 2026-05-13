@@ -2244,3 +2244,58 @@ def ocr_attachment(node_id, attachment_id):
     run_in_background(current_app._get_current_object(), task.id, run_ocr)
 
     return success({'task_id': task.id, 'status': 'pending'}, 201)
+
+# POST /api/v1/nodes/<id>/attachments/<attachment_id>/transcribe
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/transcribe', methods=['POST'])
+@login_required
+@require_write
+def transcribe_attachment(node_id, attachment_id):
+    from app.models.background_task import BackgroundTask
+    from app.tasks.runner import run_in_background
+    from app.tasks.whisper_ import can_transcribe
+    from flask import current_app
+
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+
+    if not can_transcribe(attachment.mime_type, attachment.original_filename):
+        return error(
+            f'Transcription not supported for {attachment.mime_type}. '
+            'Supported: audio (MP3, WAV, FLAC, AAC, OGG) and video (MP4, MOV, AVI, MKV).', 400
+        )
+
+    data = request.get_json(silent=True) or {}
+    model_size = data.get('model_size', 'medium')
+    if model_size not in ('tiny', 'base', 'small', 'medium', 'large'):
+        model_size = 'medium'
+
+    existing = BackgroundTask.query.filter_by(
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        task_type='whisper',
+        status='running',
+    ).first()
+    if existing:
+        return error('Transcription already running for this attachment', 409)
+
+    task = BackgroundTask(
+        institution_id=institution_id,
+        created_by_id=current_user.id,
+        task_type='whisper',
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        result={'model_size': model_size},
+    )
+    db.session.add(task)
+    db.session.commit()
+
+    from app.tasks.whisper_ import run_whisper
+    run_in_background(current_app._get_current_object(), task.id, run_whisper)
+
+    return success({'task_id': task.id, 'status': 'pending', 'model_size': model_size}, 201)
