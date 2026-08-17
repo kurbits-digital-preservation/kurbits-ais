@@ -432,6 +432,7 @@ def update_status(node_id):
         return error(f'Invalid status. Must be one of: {", ".join(valid)}', 400)
 
     before_data = node.to_dict()
+    old_status = node.status
     node.status = NodeStatus(new_status)
     node.updated_by_id = current_user.id
 
@@ -443,6 +444,14 @@ def update_status(node_id):
         after_data=node.to_dict(),
     )
     db.session.commit()
+
+    # ── Portal sync ───────────────────────────────────────────────────
+    from app.portal.publisher import publish_node, unpublish_node
+    if node.status == NodeStatus.PUBLISHED:
+        publish_node(node)
+    elif old_status == NodeStatus.PUBLISHED:
+        unpublish_node(node)
+
     return success({'status': node.status.value})
 
 

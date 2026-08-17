@@ -38,6 +38,8 @@ class InstitutionAIConfig(db.Model):
 
     is_enabled: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=True, nullable=False)
 
+    task_configs: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True, default=dict)
+
     created_at: so.Mapped[datetime] = so.mapped_column(
         default=lambda: datetime.now(timezone.utc))
     updated_at: so.Mapped[datetime] = so.mapped_column(

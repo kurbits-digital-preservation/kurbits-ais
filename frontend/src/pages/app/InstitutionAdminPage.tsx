@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users, Settings, Shield, Pencil, Trash2, BookOpen, Layers,
   X, Save, Plus, ChevronDown, Check, AlertCircle,
-  UserPlus, Building2,Link
+  UserPlus, Building2, Link, Bot
 } from 'lucide-react'
-import { institutionApi } from '@/api'
+import { institutionApi, portalApi } from '@/api'
 import { useAuthStore } from '@/store/auth'
 import { Spinner, Tabs } from '@/components/ui'
 import styles from './InstitutionAdminPage.module.css'
@@ -14,7 +14,8 @@ import HierarchyTab from './HierarchyTab'
 import MetadataTemplatesPage from './MetadataTemplatesPage'
 import IntegrationsTab from './IntegrationsTab'
 import AIConfigTab from './AIConfigTab'
-import { Bot } from 'lucide-react'
+import { Zap, RefreshCw, Globe } from 'lucide-react'
+
 // ─── Constants ────────────────────────────────────────────────────────
 
 const ROLES = [
@@ -377,6 +378,163 @@ function SettingsTab({ institution }: { institution: any }) {
 
 // ─── Templates tab ───────────────────────────────────────────────────
 
+// ─── Portal tab ───────────────────────────────────────────────────────
+
+function PortalTab() {
+  const queryClient = useQueryClient()
+  const [saved, setSaved] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; message?: string } | null>(null)
+  const [syncing, setSyncing] = useState(false)
+  const [testing, setTesting] = useState(false)
+
+const { data: config, isLoading } = useQuery({
+  queryKey: ['portal-config'],
+  queryFn: () => portalApi.getConfig().then(r => r.data.data),
+})
+
+  const [form, setForm] = useState({
+    enabled: false,
+    webhook_url: '',
+    webhook_secret: '',
+  })
+
+  useEffect(() => {
+    if (config) {
+      setForm(f => ({
+        ...f,
+        enabled: config.enabled ?? false,
+        webhook_url: config.webhook_url ?? '',
+      }))
+    }
+  }, [config])
+
+  const saveMutation = useMutation({
+    mutationFn: () => portalApi.saveConfig(form),
+    onSuccess: () => {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      queryClient.invalidateQueries({ queryKey: ['portal-config'] })
+    },
+  })
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const r = await portalApi.testWebhook()
+      setTestResult(r.data.data)
+    } catch {
+      setTestResult({ ok: false, message: 'Request failed' })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const handleBulkSync = async () => {
+    setSyncing(true)
+    try {
+      const r = await portalApi.bulkSync()
+      alert(`Queued ${r.data.data.queued} of ${r.data.data.total} published nodes for sync.`)
+    } catch {
+      alert('Sync failed — check portal config.')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm(f => ({ ...f, [field]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+
+  if (isLoading) return <div><Spinner size={18} /></div>
+
+  return (
+    <div className={styles.settingsSection}>
+      <h3 className={styles.settingsSectionTitle}>Public portal</h3>
+      <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)', marginBottom: 'var(--space-4)' }}>
+        When enabled, published nodes are pushed to the public portal via webhook.
+        The portal is a separate application — configure its URL and shared secret below.
+      </p>
+
+      <div className={styles.settingsGrid}>
+        <div className="form-group" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+          <input
+            type="checkbox"
+            id="portal-enabled"
+            checked={form.enabled}
+            onChange={set('enabled')}
+          />
+          <label htmlFor="portal-enabled" style={{ margin: 0 }}>Enable portal publishing for this institution</label>
+        </div>
+
+        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+          <label>Webhook URL</label>
+          <input
+            value={form.webhook_url}
+            onChange={set('webhook_url')}
+            placeholder="https://portal.example.com/webhook"
+            disabled={!form.enabled}
+          />
+          <span className="form-hint">The portal's /webhook endpoint</span>
+        </div>
+
+        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+          <label>Webhook secret {config?.has_secret && <span style={{ color: 'var(--color-success)', fontSize: 'var(--text-xs)' }}>✓ secret saved</span>}</label>
+          <input
+            type="password"
+            value={form.webhook_secret}
+            onChange={set('webhook_secret')}
+            placeholder={config?.has_secret ? '(leave blank to keep existing)' : 'Shared HMAC secret'}
+            disabled={!form.enabled}
+          />
+          <span className="form-hint">Generate a strong random string and paste the same value in the portal's config</span>
+        </div>
+      </div>
+
+      <div className={styles.settingsActions} style={{ justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+          <button
+            className="btn btn-secondary"
+            onClick={handleTest}
+            disabled={!form.enabled || !form.webhook_url || testing}
+          >
+            {testing ? <Spinner size={13} /> : <Zap size={13} />}
+            Test connection
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={handleBulkSync}
+            disabled={!form.enabled || syncing}
+          >
+            {syncing ? <Spinner size={13} /> : <RefreshCw size={13} />}
+            Bulk re-sync
+          </button>
+        </div>
+        <button
+          className="btn btn-primary"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? <Spinner size={14} /> : <Save size={14} />}
+          {saved ? 'Saved!' : 'Save'}
+        </button>
+      </div>
+
+      {testResult && (
+        <div style={{
+          marginTop: 'var(--space-3)',
+          padding: 'var(--space-3)',
+          borderRadius: 'var(--radius)',
+          background: testResult.ok ? 'var(--color-success-subtle)' : 'var(--color-error-subtle)',
+          color: testResult.ok ? 'var(--color-success)' : 'var(--color-error)',
+          fontSize: 'var(--text-sm)',
+        }}>
+          {testResult.ok ? '✓ Portal responded successfully' : `✗ ${testResult.message ?? 'Connection failed'}`}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TemplatesTab() {
   return <MetadataTemplatesPage />
 }
@@ -424,8 +582,9 @@ export default function InstitutionAdminPage() {
     { key: 'vocabularies', icon: <BookOpen size={14} />, label: 'Vocabularies' },
     { key: 'hierarchies',  icon: <Layers size={14} />,   label: 'Hierarchies' },
     { key: 'templates',    icon: <Layers size={14} />,   label: 'Field templates' },
-    { key: 'integrations', icon: <Link size={14} />, label: 'Integrations' },
-    { key: 'ai', icon: <Bot size={14} />, label: 'AI' },
+    { key: 'integrations', icon: <Link size={14} />,     label: 'Integrations' },
+    { key: 'ai',           icon: <Bot size={14} />,      label: 'AI' },
+    { key: 'portal', icon: <Globe size={14} />, label: 'Portal' },
   ]
 
   return (
@@ -451,7 +610,12 @@ export default function InstitutionAdminPage() {
         {tab === 'hierarchies'  && <HierarchyTab />}
         {tab === 'templates'    && <TemplatesTab />}
         {tab === 'integrations' && <IntegrationsTab />}
-        {tab === 'ai' && <AIConfigTab />}
+        {tab === 'ai'           && (
+          <div className={styles.tabContent}>
+            <AIConfigTab />
+          </div>
+        )}
+        {tab === 'portal' && <PortalTab />}
       </div>
     </div>
   )

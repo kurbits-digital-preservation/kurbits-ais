@@ -16,3 +16,4 @@ requests==2.33.1
 pytesseract
 pdf2image
 pdfplumber
+faster-whisper

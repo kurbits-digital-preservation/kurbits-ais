@@ -17,7 +17,8 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', str(BASE_DIR / 'uploads'))
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024
-    ALLOWED_UPLOAD_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'tiff', 'tif', 'txt', 'md', 'csv', 'docx', 'xlsx', 'odt', 'ods'}
+    ALLOWED_UPLOAD_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'tiff', 'tif', 'txt', 'md', 'csv',
+                                 'docx', 'xlsx', 'odt', 'ods', 'mp3', 'mp4', 'flac', 'wav', 'aiff','ogg'}
 
     # Session cookie — must allow cross-origin requests from Vite dev server
     SESSION_COOKIE_SAMESITE = 'None'

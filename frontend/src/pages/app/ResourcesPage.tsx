@@ -729,6 +729,12 @@ function NodeDetailPanel({
             ))}
           </div>
           <div className={styles.detailActions}>
+            <BookmarkButton
+              entityType="node"
+              entityId={nodeId}
+              title={data.title}
+              subtitle={data.ref_code}
+            />
             <CopyLinkButton nodeId={nodeId} refCode={data?.ref_code ?? ''} />
             <ExportMenu nodeId={nodeId} />
             <PrintLabelsButton nodeIds={[nodeId]} />
@@ -1235,6 +1241,7 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                   nodeId={node.id}
                   attachmentId={att.id}
                   mimeType={att.mime_type}
+                  filename={att.original_filename}
                   hasText={att.extracted_text === true}
                 />
                 {att.extracted_text === true && (
@@ -1276,6 +1283,7 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
             {showSummariseId === att.id && (
               <AttachmentSummarisePanel
                 nodeId={node.id}
+                attachmentId={att.id}
                 filename={att.original_filename}
                 onClose={() => setShowSummariseId(null)}
               />

@@ -1,0 +1,1 @@
+from app.api.v1.portal import routes  # noqa: F401

@@ -73,6 +73,18 @@ def run_ocr(task_id: str) -> None:
     attachment.extracted_text    = text
     attachment.extracted_text_at = datetime.now(timezone.utc)
 
+    if attachment.representation_id and text:
+        from app.tasks.text_representation import create_text_representation
+        create_text_representation(
+            node_id=node_id,
+            institution_id=institution_id,
+            source_filename=attachment.original_filename,
+            text=text,
+            method='ocr',
+            upload_folder=current_app.config['UPLOAD_FOLDER'],
+            uploaded_by_id=task.created_by_id,
+        )
+
     _reindex_node(attachment.node, db)
 
     char_count = len(text) if text else 0

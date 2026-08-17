@@ -36,3 +36,29 @@ def get_provider_for_institution(institution_id: int) -> Optional[AIProvider]:
     if not config:
         return None
     return get_provider(config)
+
+def get_provider_for_task(task_key: str, institution_id: int):
+    """
+    Get a provider for a specific task.
+    Uses task-level model override if set, falls back to institution default.
+    """
+    from app.models.ai_config import InstitutionAIConfig
+    from app.ai.tasks import get_model_for_task
+
+    config = InstitutionAIConfig.query.filter_by(
+        institution_id=institution_id,
+        is_enabled=True,
+    ).first()
+    if not config:
+        return None
+
+    task_model = get_model_for_task(task_key, institution_id)
+    if task_model:
+        # Clone config with overridden model
+        from app.models.ai_config import InstitutionAIConfig as C
+        import copy
+        overridden = copy.copy(config)
+        overridden.model = task_model
+        return get_provider(overridden)
+
+    return get_provider(config)

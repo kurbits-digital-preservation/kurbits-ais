@@ -19,6 +19,7 @@ from app.api.v1.saved_searches import routes as saved_search_routes  # noqa
 from app.api.v1.history import routes as history_routes  # noqa
 from app.api.v1.ai import routes as ai_routes # noqa
 from app.api.v1.tasks import routes as task_routes  # noqa: F401
+from app.api.v1.portal import routes as portal_routes  # noqa: F401
 # Health check (no auth required — used by k8s probes)
 @bp.route('/health', methods=['GET'])
 def health():

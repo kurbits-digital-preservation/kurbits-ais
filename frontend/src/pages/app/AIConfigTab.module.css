@@ -1,15 +1,61 @@
-.tab {
+/* ─── Outer wrapper ──────────────────────────────────────────────── */
+.wrap {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
-  max-width: 700px;
 }
 
-.loading {
+/* ─── Tab bar — matches VocabulariesTab pattern exactly ──────────── */
+.tabBar {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-8);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 var(--space-6);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+
+.tabBtn {
+  padding: 7px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink-muted);
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+}
+.tabBtn:hover { color: var(--color-ink); }
+.tabBtnActive {
+  color: var(--color-accent) !important;
+  border-bottom-color: var(--color-accent) !important;
+}
+
+/* ─── Tab content area ───────────────────────────────────────────── */
+.tabContent {
+  padding: var(--space-6);
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ─── Intro text ─────────────────────────────────────────────────── */
+.intro {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  line-height: 1.6;
+  padding: var(--space-4);
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.emptyNotice {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  font-style: italic;
 }
 
 /* ─── Status banner ──────────────────────────────────────────────── */
@@ -51,14 +97,14 @@
   line-height: 1.5;
 }
 
-/* ─── Section ────────────────────────────────────────────────────── */
-.section {
+/* ─── Field section ──────────────────────────────────────────────── */
+.fieldSection {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-.sectionTitle {
+.fieldSectionTitle {
   font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -66,11 +112,23 @@
   color: var(--color-ink-faint);
 }
 
+.fieldHint {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  line-height: 1.5;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+
 /* ─── Provider cards ─────────────────────────────────────────────── */
 .providerGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .providerCard {
@@ -113,18 +171,7 @@
   white-space: nowrap;
 }
 
-.providerHint {
-  font-size: var(--text-sm);
-  color: var(--color-ink-faint);
-}
-
-/* ─── Fields ─────────────────────────────────────────────────────── */
-.fieldGrid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-
+/* ─── Key row ────────────────────────────────────────────────────── */
 .keyRow {
   display: flex;
   gap: var(--space-2);
@@ -133,7 +180,7 @@
 .keyRow input { flex: 1; }
 
 /* ─── Toggle ─────────────────────────────────────────────────────── */
-.enabledToggle {
+.toggle {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -165,6 +212,130 @@
 
 /* ─── Actions ────────────────────────────────────────────────────── */
 .actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ─── Task list ──────────────────────────────────────────────────── */
+.taskList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.taskEditor {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.taskHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg-subtle);
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+  transition: background 0.08s;
+  gap: var(--space-3);
+}
+.taskHeader:hover { background: var(--color-accent-bg); }
+
+.taskHeaderLeft {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.taskName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.taskDesc {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+}
+
+.taskHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+  color: var(--color-ink-faint);
+}
+
+.customBadge {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+}
+
+.taskBody {
+  padding: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  background: var(--color-surface);
+}
+
+.inlineHint {
+  font-weight: 400;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  margin-left: var(--space-2);
+}
+
+.showDefaultBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  padding: 0;
+}
+.showDefaultBtn:hover { color: var(--color-ink); }
+
+.defaultPrompt {
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.taskActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ─── Whisper model row ──────────────────────────────────────────── */
+.modelRow {
   display: flex;
   align-items: center;
   gap: var(--space-3);

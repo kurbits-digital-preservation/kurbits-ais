@@ -151,6 +151,7 @@ function FileCard({
             nodeId={nodeId}
             attachmentId={file.id}
             mimeType={file.mime_type}
+            filename={file.original_filename}
             hasText={hasText}
           />
 

@@ -112,6 +112,12 @@ ocr: (nodeId: number, attachmentId: number, forceOcr: boolean = false) =>
   ),
 getTextUrl: (nodeId: number, attachmentId: number) =>
   `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/text`,
+
+transcribe: (nodeId: number, attachmentId: number, modelSize: string = 'medium') =>
+  api.post<{ status: string; data: { task_id: string; status: string; model_size: string } }>(
+    `/nodes/${nodeId}/attachments/${attachmentId}/transcribe`,
+    { model_size: modelSize }
+  ),
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────
@@ -793,7 +799,51 @@ draftNodeNote: (nodeId: number, noteType: 'scope_and_content' | 'arrangement' | 
     sources: { label: string; url: string | null }[]
     char_count: number
   }}>('/ai/draft-node-note', { node_id: nodeId, note_type: noteType }),
+suggestTags: (nodeId: number) =>
+  api.post<{ status: string; data: {
+    suggestions: Array<{
+      name: string
+      category: string
+      category_label: string
+      exists_in_vocab: boolean
+    }>
+    total: number
+  }}>('/ai/suggest-tags', { node_id: nodeId, entity_type: 'node' }),
+
+analyseAttachment: (nodeId: number, attachmentId: number) =>
+  api.post<{ status: string; data: {
+    document_type: string
+    confidence: 'high' | 'medium' | 'low'
+    summary: string
+    key_entities: string[]
+    date_hints: string | null
+    formatted_note: string
+    filename: string
+  }}>('/ai/analyse-attachment', {
+    node_id: nodeId,
+    attachment_id: attachmentId,
+  }),
+saveWhisperConfig: (data: {
+  service_url?: string
+  api_key?: string
+  model?: string
+}) => api.put<{ status: string; data: any }>('/ai/whisper-config', data),
+
+getWhisperModels: () =>
+  api.get<{ status: string; data: { models: string[]; default: string } }>(
+    '/ai/whisper-models'
+  ),
+
+listTasks: () =>
+  api.get<{ status: string; data: any[] }>('/ai/tasks'),
+
+updateTask: (key: string, data: { system_prompt?: string; model?: string }) =>
+  api.put<{ status: string; data: any }>(`/ai/tasks/${key}`, data),
+
+resetTask: (key: string) =>
+  api.post<{ status: string; data: any }>(`/ai/tasks/${key}/reset`),
 }
+
 
 // ─── Background tasks ─────────────────────────────────────────────────
 export const tasksApi = {
@@ -804,4 +854,20 @@ export const tasksApi = {
     api.get<{ status: string; data: any[] }>('/tasks', {
       params: { entity_type: entityType, entity_id: entityId },
     }),
+}
+
+
+// ─── Portal (institution admin) ───────────────────────────────────────
+export const portalApi = {
+  getConfig: () =>
+    api.get<{ status: string; data: any }>('/portal/config'),
+
+  saveConfig: (data: { enabled: boolean; webhook_url: string; webhook_secret?: string }) =>
+    api.put<{ status: string; data: any }>('/portal/config', data),
+
+  testWebhook: () =>
+    api.post<{ status: string; data: any }>('/portal/test'),
+
+  bulkSync: () =>
+    api.post<{ status: string; data: any }>('/portal/sync'),
 }

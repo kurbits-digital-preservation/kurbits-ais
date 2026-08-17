@@ -11,6 +11,7 @@
   gap: var(--space-1);
   font-size: var(--text-xs);
   color: var(--color-ink-faint);
+  white-space: nowrap;
 }
 
 .spin {
@@ -48,9 +49,23 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xl);
-  min-width: 220px;
+  min-width: 240px;
+  max-width: 320px;
   z-index: 100;
   overflow: hidden;
+}
+
+.menuSectionLabel {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  border-top: 1px solid var(--color-border);
+}
+.menuSectionLabel:first-child {
+  border-top: none;
 }
 
 .menuItem {
@@ -71,3 +86,25 @@
 }
 .menuItem:last-child { border-bottom: none; }
 .menuItem:hover { background: var(--color-bg-subtle); color: var(--color-ink); }
+.menuItemActive {
+  background: var(--color-accent-bg) !important;
+  color: var(--color-accent) !important;
+}
+
+/* Truncate long model names like KBLab/kb-whisper-medium */
+.modelName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.menuItemHint {
+  font-size: 10px;
+  color: var(--color-ink-faint);
+  flex-shrink: 0;
+  font-style: italic;
+}

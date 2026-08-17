@@ -3,7 +3,6 @@ set -e
 
 echo "==> Kurbits AIS starting"
 
-# Run DB migrations (idempotent — safe to run on every start)
 echo "==> Running database migrations"
 flask db upgrade
 
