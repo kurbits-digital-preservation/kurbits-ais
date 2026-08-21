@@ -25,11 +25,9 @@ import RapidEntryModal from '@/components/node/RapidEntryModal'
 import type { NodeStub, NodeDetail, NodeStatus } from '@/types'
 import styles from './ResourcesPage.module.css'
 import RepresentationsTab from '@/components/node/RepresentationsTab'
-import { Layers, Sparkles, Copy } from 'lucide-react'
+import { Layers, Copy } from 'lucide-react'
 import BookmarkButton from '@/components/layout/BookmarkButton'
-import DraftNodeNoteButton from '@/components/node/DraftNodeNoteButton'
 import OcrButton from '@/components/node/OcrButton'
-import AttachmentSummarisePanel from '@/components/node/AttachmentSummarisePanel'
 
 // ─── Status badge ─────────────────────────────────────────────────────
 
@@ -1141,7 +1139,6 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [showSummariseId, setShowSummariseId] = useState<number | null>(null)
 
   const deleteMutation = useMutation({
     mutationFn: (attachmentId: number) => nodesApi.deleteAttachment(node.id, attachmentId),
@@ -1244,16 +1241,6 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                   filename={att.original_filename}
                   hasText={att.extracted_text === true}
                 />
-                {att.extracted_text === true && (
-                  <button
-                    className="btn btn-ghost btn-sm btn-icon"
-                    onClick={() => setShowSummariseId(showSummariseId === att.id ? null : att.id)}
-                    title="Summarise extracted text"
-                    style={{ color: showSummariseId === att.id ? 'var(--color-accent)' : undefined }}
-                  >
-                    <Sparkles size={12} />
-                  </button>
-                )}
                 <button className="btn btn-ghost btn-sm btn-icon"
                   onClick={() => setExpandedId(isExpanded ? null : att.id)}
                   title="Technical metadata">
@@ -1280,14 +1267,6 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
               </div>
             </div>
 
-            {showSummariseId === att.id && (
-              <AttachmentSummarisePanel
-                nodeId={node.id}
-                attachmentId={att.id}
-                filename={att.original_filename}
-                onClose={() => setShowSummariseId(null)}
-              />
-            )}
 
             {/* Expanded technical metadata panel */}
             {isExpanded && (

@@ -5,7 +5,6 @@ import {
   Trash2,
   Upload,
   Download,
-  Sparkles,
   Edit2,
   X,
   Save,
@@ -18,7 +17,7 @@ import { Spinner } from '@/components/ui'
 import type { NodeDetail, NodeRepresentation, RepresentationFile } from '@/types'
 import styles from './RepresentationsTab.module.css'
 import OcrButton from '@/components/node/OcrButton'
-import FileSummarisePanel from '@/components/node/FileSummarisePanel'
+
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -55,7 +54,6 @@ function FileCard({
 }) {
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(false)
-  const [showSummarise, setShowSummarise] = useState(false)
 
   const downloadUrl = representationsApi.getDownloadUrl(nodeId, file.id)
   const thumbUrl = representationsApi.getThumbnailUrl(nodeId, file.id)
@@ -74,25 +72,6 @@ function FileCard({
     mutationFn: () => nodesApi.reextractMetadata(nodeId, file.id),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['representations', nodeId] }),
-  })
-
-  const saveNoteMutation = useMutation({
-    mutationFn: ({
-      content,
-      noteType,
-    }: {
-      content: string
-      noteType: string
-    }) =>
-      nodesApi.addNote(nodeId, {
-        content,
-        note_type: noteType,
-        is_public: false,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['node', nodeId] })
-      setShowSummarise(false)
-    },
   })
 
   return (
@@ -155,18 +134,6 @@ function FileCard({
             hasText={hasText}
           />
 
-          {/* Summarise toggle */}
-          {hasText && (
-            <button
-              className="btn btn-ghost btn-sm btn-icon"
-              onClick={() => setShowSummarise((v) => !v)}
-              title="Summarise extracted text into a note"
-              style={{ color: showSummarise ? 'var(--color-accent)' : undefined }}
-            >
-              <Sparkles size={12} />
-            </button>
-          )}
-
           {/* Tech metadata toggle */}
           <button
             className="btn btn-ghost btn-sm btn-icon"
@@ -211,18 +178,6 @@ function FileCard({
           </button>
         </div>
       </div>
-
-      {/* Summarise panel */}
-      {showSummarise && (
-        <FileSummarisePanel
-          nodeId={nodeId}
-          filename={file.original_filename}
-          onSaveNote={(content, noteType) =>
-            saveNoteMutation.mutate({ content, noteType })
-          }
-          isSavingNote={saveNoteMutation.isPending}
-        />
-      )}
 
       {/* Tech metadata panel */}
       {expanded && (

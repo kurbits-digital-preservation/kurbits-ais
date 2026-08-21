@@ -5,7 +5,7 @@ import {
   ScanText, FileText, Mic, CheckCircle, AlertCircle,
   Loader, ChevronDown,
 } from 'lucide-react'
-import { nodesApi, aiApi } from '@/api'
+import { nodesApi, whisperApi } from '@/api'
 import { useTaskPoller } from '@/hooks/useTaskPoller'
 import styles from './OcrButton.module.css'
 
@@ -153,7 +153,7 @@ export default function OcrButton({
 
   const { data: whisperModelsData } = useQuery({
     queryKey: ['whisper-models'],
-    queryFn:  () => aiApi.getWhisperModels().then(r => r.data.data),
+    queryFn:  () => whisperApi.getModels().then(r => r.data.data),
     staleTime: 300_000,
     enabled:   isWhisper,
     retry:     false,

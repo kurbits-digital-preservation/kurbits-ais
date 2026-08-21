@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users, Settings, Shield, Pencil, Trash2, BookOpen, Layers,
   X, Save, Plus, ChevronDown, Check, AlertCircle,
-  UserPlus, Building2, Link, Bot
+  UserPlus, Building2, Link, Mic
 } from 'lucide-react'
 import { institutionApi, portalApi } from '@/api'
 import { useAuthStore } from '@/store/auth'
@@ -13,7 +13,7 @@ import VocabulariesTab from './VocabulariesTab'
 import HierarchyTab from './HierarchyTab'
 import MetadataTemplatesPage from './MetadataTemplatesPage'
 import IntegrationsTab from './IntegrationsTab'
-import AIConfigTab from './AIConfigTab'
+import WhisperConfigTab from './WhisperConfigTab'
 import { Zap, RefreshCw, Globe } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────
@@ -583,7 +583,7 @@ export default function InstitutionAdminPage() {
     { key: 'hierarchies',  icon: <Layers size={14} />,   label: 'Hierarchies' },
     { key: 'templates',    icon: <Layers size={14} />,   label: 'Field templates' },
     { key: 'integrations', icon: <Link size={14} />,     label: 'Integrations' },
-    { key: 'ai',           icon: <Bot size={14} />,      label: 'AI' },
+    { key: 'ai',           icon: <Mic size={14} />,      label: 'Transcription' },
     { key: 'portal', icon: <Globe size={14} />, label: 'Portal' },
   ]
 
@@ -612,7 +612,7 @@ export default function InstitutionAdminPage() {
         {tab === 'integrations' && <IntegrationsTab />}
         {tab === 'ai'           && (
           <div className={styles.tabContent}>
-            <AIConfigTab />
+            <WhisperConfigTab />
           </div>
         )}
         {tab === 'portal' && <PortalTab />}

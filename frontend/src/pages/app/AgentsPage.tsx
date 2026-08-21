@@ -7,7 +7,7 @@ import {
   X, Save, ExternalLink, Globe, Upload, Check, AlertCircle,
   MapPin, Tag as Tag2, Search
 } from 'lucide-react'
-import { agentsApi, agentsImportApi, nodesApi, aiApi } from '@/api'
+import { agentsApi, agentsImportApi, nodesApi} from '@/api'
 import PlacesPanel from '@/components/geo/PlacesPanel'
 import TagsPanel from '@/components/geo/TagsPanel'
 import {
@@ -491,17 +491,13 @@ function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
 
 // ─── Notes tab ────────────────────────────────────────────────────────
 
+// ─── Notes tab ────────────────────────────────────────────────────────
+
 function NotesTab({ agent }: { agent: AgentDetail }) {
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [content, setContent] = useState('')
   const [noteType, setNoteType] = useState('general')
-  const [draft, setDraft] = useState<{
-    text: string
-    sources: { label: string; url: string | null }[]
-  } | null>(null)
-  const [useWikipedia, setUseWikipedia] = useState(false)
-  const [useAttachments, setUseAttachments] = useState(false)
 
   const addMutation = useMutation({
     mutationFn: () => agentsApi.addNote(agent.id, { content, note_type: noteType }),
@@ -517,132 +513,13 @@ function NotesTab({ agent }: { agent: AgentDetail }) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['agent', agent.id] }),
   })
 
-  const draftMutation = useMutation({
-    mutationFn: () => aiApi.draftHistoryNote(
-      agent.id,
-      useWikipedia ? ['wikipedia'] : [],
-      useAttachments,
-    ),
-    onSuccess: (res) => {
-      const data = res.data.data
-      setDraft({ text: data.draft, sources: data.sources })
-    },
-  })
-
-  const saveDraftMutation = useMutation({
-    mutationFn: () => {
-      const sourceLines = draft!.sources
-        .map(s => s.url ? `${s.label}: ${s.url}` : s.label)
-        .join(', ')
-      return agentsApi.addNote(agent.id, {
-        content: draft!.text + `\n\n[Sources: ${sourceLines}]`,
-        note_type: 'history',
-      })
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['agent', agent.id] })
-      setDraft(null)
-    },
-  })
-
-  const hasIdentifier = !!agent.identifier
-  const identifierPrefix = agent.identifier?.split(':')[0]?.toUpperCase() ?? ''
-
   return (
     <div className={styles.tabContent}>
       <div className={styles.tabActions}>
-        {hasIdentifier && (
-          <div className={styles.draftControls}>
-            <div className={styles.draftSourcePicker}>
-              <span className={styles.draftSourceLabel}>Sources:</span>
-              <span className={styles.draftSourceBadge}>{identifierPrefix}</span>
-              <label className={styles.draftSourceToggle}>
-                <input
-                  type="checkbox"
-                  checked={useWikipedia}
-                  onChange={e => setUseWikipedia(e.target.checked)}
-                />
-                Wikipedia
-              </label>
-              <label className={styles.draftSourceToggle}>
-                <input
-                  type="checkbox"
-                  checked={useAttachments}
-                  onChange={e => setUseAttachments(e.target.checked)}
-                />
-                Attachment text
-              </label>
-            </div>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={() => draftMutation.mutate()}
-              disabled={draftMutation.isPending}
-              title={`Draft history note from ${agent.identifier}`}
-            >
-              {draftMutation.isPending
-                ? <><Spinner size={13} /> Drafting…</>
-                : <><Bot size={13} /> Draft history note</>}
-            </button>
-          </div>
-        )}
         <button className="btn btn-secondary btn-sm" onClick={() => setAdding(!adding)}>
           <Plus size={13} /> Add note
         </button>
       </div>
-
-      {draftMutation.isError && (
-        <div style={{
-          display: 'flex', gap: 'var(--space-2)', padding: 'var(--space-3)',
-          background: 'var(--color-error-bg)', border: '1px solid var(--color-error-border)',
-          borderRadius: 'var(--radius-md)', color: 'var(--color-error)',
-          fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)',
-        }}>
-          <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-          {(draftMutation.error as any)?.response?.data?.message ?? 'Could not draft history note'}
-        </div>
-      )}
-
-      {draft && (
-        <div className={styles.draftPreview}>
-          <div className={styles.draftHeader}>
-            <Bot size={13} />
-            <span>AI draft — review before saving</span>
-            <div className={styles.draftSourceLinks}>
-              {draft.sources.map(s => (
-                s.url
-                  ? <a key={s.label} href={s.url} target="_blank" rel="noreferrer" className={styles.draftSource}>
-                      {s.label} <ExternalLink size={10} />
-                    </a>
-                  : <span key={s.label} className={styles.draftSource}>{s.label}</span>
-              ))}
-            </div>
-            <button
-              className="btn btn-ghost btn-sm btn-icon"
-              style={{ marginLeft: 'auto' }}
-              onClick={() => setDraft(null)}
-            >
-              <X size={12} />
-            </button>
-          </div>
-          <textarea
-            className={styles.draftTextarea}
-            value={draft.text}
-            onChange={e => setDraft(d => d ? { ...d, text: e.target.value } : null)}
-            rows={5}
-          />
-          <div className={styles.draftActions}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setDraft(null)}>Discard</button>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => saveDraftMutation.mutate()}
-              disabled={saveDraftMutation.isPending || !draft.text.trim()}
-            >
-              {saveDraftMutation.isPending ? <Spinner size={13} /> : <Check size={13} />}
-              Save as history note
-            </button>
-          </div>
-        </div>
-      )}
 
       {adding && (
         <div className={styles.addForm}>
@@ -671,11 +548,8 @@ function NotesTab({ agent }: { agent: AgentDetail }) {
         </div>
       )}
 
-      {agent.notes.length === 0 && !adding && !draft && (
-        <p className={styles.emptyText}>
-          No notes yet.
-          {hasIdentifier && ' Use "Draft history note" to generate one from the linked source.'}
-        </p>
+      {agent.notes.length === 0 && !adding && (
+        <p className={styles.emptyText}>No notes yet.</p>
       )}
 
       {agent.notes.map(note => (

@@ -4,9 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Search, FileText, User, Building2, UsersRound, Bot,
   SlidersHorizontal, X, ChevronLeft, ChevronRight,
-  Bookmark, BookmarkCheck, Trash2, Sparkles, Wand2,
+  Bookmark, BookmarkCheck, Trash2,
 } from 'lucide-react'
-import { searchApi, hierarchyApi, savedSearchesApi, aiApi } from '@/api'
+import { searchApi, hierarchyApi, savedSearchesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import styles from './SearchPage.module.css'
 
@@ -76,46 +76,6 @@ function AgentRow({ item, onClick }: { item: any; onClick: () => void }) {
             <><span className={styles.dot}>·</span>
             <span>{item.date_from}{item.date_to ? `–${item.date_to}` : ''}</span></>
           )}
-        </div>
-      </div>
-      <span className={styles.resultType}>Agent</span>
-    </button>
-  )
-}
-
-// ─── Smart result row (unified shape from smart-search) ───────────────
-
-function SmartNodeRow({ item, onClick }: { item: any; onClick: () => void }) {
-  return (
-    <button className={styles.resultRow} onClick={onClick}>
-      <div className={styles.resultIconWrap}><FileText size={15} /></div>
-      <div className={styles.resultBody}>
-        <div className={styles.resultTitle}>{item.title}</div>
-        <div className={styles.resultMeta}>
-          {item.subtitle && <span className={styles.resultRef}>{item.subtitle}</span>}
-          {item.subtitle && item.meta && <span className={styles.dot}>·</span>}
-          {item.meta && <span className={styles.resultLevel}>{item.meta}</span>}
-          {item.status && item.status !== 'published' && (
-            <><span className={styles.dot}>·</span>
-            <span className={styles.statusBadge} data-status={item.status}>{item.status}</span></>
-          )}
-        </div>
-      </div>
-      <span className={styles.resultType}>Resource</span>
-    </button>
-  )
-}
-
-function SmartAgentRow({ item, onClick }: { item: any; onClick: () => void }) {
-  const Icon = AGENT_ICONS[item.subtitle] ?? User
-  return (
-    <button className={styles.resultRow} onClick={onClick}>
-      <div className={styles.resultIconWrap}><Icon size={15} /></div>
-      <div className={styles.resultBody}>
-        <div className={styles.resultTitle}>{item.title}</div>
-        <div className={styles.resultMeta}>
-          <span className={styles.resultLevel}>{item.subtitle}</span>
-          {item.meta && <><span className={styles.dot}>·</span><span>{item.meta}</span></>}
         </div>
       </div>
       <span className={styles.resultType}>Agent</span>
@@ -325,27 +285,13 @@ export default function SearchPage() {
   const [inputValue, setInputValue] = useState(searchParams.get('q') ?? '')
   const [showFilters, setShowFilters] = useState(false)
 
-  // Smart search state
-  const [smartResults, setSmartResults]             = useState<any[] | null>(null)
-  const [smartInterpretation, setSmartInterpretation] = useState('')
-  const [smartTotal, setSmartTotal]                 = useState(0)
-  const [smartErrors, setSmartErrors]               = useState<string[]>([])
-
   const q       = searchParams.get('q') ?? ''
   const page    = parseInt(searchParams.get('page') ?? '1')
   const perPage = 25
 
   useEffect(() => { setInputValue(searchParams.get('q') ?? '') }, [searchParams])
 
-  // ── AI status ──────────────────────────────────────────────────────
-  const { data: aiStatus } = useQuery({
-    queryKey: ['ai-status'],
-    queryFn: () => aiApi.getStatus().then(r => r.data.data),
-    staleTime: 60_000,
-  })
-  const aiEnabled = aiStatus?.enabled ?? false
-
-  // ── Hierarchy levels for filter panel + LLM context ───────────────
+  // ── Hierarchy levels for filter panel ─────────────────────────────
   const { data: hierarchyTypes } = useQuery({
     queryKey: ['hierarchy-types-search'],
     queryFn: () => hierarchyApi.listTypes().then((r: any) => r.data.data as any[]),
@@ -363,7 +309,7 @@ export default function SearchPage() {
     enabled: !!hierarchyTypes?.length,
   })
 
-  // ── Normal search ──────────────────────────────────────────────────
+  // ── Search ────────────────────────────────────────────────────────
   const { data, isFetching } = useQuery({
     queryKey: ['full-search', Object.fromEntries(searchParams)],
     queryFn: () => {
@@ -373,28 +319,9 @@ export default function SearchPage() {
       }
       return searchApi.search(params).then(r => r.data.data)
     },
-    enabled: q.length >= 2 && smartResults === null,
+    enabled: q.length >= 2,
     staleTime: 10_000,
   })
-
-  // ── Smart search ───────────────────────────────────────────────────
-  const smartMutation = useMutation({
-    mutationFn: () => aiApi.smartSearch(inputValue.trim(), allLevels ?? []),
-    onSuccess: (res) => {
-      const d = res.data.data
-      setSmartResults(d.results)
-      setSmartInterpretation(d.interpretation)
-      setSmartTotal(d.total)
-      setSmartErrors(d.errors ?? [])
-    },
-  })
-
-  const clearSmartSearch = () => {
-    setSmartResults(null)
-    setSmartInterpretation('')
-    setSmartTotal(0)
-    setSmartErrors([])
-  }
 
   // ── Handlers ───────────────────────────────────────────────────────
   const setParam = (k: string, v: string) => {
@@ -406,21 +333,14 @@ export default function SearchPage() {
     next.delete(k); next.set('page', '1'); setSearchParams(next)
   }
   const handleSearch = () => {
-    clearSmartSearch()
     const next = new URLSearchParams(searchParams)
     next.set('q', inputValue.trim()); next.set('page', '1'); setSearchParams(next)
-  }
-  const handleSmartSearch = () => {
-    if (inputValue.trim().length < 2) return
-    clearSmartSearch()
-    smartMutation.mutate()
   }
   const handleResultClick = (item: any) => {
     if (item.type === 'node') navigate('/app/resources', { state: { selectNodeId: item.id } })
     else navigate('/app/agents', { state: { selectAgentId: item.id } })
   }
   const handleLoadSaved = (params: Record<string, string>) => {
-    clearSmartSearch()
     const next = new URLSearchParams(params)
     next.set('page', '1')
     setSearchParams(next)
@@ -448,21 +368,9 @@ export default function SearchPage() {
             placeholder="Search resources and agents…"
             autoFocus
           />
-          {(isFetching || smartMutation.isPending) && <Spinner size={14} />}
+          {isFetching && <Spinner size={14} />}
         </div>
         <button type="button" onClick={handleSearch} className="btn btn-primary">Search</button>
-        {aiEnabled && (
-          <button
-            type="button"
-            onClick={handleSmartSearch}
-            className={`btn btn-secondary ${styles.nlBtn} ${smartResults !== null ? styles.nlBtnActive : ''}`}
-            disabled={smartMutation.isPending}
-            title="Search using natural language"
-          >
-            {smartMutation.isPending ? <Spinner size={14} /> : <Sparkles size={14} />}
-            <span className={styles.nlBtnLabel}>AI Search</span>
-          </button>
-        )}
         <button
           className={`btn btn-secondary ${hasFilters ? styles.filterBtnActive : ''}`}
           onClick={() => setShowFilters(v => !v)}
@@ -489,103 +397,58 @@ export default function SearchPage() {
           <SavedSearchesPanel onLoad={handleLoadSaved} />
         </aside>
 
-        {/* ── Smart search results ── */}
-        {smartResults !== null && (
-          <div className={styles.results}>
-            <div className={styles.smartBar}>
-              <Wand2 size={13} className={styles.smartIcon} />
-              <span className={styles.smartInterpretation}>{smartInterpretation}</span>
-              <span className={styles.smartCount}>{smartTotal} result{smartTotal !== 1 ? 's' : ''}</span>
-              <button className={styles.smartClear} onClick={clearSmartSearch}>
-                <X size={12} /> Clear AI search
-              </button>
+        {/* ── Search results ── */}
+        <div className={styles.results}>
+          {q.length >= 2 && (
+            <div className={styles.statsBar}>
+              {isFetching ? (
+                <span className={styles.searching}><Spinner size={13} /> Searching…</span>
+              ) : data ? (
+                <div className={styles.statsLeft}>
+                  <span className={styles.totalCount}>
+                    {total === 0 ? 'No results' : `${total.toLocaleString()} result${total !== 1 ? 's' : ''}`}
+                    {' for '}<strong>"{q}"</strong>
+                  </span>
+                  {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
+                  {data.node_total > 0 && <span className={styles.typeStat}>{data.node_total} resource{data.node_total !== 1 ? 's' : ''}</span>}
+                  {data.agent_total > 0 && <span className={styles.typeStat}>{data.agent_total} agent{data.agent_total !== 1 ? 's' : ''}</span>}
+                </div>
+              ) : null}
             </div>
+          )}
 
-            {smartErrors.length > 0 && (
-              <div style={{ padding: 'var(--space-3) var(--space-6)', fontSize: 'var(--text-xs)', color: 'var(--color-warning)' }}>
-                {smartErrors.map((e, i) => <span key={i}>{e}</span>)}
-              </div>
-            )}
+          {!q && (
+            <div className={styles.emptyState}>
+              <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
+              <p>Enter a search term above to get started</p>
+              <p className={styles.emptyHint}>Searches across titles, descriptions, scope notes, and custom metadata fields</p>
+            </div>
+          )}
 
-            {smartResults.length === 0 ? (
-              <div className={styles.emptyState}>
-                <Sparkles size={32} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
-                <p>No results found</p>
-                <p className={styles.emptyHint}>Try rephrasing your question</p>
-              </div>
-            ) : (
-              <div className={styles.resultList}>
-                {smartResults.map((item: any) =>
-                  item.type === 'node'
-                    ? <SmartNodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                    : <SmartAgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                )}
-              </div>
-            )}
-          </div>
-        )}
+          {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>Type at least 2 characters…</p></div>}
 
-        {/* ── Normal search results ── */}
-        {smartResults === null && (
-          <div className={styles.results}>
-            {q.length >= 2 && (
-              <div className={styles.statsBar}>
-                {isFetching ? (
-                  <span className={styles.searching}><Spinner size={13} /> Searching…</span>
-                ) : data ? (
-                  <div className={styles.statsLeft}>
-                    <span className={styles.totalCount}>
-                      {total === 0 ? 'No results' : `${total.toLocaleString()} result${total !== 1 ? 's' : ''}`}
-                      {' for '}<strong>"{q}"</strong>
-                    </span>
-                    {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
-                    {data.node_total > 0 && <span className={styles.typeStat}>{data.node_total} resource{data.node_total !== 1 ? 's' : ''}</span>}
-                    {data.agent_total > 0 && <span className={styles.typeStat}>{data.agent_total} agent{data.agent_total !== 1 ? 's' : ''}</span>}
-                  </div>
-                ) : null}
-              </div>
-            )}
+          {q.length >= 2 && !isFetching && results.length === 0 && (
+            <div className={styles.emptyState}>
+              <p>No results for <strong>"{q}"</strong></p>
+              <p className={styles.emptyHint}>Try different keywords or adjust your filters.</p>
+            </div>
+          )}
 
-            {!q && (
-              <div className={styles.emptyState}>
-                <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
-                <p>Enter a search term above to get started</p>
-                {aiEnabled ? (
-                  <p className={styles.emptyHint}>
-                    Use <Sparkles size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> AI Search
-                    to ask in plain language — e.g. <em>"agents with a website"</em> or <em>"fonds from the 1920s"</em>
-                  </p>
-                ) : (
-                  <p className={styles.emptyHint}>Searches across titles, descriptions, scope notes, and custom metadata fields</p>
-                )}
-              </div>
-            )}
+          {results.length > 0 && (
+            <div className={styles.resultList}>
+              {results.map((item: any) =>
+                item.type === 'node'
+                  ? <NodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                  : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+              )}
+            </div>
+          )}
 
-            {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>Type at least 2 characters…</p></div>}
-
-            {q.length >= 2 && !isFetching && results.length === 0 && (
-              <div className={styles.emptyState}>
-                <p>No results for <strong>"{q}"</strong></p>
-                <p className={styles.emptyHint}>Try different keywords or adjust your filters.</p>
-              </div>
-            )}
-
-            {results.length > 0 && (
-              <div className={styles.resultList}>
-                {results.map((item: any) =>
-                  item.type === 'node'
-                    ? <NodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                    : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                )}
-              </div>
-            )}
-
-            {pages > 1 && (
-              <Pagination page={page} pages={pages} total={total} perPage={perPage}
-                onPage={p => { const next = new URLSearchParams(searchParams); next.set('page', String(p)); setSearchParams(next) }} />
-            )}
-          </div>
-        )}
+          {pages > 1 && (
+            <Pagination page={page} pages={pages} total={total} perPage={perPage}
+              onPage={p => { const next = new URLSearchParams(searchParams); next.set('page', String(p)); setSearchParams(next) }} />
+          )}
+        </div>
 
       </div>
     </div>

@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tag, X, Plus } from 'lucide-react'
-import { tagsApi, vocabApi, aiApi } from '@/api'
+import { tagsApi, vocabApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import styles from './TagsPanel.module.css'
-import SuggestTagsButton from './SuggestTagsButton'
 
 const NO_CATEGORY = { value: '', label: 'No category' }
 
@@ -69,29 +68,6 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey }),
   })
 
-  const [applyingTags, setApplyingTags] = useState(false)
-
-  const { data: aiStatus } = useQuery({
-    queryKey: ['ai-status'],
-    queryFn: () => aiApi.getStatus().then(r => r.data.data),
-    staleTime: 60_000,
-  })
-  const aiEnabled = (aiStatus?.enabled ?? false) && entityType === 'node'
-
-  const handleApplyAiTags = async (suggestedTags: { name: string; category: string }[]) => {
-    setApplyingTags(true)
-    try {
-      for (const tag of suggestedTags) {
-        await (entityType === 'node'
-          ? tagsApi.addNodeTag(entityId, tag.name, tag.category || undefined)
-          : tagsApi.addAgentTag(entityId, tag.name, tag.category || undefined))
-      }
-    } finally {
-      setApplyingTags(false)
-      queryClient.invalidateQueries({ queryKey })
-    }
-  }
-
   // Debounced suggestion fetch
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -131,15 +107,6 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
           <Tag size={14} /> Tags
         </span>
       </div>
-
-      {/* AI tag suggestions — nodes only when AI is enabled */}
-      {aiEnabled && (
-        <SuggestTagsButton
-          nodeId={entityId}
-          onApply={handleApplyAiTags}
-          isApplying={applyingTags}
-        />
-      )}
 
       {/* Grouped tags */}
       {Object.entries(groupedTags).map(([cat, catTags]) => (

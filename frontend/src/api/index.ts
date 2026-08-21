@@ -729,119 +729,26 @@ export const historyApi = {
 
 
 // ─── AI ───────────────────────────────────────────────────────────────
-export const aiApi = {
+// ─── Whisper transcription ────────────────────────────────────────────
+export const whisperApi = {
   getConfig: () =>
-    api.get<{ status: string; data: any }>('/ai/config'),
+    api.get<{ status: string; data: {
+      service_url: string
+      model: string
+      has_api_key: boolean
+      updated_at: string | null
+    } | null }>('/ai/whisper-config'),
 
   saveConfig: (data: {
-    provider: string
-    model: string
-    base_url?: string
+    service_url: string
     api_key?: string
-    options?: Record<string, unknown>
-    is_enabled?: boolean
-    language?: string
-  }) => api.put<{ status: string; data: any }>('/ai/config', data),
+    model?: string
+  }) => api.put<{ status: string; data: any }>('/ai/whisper-config', data),
 
-  testConfig: () =>
-    api.post<{ status: string; data: { ok: boolean; message: string } }>('/ai/test'),
-
-  getStatus: () =>
-    api.get<{ status: string; data: { enabled: boolean; provider: string | null; model: string | null } }>('/ai/status'),
-
-  fetchSources: (query: string, sources?: string[]) =>
-    api.post<{ status: string; data: any }>('/ai/fetch-sources', {
-      query,
-      sources: sources ?? ['wikidata', 'wikipedia'],
-    }),
-
-  generateAgent: (payload: {
-    query: string
-    agent_type: string
-    current_form?: Record<string, string>
-    sources?: string[]
-  }) => api.post<{ status: string; data: any }>('/ai/generate-agent', payload),
-
-draftHistoryNote: (agentId: number, extraSources?: string[], includeAttachments?: boolean) =>
-  api.post<{ status: string; data: {
-    draft: string
-    sources: { label: string; url: string | null }[]
-    errors: any[]
-  }}>('/ai/draft-history-note', {
-    agent_id: agentId,
-    extra_sources: extraSources ?? [],
-    include_attachments: includeAttachments ?? false,
-  }),
-parseSearch: (query: string, levels?: string[]) =>
-  api.post<{ status: string; data: Record<string, string> }>(
-    '/ai/parse-search',
-    { query, levels: levels ?? [] }
-  ),
-smartSearch: (query: string, levels?: string[]) =>
-  api.post<{ status: string; data: {
-    results: Array<{
-      type: 'node' | 'agent'
-      id: number
-      title: string
-      subtitle: string
-      meta: string | null
-      status: string | null
-    }>
-    total: number
-    interpretation: string
-    plan: any[]
-    errors: string[]
-  }}>('/ai/smart-search', { query, levels: levels ?? [] }),
-draftNodeNote: (nodeId: number, noteType: 'scope_and_content' | 'arrangement' | 'general') =>
-  api.post<{ status: string; data: {
-    draft: string
-    note_type: string
-    sources: { label: string; url: string | null }[]
-    char_count: number
-  }}>('/ai/draft-node-note', { node_id: nodeId, note_type: noteType }),
-suggestTags: (nodeId: number) =>
-  api.post<{ status: string; data: {
-    suggestions: Array<{
-      name: string
-      category: string
-      category_label: string
-      exists_in_vocab: boolean
-    }>
-    total: number
-  }}>('/ai/suggest-tags', { node_id: nodeId, entity_type: 'node' }),
-
-analyseAttachment: (nodeId: number, attachmentId: number) =>
-  api.post<{ status: string; data: {
-    document_type: string
-    confidence: 'high' | 'medium' | 'low'
-    summary: string
-    key_entities: string[]
-    date_hints: string | null
-    formatted_note: string
-    filename: string
-  }}>('/ai/analyse-attachment', {
-    node_id: nodeId,
-    attachment_id: attachmentId,
-  }),
-saveWhisperConfig: (data: {
-  service_url?: string
-  api_key?: string
-  model?: string
-}) => api.put<{ status: string; data: any }>('/ai/whisper-config', data),
-
-getWhisperModels: () =>
-  api.get<{ status: string; data: { models: string[]; default: string } }>(
-    '/ai/whisper-models'
-  ),
-
-listTasks: () =>
-  api.get<{ status: string; data: any[] }>('/ai/tasks'),
-
-updateTask: (key: string, data: { system_prompt?: string; model?: string }) =>
-  api.put<{ status: string; data: any }>(`/ai/tasks/${key}`, data),
-
-resetTask: (key: string) =>
-  api.post<{ status: string; data: any }>(`/ai/tasks/${key}/reset`),
+  getModels: () =>
+    api.get<{ status: string; data: { models: string[]; default: string } }>(
+      '/ai/whisper-models'
+    ),
 }
 
 
