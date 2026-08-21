@@ -20,9 +20,10 @@ class Config:
     ALLOWED_UPLOAD_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'tiff', 'tif', 'txt', 'md', 'csv',
                                  'docx', 'xlsx', 'odt', 'ods', 'mp3', 'mp4', 'flac', 'wav', 'aiff','ogg'}
 
-    # Session cookie — must allow cross-origin requests from Vite dev server
-    SESSION_COOKIE_SAMESITE = 'None'
-    SESSION_COOKIE_SECURE = False      # set True in production (requires HTTPS)
+    # Session cookie — Lax works everywhere: the Vite dev server proxies /api
+    # (same-origin in the browser), and Docker serves frontend + API together.
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = False      # overridden to True in production (requires HTTPS)
     SESSION_COOKIE_HTTPONLY = True
     CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
 
@@ -39,7 +40,6 @@ class DevelopmentConfig(Config):
 class ProductionConfig(Config):
     DEBUG = False
     SESSION_COOKIE_SECURE = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
     REMEMBER_COOKIE_SECURE = True
     REMEMBER_COOKIE_SAMESITE = 'Lax'
     REMEMBER_COOKIE_HTTPONLY = True
@@ -50,7 +50,6 @@ class ProductionConfig(Config):
 class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
-    SESSION_COOKIE_SAMESITE = 'Lax'
 
 
 config = {

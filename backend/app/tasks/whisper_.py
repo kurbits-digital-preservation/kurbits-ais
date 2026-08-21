@@ -41,19 +41,15 @@ def _get_whisper_config(institution_id: int) -> dict:
     config = InstitutionAIConfig.query.filter_by(
         institution_id=institution_id
     ).first()
-    if not config:
-        raise RuntimeError('No AI configuration found.')
-    whisper_cfg = (config.task_configs or {}).get('whisper', {})
-    service_url = whisper_cfg.get('service_url', '').rstrip('/')
-    if not service_url:
+    if not config or not config.whisper_service_url:
         raise RuntimeError(
             'Whisper service URL not configured. '
-            'Set it under Administration → AI → Whisper.'
+            'Set it under Administration → Transcription.'
         )
     return {
-        'service_url': service_url,
-        'api_key':     whisper_cfg.get('api_key', ''),
-        'model':       whisper_cfg.get('model', 'medium'),
+        'service_url': config.whisper_service_url.rstrip('/'),
+        'api_key':     config.whisper_api_key,
+        'model':       config.whisper_model or 'medium',
     }
 
 

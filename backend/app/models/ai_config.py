@@ -1,59 +1,58 @@
+"""
+Per-institution Whisper transcription configuration.
+
+This is the stripped-down remnant of the former AI configuration model.
+LLM provider support (Anthropic/OpenAI/Ollama/Azure) has been removed —
+only the connection to the Whisper transcription microservice remains.
+"""
 from __future__ import annotations
 from datetime import datetime, timezone
-from typing import Optional
-import sqlalchemy as sa
-import sqlalchemy.orm as so
+
 from app.extensions import db
+from app.utils.crypto import encrypt_api_key, decrypt_api_key
 
 
 class InstitutionAIConfig(db.Model):
-    __tablename__ = 'institution_ai_configs'
+    __tablename__ = 'institution_ai_config'
 
-    id: so.Mapped[int] = so.mapped_column(primary_key=True)
-    institution_id: so.Mapped[int] = so.mapped_column(
-        sa.ForeignKey('institutions.id', ondelete='CASCADE'),
-        unique=True, nullable=False,
+    id             = db.Column(db.Integer, primary_key=True)
+    institution_id = db.Column(
+        db.Integer,
+        db.ForeignKey('institutions.id', ondelete='CASCADE'),
+        nullable=False,
+        unique=True,
+        index=True,
     )
 
-    # Provider: 'anthropic' | 'openai' | 'ollama' | 'azure_openai'
-    provider: so.Mapped[str] = so.mapped_column(sa.String(50), nullable=False)
+    # ── Whisper service connection ────────────────────────────────────
+    whisper_service_url    = db.Column(db.String(512), nullable=False, default='')
+    _whisper_key_encrypted = db.Column('whisper_api_key', db.Text, nullable=False, default='')
+    whisper_model          = db.Column(db.String(256), nullable=False, default='')
 
-    # Model name — provider-specific, e.g. 'claude-sonnet-4-20250514', 'llama3', 'gpt-4o'
-    model: so.Mapped[str] = so.mapped_column(sa.String(200), nullable=False)
-
-    # Base URL — required for Ollama and Azure, optional override for others
-    base_url: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
-
-    # Add this field to InstitutionAIConfig
-    language: so.Mapped[str] = so.mapped_column(sa.String(10), nullable=False, default='en')
-
-    # Encrypted API key — empty string for Ollama (no auth needed)
-    _api_key_encrypted: so.Mapped[str] = so.mapped_column(
-        'api_key_encrypted', sa.Text, nullable=False, default=''
-    )
-
-    # Extra provider-specific options stored as JSON
-    # e.g. Azure deployment name, timeout, max_tokens
-    options: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True)
-
-    is_enabled: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=True, nullable=False)
-
-    task_configs: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True, default=dict)
-
-    created_at: so.Mapped[datetime] = so.mapped_column(
-        default=lambda: datetime.now(timezone.utc))
-    updated_at: so.Mapped[datetime] = so.mapped_column(
+    # ── Audit ─────────────────────────────────────────────────────────
+    updated_by_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    updated_at    = db.Column(
+        db.DateTime,
         default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc))
-    updated_by_id: so.Mapped[Optional[int]] = so.mapped_column(
-        sa.ForeignKey('users.id'), nullable=True)
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    institution = db.relationship('Institution', backref=db.backref(
+        'ai_config', uselist=False, cascade='all, delete-orphan'
+    ))
+
+    # ── Encrypted API key accessors ───────────────────────────────────
+    @property
+    def whisper_api_key(self) -> str:
+        return decrypt_api_key(self._whisper_key_encrypted)
+
+    @whisper_api_key.setter
+    def whisper_api_key(self, value: str) -> None:
+        self._whisper_key_encrypted = encrypt_api_key(value or '')
 
     @property
-    def api_key(self) -> str:
-        from app.ai.crypto import decrypt_api_key
-        return decrypt_api_key(self._api_key_encrypted)
+    def has_whisper_api_key(self) -> bool:
+        return bool(self._whisper_key_encrypted)
 
-    @api_key.setter
-    def api_key(self, plaintext: str) -> None:
-        from app.ai.crypto import encrypt_api_key
-        self._api_key_encrypted = encrypt_api_key(plaintext)
+    def __repr__(self) -> str:
+        return f'<InstitutionAIConfig inst={self.institution_id} whisper={bool(self.whisper_service_url)}>'
