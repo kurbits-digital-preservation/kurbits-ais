@@ -23,8 +23,8 @@ export const nodesApi = {
   getTree: (include_drafts = true) =>
     api.get<{ status: string; data: NodeStub[] }>('/nodes/tree', { params: { include_drafts } }),
 
-  getChildren: (nodeId: number, include_drafts = true) =>
-    api.get<{ status: string; data: NodeStub[] }>(`/nodes/${nodeId}/children`, { params: { include_drafts } }),
+  getChildren: (id: number, page = 1) =>
+    api.get(`/nodes/${id}/children`, { params: { page, per_page: 200 } }),
 
   get: (nodeId: number) =>
     api.get<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}`),
@@ -194,8 +194,16 @@ export const locationsApi = {
   move: (locationId: number, nodeId: number, targetLocationId: number, notes?: string) =>
     api.post(`/locations/${locationId}/move`, { node_id: nodeId, target_location_id: targetLocationId, notes }),
 
-  checkOut: (locationId: number, node_id: number, notes?: string) =>
-    api.post(`/locations/${locationId}/check-out`, { node_id, notes }),
+  checkOut: (locationId: number, nodeId: number, notes?: string, categoryLocationId?: number) =>
+    api.post(`/locations/${locationId}/check-out`, {
+      node_id: nodeId,
+      notes,
+      category_location_id: categoryLocationId,
+    }),
+  getCheckoutCategories: () =>
+    api.get('/locations/checkout-categories'),
+  returnToPrevious: (nodeId: number, notes?: string) =>
+    api.post(`/nodes/${nodeId}/return-to-previous`, { notes }),
 
   transfer: (locationId: number, node_id: number, target_location_id: number, notes?: string) =>
     api.post(`/locations/${locationId}/transfer`, { node_id, target_location_id, notes }),
@@ -208,6 +216,17 @@ export const locationsApi = {
 
   inventory: (locationId: number) =>
     api.get(`/locations/${locationId}/inventory`, { responseType: 'blob' }),
+
+  moveContents: (locationId: number, targetLocationId: number, notes?: string) =>
+    api.post(`/locations/${locationId}/move-contents`, {
+      target_location_id: targetLocationId,
+      notes,
+    }),
+  quickMove: (locationCode: string, refCodes: string[]) =>
+    api.post('/locations/quick-move', {
+      location_code: locationCode,
+      ref_codes: refCodes,
+    }),
 }
 
 // ─── Classifications ─────────────────────────────────────────────────

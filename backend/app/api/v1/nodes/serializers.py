@@ -1,8 +1,36 @@
+import sqlalchemy as sa
+
+from app.extensions import db
 from app.models.node import Node, NodeChange, NodeAttachment, NodeNote
 
 
-def serialize_node_stub(node: Node) -> dict:
-    """Minimal representation for tree views and lists."""
+def compute_has_children(nodes) -> set:
+    """Return the set of node ids (from `nodes`) that have at least one child.
+
+    One query for the whole batch instead of one COUNT per node.
+    """
+    ids = [n.id for n in nodes]
+    if not ids:
+        return set()
+    rows = db.session.execute(
+        sa.select(Node.parent_id)
+        .where(Node.parent_id.in_(ids))
+        .group_by(Node.parent_id)
+    ).scalars().all()
+    return set(rows)
+
+
+def serialize_node_stub(node: Node, has_children: bool | None = None) -> dict:
+    """Minimal representation for tree views and lists.
+
+    Pass `has_children` (from compute_has_children) when serializing a batch.
+    When omitted, a single EXISTS query is issued for this node.
+    """
+    if has_children is None:
+        has_children = db.session.execute(
+            sa.select(sa.exists().where(Node.parent_id == node.id))
+        ).scalar()
+
     return {
         'id': node.id,
         'title': node.title,
@@ -12,13 +40,19 @@ def serialize_node_stub(node: Node) -> dict:
         'status': node.status.value,
         'date_start': node.date_start.isoformat() if node.date_start else None,
         'date_end': node.date_end.isoformat() if node.date_end else None,
-        'has_children': node.children.count() > 0,
+        'has_children': bool(has_children),
         'parent_id': node.parent_id,
     }
 
 
 def serialize_node_detail(node: Node) -> dict:
     """Full representation for the detail view."""
+    children_count = db.session.execute(
+        sa.select(sa.func.count())
+        .select_from(Node)
+        .where(Node.parent_id == node.id)
+    ).scalar()
+
     return {
         'id': node.id,
         'institution_id': node.institution_id,
@@ -47,8 +81,8 @@ def serialize_node_detail(node: Node) -> dict:
         'tags': [t.to_dict() for t in node.tags],
         'parent_id': node.parent_id,
         'breadcrumb': node.get_breadcrumb(),
-        'has_children': node.children.count() > 0,
-        'children_count': node.children.count(),
+        'has_children': children_count > 0,
+        'children_count': children_count,
         'can_have_location': node.can_have_location(),
         'is_object': node.is_object(),
         'representations': [
@@ -107,8 +141,9 @@ def serialize_attachment(attachment: NodeAttachment) -> dict:
         'image_mode': attachment.image_mode,
         'image_bit_depth': attachment.image_bit_depth,
         'exif_data': attachment.exif_data,
-        # OCR
-        'extracted_text': bool(attachment.extracted_text),
+        # OCR — extracted_text is a deferred column; use the timestamp as the
+        # presence indicator so the (potentially huge) text is never loaded here
+        'extracted_text': attachment.extracted_text_at is not None,
         'extracted_text_at': attachment.extracted_text_at.isoformat() if attachment.extracted_text_at else None,
         # AV
         'duration_seconds': attachment.duration_seconds,

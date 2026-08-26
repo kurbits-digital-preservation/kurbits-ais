@@ -162,6 +162,10 @@ class Node(db.Model):
 
     __table_args__ = (
         sa.UniqueConstraint('local_ref', 'parent_id', 'institution_id', name='uq_local_ref_per_parent'),
+        # Serves children lookups AND their ORDER BY local_ref in one index
+        sa.Index('ix_nodes_parent_local_ref', 'parent_id', 'local_ref'),
+        # Serves root listing per institution (parent_id IS NULL scans)
+        sa.Index('ix_nodes_institution_parent', 'institution_id', 'parent_id'),
     )
 
     def __repr__(self):
@@ -176,10 +180,22 @@ class Node(db.Model):
         return f'{institution.ref_prefix}/{self.local_ref}'
 
     def refresh_ref_code(self) -> None:
-        """Recompute and save ref_code. Call after reparenting or local_ref changes."""
+        """Recompute ref_code for this node and its entire subtree.
+
+        Iterative breadth-first, one query per tree level instead of one per
+        node, and each descendant is written exactly once.
+        """
         self.ref_code = self.compute_ref_code()
-        for child in self.children:
-            child.refresh_ref_code()
+        current: Dict[int, str] = {self.id: self.ref_code}
+        while current:
+            rows = db.session.execute(
+                sa.select(Node).where(Node.parent_id.in_(current.keys()))
+            ).scalars().all()
+            nxt: Dict[int, str] = {}
+            for child in rows:
+                child.ref_code = f'{current[child.parent_id]}/{child.local_ref}'
+                nxt[child.id] = child.ref_code
+            current = nxt
 
     # --- Hierarchy helpers ---
 
@@ -387,7 +403,7 @@ class NodeAttachment(db.Model):
 
     thumbnail_path:  so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
     tech_extracted_at: so.Mapped[Optional[datetime]] = so.mapped_column(sa.DateTime, nullable=True)
-    extracted_text: so.Mapped[Optional[str]] = so.mapped_column(sa.Text, nullable=True)
+    extracted_text: so.Mapped[Optional[str]] = so.mapped_column(sa.Text, nullable=True, deferred=True)
     extracted_text_at: so.Mapped[Optional[datetime]] = so.mapped_column(sa.DateTime, nullable=True)
 
     node: so.Mapped['Node'] = so.relationship('Node', back_populates='attachments')

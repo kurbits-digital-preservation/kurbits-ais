@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { nodesApi } from '@/api'
 import {
   Plus, MapPin, Package, ArrowDownToLine, ArrowUpFromLine, ExternalLink, ArrowRightLeft, FileText,
   ArrowLeftRight, Pencil, Trash2, X, Save, Clock,
-  BarChart3, ChevronRight
+  BarChart3, ChevronRight, ScanLine, CheckCircle2, AlertCircle
 } from 'lucide-react'
 import { locationsApi } from '@/api'
 import LocationTree from '@/components/tree/LocationTree'
@@ -290,6 +290,22 @@ function StoredItemsTab({
   onMove: (node: {id:number;title:string;ref_code:string}) => void
 }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
+
+  const returnMutation = useMutation({
+    mutationFn: (nodeId: number) => locationsApi.returnToPrevious(nodeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['location-nodes'] })
+      queryClient.invalidateQueries({ queryKey: ['location-movements'] })
+      queryClient.invalidateQueries({ queryKey: ['location-tree'] })
+      queryClient.invalidateQueries({ queryKey: ['location'] })
+      queryClient.invalidateQueries({ queryKey: ['location-overview'] })
+      queryClient.invalidateQueries({ queryKey: ['node'] })
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message ?? 'Return failed')
+    },
+  })
   const { data, isLoading } = useQuery({
     queryKey: ['location-nodes', location.id],
     queryFn: () => locationsApi.getStoredNodes(location.id).then(r => r.data.data as any[]),
@@ -304,7 +320,8 @@ function StoredItemsTab({
 
   if (isLoading) return <div className={styles.tabContent}><Spinner /></div>
 
-  const isCheckedOutVirtual = (location as any).code === '__checked_out__'
+  const isCheckedOutVirtual =
+    (location as any).is_checkout ?? (location as any).code === '__checked_out__'
 
   return (
     <div className={styles.tabContent}>
@@ -340,6 +357,16 @@ function StoredItemsTab({
                   title="Check out"
                 >
                   <ArrowUpFromLine size={13} /> Check out
+                </button>
+              )}
+              {isCheckedOutVirtual && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  disabled={returnMutation.isPending}
+                  onClick={() => returnMutation.mutate(node.id)}
+                  title="Check back in to where it was checked out from"
+                >
+                  <ArrowDownToLine size={13} /> Return
                 </button>
               )}
               {isCheckedOutVirtual && (
@@ -646,6 +673,8 @@ function LocationDetailPanel({
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('overview')
   const [showCheckIn, setShowCheckIn] = useState(false)
+  const [showMoveContents, setShowMoveContents] = useState(false)
+  const [checkOutNodeId, setCheckOutNodeId] = useState<number | null>(null)
   const [movingNode, setMovingNode] = useState<{id:number;title:string;ref_code:string}|null>(null)
   const [transferNodeId, setTransferNodeId] = useState<number | null>(null)
 
@@ -659,18 +688,6 @@ function LocationDetailPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['location-tree'] })
       onDelete()
-    },
-  })
-
-  const checkOutMutation = useMutation({
-    mutationFn: (nodeId: number) => locationsApi.checkOut(locationId, nodeId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['location-nodes', locationId] })
-      queryClient.invalidateQueries({ queryKey: ['location-movements', locationId] })
-      queryClient.invalidateQueries({ queryKey: ['location-tree'] })
-      queryClient.invalidateQueries({ queryKey: ['location', locationId] })
-      queryClient.invalidateQueries({ queryKey: ['location-overview'] })
-      queryClient.invalidateQueries({ queryKey: ['node'] })
     },
   })
 
@@ -716,6 +733,15 @@ function LocationDetailPanel({
                   <ArrowDownToLine size={13} /> Check in
                 </button>
               )}
+              {location.can_store_nodes && location.stored_count > 0 && (
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowMoveContents(true)}
+                  title="Relocate all stored items to another location"
+                >
+                  <ArrowLeftRight size={13} /> Move contents
+                </button>
+              )}
               <button className="btn btn-ghost btn-sm" onClick={async () => {
                 try {
                   const res = await locationsApi.inventory(locationId)
@@ -751,9 +777,7 @@ function LocationDetailPanel({
           {tab === 'items'     && (
             <StoredItemsTab
               location={location}
-              onCheckOut={(nodeId) => {
-                if (confirm('Check out this item?')) checkOutMutation.mutate(nodeId)
-              }}
+              onCheckOut={(nodeId) => setCheckOutNodeId(nodeId)}
               onMove={(node) => setMovingNode(node)}
             />
           )}
@@ -763,6 +787,16 @@ function LocationDetailPanel({
 
       {showCheckIn && (
         <CheckInModal location={location} onClose={() => setShowCheckIn(false)} />
+      )}
+      {showMoveContents && (
+        <MoveContentsModal location={location} onClose={() => setShowMoveContents(false)} />
+      )}
+      {checkOutNodeId !== null && (
+        <CheckOutCategoryModal
+          location={location}
+          nodeId={checkOutNodeId}
+          onClose={() => setCheckOutNodeId(null)}
+        />
       )}
       {movingNode && (
         <MoveToModal location={location} node={movingNode} onClose={() => setMovingNode(null)} />
@@ -784,12 +818,25 @@ type ViewMode = 'detail' | 'create' | 'edit'
 
 export default function LocationsPage() {
   const queryClient = useQueryClient()
+  const routerLocation = useLocation()
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [selectedStub, setSelectedStub] = useState<LocationStub | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('detail')
+
+  // Incoming navigation from a node's Locations tab:
+  // navigate('/app/locations', { state: { selectLocationId } })
+  useEffect(() => {
+    const incoming = routerLocation.state?.selectLocationId
+    if (incoming) {
+      setSelectedId(incoming)
+      setSelectedStub(null)
+      setViewMode('detail')
+    }
+  }, [routerLocation.state?.selectLocationId])
   const [editingLocation, setEditingLocation] = useState<LocationDetail | null>(null)
   const [addingChildOf, setAddingChildOf] = useState<number | null>(null)
   const [treeSearch, setTreeSearch] = useState('')
+  const [showQuickMove, setShowQuickMove] = useState(false)
 
   const { data: parentLocation } = useQuery({
     queryKey: ['location', addingChildOf],
@@ -836,17 +883,27 @@ export default function LocationsPage() {
   }
 
   return (
+    <>
     <PageShell
       sidebar={
         <SidebarPanel
           title="Locations"
           actions={
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => { setAddingChildOf(null); setViewMode('create') }}
-            >
-              <Plus size={14} /> New
-            </button>
+            <>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setShowQuickMove(true)}
+                title="Move items by scanning location and item codes"
+              >
+                <ScanLine size={14} /> Quick move
+              </button>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => { setAddingChildOf(null); setViewMode('create') }}
+              >
+                <Plus size={14} /> New
+              </button>
+            </>
           }
         >
 <div className={styles.treeWrap}>
@@ -937,5 +994,368 @@ export default function LocationsPage() {
         )
       }
     />
+    {showQuickMove && (
+      <QuickMoveModal
+        onClose={() => setShowQuickMove(false)}
+        onOpenLocation={(id) => { setSelectedId(id); setViewMode('detail'); setShowQuickMove(false) }}
+      />
+    )}
+    </>
+  )
+}
+
+// ─── Move-contents modal ──────────────────────────────────────────────
+
+function MoveContentsModal({ location, onClose }: {
+  location: LocationDetail
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [target, setTarget] = useState<any>(null)
+  const [notes, setNotes] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const { data: searchResults } = useQuery({
+    queryKey: ['locations-search-movecontents', search],
+    queryFn: () => locationsApi.search(search, true).then(r => r.data.data as any[]),
+    enabled: search.length > 1,
+  })
+
+  const moveMutation = useMutation({
+    mutationFn: () => locationsApi.moveContents(location.id, target.id, notes || undefined),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['location-tree'] })
+      queryClient.invalidateQueries({ queryKey: ['location-nodes'] })
+      queryClient.invalidateQueries({ queryKey: ['location-movements'] })
+      queryClient.invalidateQueries({ queryKey: ['location'] })
+      queryClient.invalidateQueries({ queryKey: ['location-overview'] })
+      queryClient.invalidateQueries({ queryKey: ['node'] })
+      onClose()
+    },
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.message ?? 'Move failed')
+    },
+  })
+
+  const overCapacity = target?.available_capacity != null
+    && target.available_capacity < location.stored_count
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} onClick={e => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <h3 className={styles.modalTitle}>
+            <ArrowLeftRight size={16} /> Move all contents of {location.name}
+          </h3>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)' }}>
+            {location.stored_count} item{location.stored_count !== 1 ? 's' : ''} will be
+            relocated in one operation. Each item gets a movement record.
+          </p>
+
+          <div className="form-group">
+            <label>Target location</label>
+            <input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setTarget(null) }}
+              placeholder="Search storage locations…"
+              autoFocus
+            />
+          </div>
+
+          {searchResults && search.length > 1 && !target && (
+            <div className={styles.searchResults}>
+              {searchResults
+                .filter((l: any) => l.id !== location.id)
+                .map((l: any) => (
+                <button
+                  key={l.id}
+                  className={styles.searchResult}
+                  onClick={() => { setTarget(l); setSearch(l.full_path ?? l.name) }}
+                >
+                  <div className={styles.searchResultInfo}>
+                    <span className={styles.searchResultTitle}>{l.full_path ?? l.name}</span>
+                    <span className="ref-code">{l.code}</span>
+                  </div>
+                  {l.available_capacity != null && (
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
+                      {l.available_capacity} free
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {overCapacity && (
+            <div className={styles.warningBanner}>
+              Target only has {target.available_capacity} free of {target.capacity} —
+              not enough for {location.stored_count} items.
+            </div>
+          )}
+
+          {errorMsg && <div className={styles.warningBanner}>{errorMsg}</div>}
+
+          <div className="form-group">
+            <label>Notes</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)}
+              placeholder="Optional — recorded on every movement" />
+          </div>
+        </div>
+
+        <div className={styles.modalFooter}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            disabled={!target || overCapacity || moveMutation.isPending}
+            onClick={() => moveMutation.mutate()}
+          >
+            {moveMutation.isPending ? <Spinner size={14} /> : <ArrowLeftRight size={14} />}
+            Move {location.stored_count} item{location.stored_count !== 1 ? 's' : ''}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Quick-move (barcode) modal ───────────────────────────────────────
+
+interface QuickMoveResult {
+  ref_code: string
+  status: 'moved' | 'not_found' | 'already_here' | 'at_capacity'
+  title?: string
+  movement_type?: string
+}
+
+function QuickMoveModal({ onClose, onOpenLocation }: {
+  onClose: () => void
+  onOpenLocation: (locationId: number) => void
+}) {
+  const queryClient = useQueryClient()
+  const [locationCode, setLocationCode] = useState('')
+  const [codeLocked, setCodeLocked] = useState(false)
+  const [itemCode, setItemCode] = useState('')
+  const [results, setResults] = useState<QuickMoveResult[]>([])
+  const [targetInfo, setTargetInfo] = useState<{ id: number; full_path: string } | null>(null)
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const moveMutation = useMutation({
+    mutationFn: (ref: string) => locationsApi.quickMove(locationCode.trim(), [ref]),
+    onSuccess: (res) => {
+      const d = res.data.data
+      setTargetInfo(d.target)
+      setErrorMsg('')
+      setResults(prev => [...d.results, ...prev])
+      queryClient.invalidateQueries({ queryKey: ['location-tree'] })
+      queryClient.invalidateQueries({ queryKey: ['location-nodes'] })
+      queryClient.invalidateQueries({ queryKey: ['location'] })
+      queryClient.invalidateQueries({ queryKey: ['location-overview'] })
+      queryClient.invalidateQueries({ queryKey: ['node'] })
+    },
+    onError: (err: any) => {
+      setErrorMsg(err?.response?.data?.message ?? 'Move failed')
+    },
+  })
+
+  const handleItemScan = () => {
+    const ref = itemCode.trim()
+    if (!ref || !locationCode.trim()) return
+    moveMutation.mutate(ref)
+    setItemCode('')
+  }
+
+  const STATUS_META: Record<QuickMoveResult['status'], { icon: any; colour: string; label: string }> = {
+    moved:        { icon: CheckCircle2, colour: 'var(--color-success)', label: 'Moved' },
+    not_found:    { icon: AlertCircle,  colour: 'var(--color-error)',   label: 'Not found' },
+    already_here: { icon: CheckCircle2, colour: 'var(--color-ink-faint)', label: 'Already here' },
+    at_capacity:  { icon: AlertCircle,  colour: 'var(--color-warning)', label: 'At capacity' },
+  }
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} onClick={e => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <h3 className={styles.modalTitle}>
+            <ScanLine size={16} /> Quick move
+          </h3>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)' }}>
+            Scan or type the target location code once, then scan item reference
+            codes one after another. Checked-out items are checked back in.
+          </p>
+
+          <div className="form-group">
+            <label>Location code</label>
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <input
+                value={locationCode}
+                onChange={e => { setLocationCode(e.target.value); setTargetInfo(null) }}
+                onKeyDown={e => { if (e.key === 'Enter') setCodeLocked(true) }}
+                placeholder="e.g. SHELF-A3"
+                disabled={codeLocked}
+                autoFocus
+                style={{ flex: 1 }}
+              />
+              {codeLocked && (
+                <button className="btn btn-ghost btn-sm"
+                  onClick={() => { setCodeLocked(false); setTargetInfo(null) }}>
+                  Change
+                </button>
+              )}
+            </div>
+            {targetInfo && (
+              <span className="form-hint" style={{ color: 'var(--color-success)' }}>
+                → {targetInfo.full_path}
+              </span>
+            )}
+          </div>
+
+          <div className="form-group">
+            <label>Item reference code</label>
+            <input
+              value={itemCode}
+              onChange={e => setItemCode(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleItemScan() }}
+              placeholder="Scan or type ref code, press Enter"
+              autoFocus={codeLocked}
+              disabled={!locationCode.trim()}
+            />
+          </div>
+
+          {errorMsg && <div className={styles.warningBanner}>{errorMsg}</div>}
+
+          {results.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2,
+              maxHeight: 220, overflowY: 'auto',
+              border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)',
+              padding: 'var(--space-2)' }}>
+              {results.map((r, i) => {
+                const meta = STATUS_META[r.status]
+                const Icon = meta.icon
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center',
+                    gap: 'var(--space-2)', fontSize: 'var(--text-sm)',
+                    padding: '2px 4px' }}>
+                    <Icon size={13} style={{ color: meta.colour, flexShrink: 0 }} />
+                    <span className="ref-code">{r.ref_code}</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden',
+                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      color: 'var(--color-ink-muted)' }}>
+                      {r.title ?? ''}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: meta.colour,
+                      fontWeight: 600, flexShrink: 0 }}>
+                      {meta.label}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className={styles.modalFooter}>
+          {targetInfo && (
+            <button className="btn btn-ghost"
+              onClick={() => onOpenLocation(targetInfo.id)}>
+              Open location
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ─── Check-out with category modal ────────────────────────────────────
+
+function CheckOutCategoryModal({ location, nodeId, onClose }: {
+  location: LocationDetail
+  nodeId: number
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [categoryId, setCategoryId] = useState<string>('')
+  const [notes, setNotes] = useState('')
+
+  const { data: cats } = useQuery({
+    queryKey: ['checkout-categories'],
+    queryFn: () => locationsApi.getCheckoutCategories().then(r => r.data.data),
+  })
+
+  const checkOutMutation = useMutation({
+    mutationFn: () => locationsApi.checkOut(
+      location.id, nodeId, notes || undefined,
+      categoryId ? parseInt(categoryId) : undefined,
+    ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['location-nodes'] })
+      queryClient.invalidateQueries({ queryKey: ['location-movements'] })
+      queryClient.invalidateQueries({ queryKey: ['location-tree'] })
+      queryClient.invalidateQueries({ queryKey: ['location'] })
+      queryClient.invalidateQueries({ queryKey: ['location-overview'] })
+      queryClient.invalidateQueries({ queryKey: ['node'] })
+      onClose()
+    },
+  })
+
+  return (
+    <div className={styles.modalOverlay} onClick={onClose}>
+      <div className={styles.modal} onClick={e => e.stopPropagation()}>
+        <div className={styles.modalHeader}>
+          <h3 className={styles.modalTitle}>
+            <ArrowUpFromLine size={16} /> Check out
+          </h3>
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </div>
+
+        <div className={styles.modalBody}>
+          <div className="form-group">
+            <label>Reason</label>
+            <select value={categoryId} onChange={e => setCategoryId(e.target.value)} autoFocus>
+              <option value="">Uncategorised</option>
+              {(cats as any)?.categories?.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <span className="form-hint">
+              Categories are managed as locations under "Checked out".
+            </span>
+          </div>
+          <div className="form-group">
+            <label>Notes</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+          </div>
+        </div>
+
+        <div className={styles.modalFooter}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-primary"
+            disabled={checkOutMutation.isPending}
+            onClick={() => checkOutMutation.mutate()}
+          >
+            {checkOutMutation.isPending ? <Spinner size={14} /> : <ArrowUpFromLine size={14} />}
+            Check out
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -171,14 +171,18 @@ def get_stored_nodes(location_id):
 
 
 def _get_or_create_checked_out_location(institution_id: int, db):
-    """Get or create the virtual 'Checked out' location for an institution."""
+    """Get or create the virtual 'Checked out' root for an institution.
+
+    On first creation, the default checkout categories are seeded as child
+    locations. Admins manage them afterwards like any other location.
+    """
+    from app.models.location import CHECKOUT_ROOT_CODE, DEFAULT_CHECKOUT_CATEGORIES
     loc = Location.query.filter_by(
         institution_id=institution_id,
-        code='__checked_out__',
+        code=CHECKOUT_ROOT_CODE,
         parent_id=None,
     ).first()
     if not loc:
-        from app.models.location import Location as _Loc
         ht = db.session.execute(
             sa.select(sa.text('id')).select_from(sa.text('hierarchy_types'))
             .where(sa.text("entity_type = 'location' AND institution_id = :iid"))
@@ -187,7 +191,7 @@ def _get_or_create_checked_out_location(institution_id: int, db):
         loc = Location(
             institution_id=institution_id,
             name='Checked out',
-            code='__checked_out__',
+            code=CHECKOUT_ROOT_CODE,
             level_name='Virtual',
             location_type='virtual',
             can_store_nodes=True,
@@ -196,7 +200,40 @@ def _get_or_create_checked_out_location(institution_id: int, db):
         )
         db.session.add(loc)
         db.session.flush()
+
+    # Backfill default categories for any missing codes. Runs whether the root
+    # was just created or already existed from the old flat checkout system,
+    # so upgrading databases get categories without a migration. Categories the
+    # admin later deletes are not resurrected, because we only add codes that
+    # have never existed — see the guard below.
+    _seed_checkout_categories(loc, db)
     return loc
+
+
+def _seed_checkout_categories(root, db):
+    """Add any default checkout categories that don't yet exist under `root`.
+
+    Only seeds when the root currently has NO children at all, so an admin who
+    has deliberately curated the category list (renaming or removing some) is
+    never overridden on subsequent calls.
+    """
+    from app.models.location import DEFAULT_CHECKOUT_CATEGORIES
+    existing = root.children.count()
+    if existing > 0:
+        return
+    for cat_name, cat_code in DEFAULT_CHECKOUT_CATEGORIES:
+        db.session.add(Location(
+            institution_id=root.institution_id,
+            name=cat_name,
+            code=cat_code,
+            level_name='Virtual',
+            location_type='virtual',
+            can_store_nodes=True,
+            is_public=False,
+            hierarchy_type_id=root.hierarchy_type_id,
+            parent_id=root.id,
+        ))
+    db.session.flush()
 
 def _update_node_current_location(node, location_id, db):
     """Denormalise current location onto node for fast lookup."""
@@ -302,7 +339,16 @@ def check_out(location_id):
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
 
     # Auto-assign to virtual "Checked out" location for this institution
-    checked_out_loc = _get_or_create_checked_out_location(institution_id, db)
+    checked_out_root = _get_or_create_checked_out_location(institution_id, db)
+
+    # Optional category (a child of the virtual root, admin-managed)
+    checked_out_loc = checked_out_root
+    category_id = data.get('category_location_id')
+    if category_id:
+        category = _get_location_or_404(category_id, institution_id)
+        if not category or not category.is_checkout_location():
+            return error('Invalid checkout category', 422)
+        checked_out_loc = category
 
     # Move to checked-out virtual location
     db.session.execute(
@@ -601,3 +647,287 @@ def print_location_inventory(location_id):
     response.headers['Content-Type'] = 'application/pdf'
     response.headers['Content-Disposition'] = f'inline; filename="{safe_name}_inventory.pdf"'
     return response
+
+# ---------------------------------------------------------------------------
+# Bulk movement
+# ---------------------------------------------------------------------------
+
+# POST /api/v1/locations/<id>/move-contents
+# Relocate every stored item from this location to another, in one transaction.
+@bp.route('/locations/<int:location_id>/move-contents', methods=['POST'])
+@login_required
+@require_write
+def move_location_contents(location_id):
+    institution_id = current_user.active_institution_id
+    source = _get_location_or_404(location_id, institution_id)
+    if not source:
+        return error('Location not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    target_id = data.get('target_location_id')
+    if not target_id:
+        return error('target_location_id is required', 400)
+    if target_id == location_id:
+        return error('Target must be a different location', 400)
+
+    target = _get_location_or_404(target_id, institution_id)
+    if not target:
+        return error('Target location not found', 404)
+    if not target.can_store_nodes:
+        return error('Target location cannot store archival materials', 422)
+
+    node_ids = db.session.execute(
+        sa.select(location_node_association.c.node_id).where(
+            location_node_association.c.location_id == source.id
+        )
+    ).scalars().all()
+
+    if not node_ids:
+        return success({'moved': 0, 'message': 'Location has no stored items'})
+
+    if target.capacity is not None:
+        current_count = target.stored_nodes.count()
+        if current_count + len(node_ids) > target.capacity:
+            return error(
+                f'Target capacity exceeded: {len(node_ids)} incoming, '
+                f'{target.capacity - current_count} free of {target.capacity}',
+                409,
+            )
+
+    # Re-point associations
+    db.session.execute(
+        location_node_association.delete().where(
+            location_node_association.c.location_id == source.id,
+            location_node_association.c.node_id.in_(node_ids),
+        )
+    )
+    # Guard against duplicates if some item already sits at the target
+    db.session.execute(
+        location_node_association.delete().where(
+            location_node_association.c.location_id == target.id,
+            location_node_association.c.node_id.in_(node_ids),
+        )
+    )
+    db.session.execute(
+        location_node_association.insert(),
+        [{'location_id': target.id, 'node_id': nid} for nid in node_ids],
+    )
+
+    # One movement record per item
+    for nid in node_ids:
+        db.session.add(LocationMovement(
+            node_id=nid,
+            location_id=target.id,
+            from_location_id=source.id,
+            movement_type='transfer',
+            notes=data.get('notes'),
+            moved_by_id=current_user.id,
+        ))
+
+    # Keep the denormalised pointer in sync
+    from app.models import Node
+    db.session.execute(
+        sa.update(Node)
+        .where(Node.id.in_(node_ids))
+        .values(current_location_id=target.id)
+    )
+
+    db.session.commit()
+    return success({
+        'moved': len(node_ids),
+        'target': serialize_location_stub(target),
+    })
+
+
+# POST /api/v1/locations/quick-move
+# Barcode workflow: resolve target by location code, items by ref_code.
+# Items currently in the virtual checked-out location are checked back in;
+# everything else is a transfer.
+@bp.route('/locations/quick-move', methods=['POST'])
+@login_required
+@require_write
+def quick_move():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    data = request.get_json(silent=True) or {}
+    location_code = (data.get('location_code') or '').strip()
+    ref_codes = data.get('ref_codes') or []
+    if not location_code:
+        return error('location_code is required', 400)
+    if not isinstance(ref_codes, list) or not ref_codes:
+        return error('ref_codes must be a non-empty list', 400)
+    if len(ref_codes) > 200:
+        return error('Too many items in one request (max 200)', 400)
+
+    # Location codes are only unique per parent — resolve and detect ambiguity
+    matches = Location.query.filter_by(
+        code=location_code, institution_id=institution_id
+    ).all()
+    if not matches:
+        return error(f'No location with code "{location_code}"', 404)
+    if len(matches) > 1:
+        paths = '; '.join(m.get_full_path() for m in matches)
+        return error(f'Ambiguous location code "{location_code}": {paths}', 409)
+    target = matches[0]
+    if not target.can_store_nodes:
+        return error('This location cannot store archival materials', 422)
+
+    remaining = None
+    if target.capacity is not None:
+        remaining = target.capacity - target.stored_nodes.count()
+
+    from app.models import Node
+    results = []
+    seen = set()
+    for raw in ref_codes:
+        ref = str(raw).strip()
+        if not ref or ref in seen:
+            continue
+        seen.add(ref)
+
+        node = Node.query.filter_by(
+            ref_code=ref, institution_id=institution_id
+        ).first()
+        if not node:
+            results.append({'ref_code': ref, 'status': 'not_found'})
+            continue
+
+        if node.current_location_id == target.id:
+            results.append({'ref_code': ref, 'status': 'already_here',
+                            'title': node.title})
+            continue
+
+        if remaining is not None and remaining <= 0:
+            results.append({'ref_code': ref, 'status': 'at_capacity',
+                            'title': node.title})
+            continue
+
+        prev_id = node.current_location_id
+        prev = Location.query.get(prev_id) if prev_id else None
+        was_checked_out = prev is not None and prev.is_checkout_location()
+
+        db.session.execute(
+            location_node_association.delete().where(
+                location_node_association.c.node_id == node.id
+            )
+        )
+        db.session.execute(
+            location_node_association.insert().values(
+                location_id=target.id, node_id=node.id
+            )
+        )
+        movement_type = 'checked_in' if (was_checked_out or prev is None) else 'transfer'
+        db.session.add(LocationMovement(
+            node_id=node.id,
+            location_id=target.id,
+            from_location_id=prev_id,
+            movement_type=movement_type,
+            moved_by_id=current_user.id,
+        ))
+        _update_node_current_location(node, target.id, db)
+        if remaining is not None:
+            remaining -= 1
+
+        results.append({'ref_code': ref, 'status': 'moved',
+                        'title': node.title,
+                        'movement_type': movement_type})
+
+    db.session.commit()
+    moved = sum(1 for r in results if r['status'] == 'moved')
+    return success({
+        'target': {'id': target.id, 'name': target.name,
+                   'full_path': target.get_full_path()},
+        'moved': moved,
+        'results': results,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Checkout categories & returns
+# ---------------------------------------------------------------------------
+
+# GET /api/v1/locations/checkout-categories
+# The virtual root plus its admin-managed category children.
+@bp.route('/locations/checkout-categories', methods=['GET'])
+@login_required
+def get_checkout_categories():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    root = _get_or_create_checked_out_location(institution_id, db)
+    db.session.commit()
+
+    categories = sorted(root.children.all(), key=lambda c: c.name.lower())
+    return success({
+        'root': serialize_location_stub(root),
+        'categories': [serialize_location_stub(c) for c in categories],
+    })
+
+
+# POST /api/v1/nodes/<id>/return-to-previous
+# Check a checked-out item back in to wherever it was checked out from.
+@bp.route('/nodes/<int:node_id>/return-to-previous', methods=['POST'])
+@login_required
+@require_write
+def return_to_previous(node_id):
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    from app.models import Node
+    node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
+    if not node:
+        return error('Node not found', 404)
+
+    current_loc = (Location.query.get(node.current_location_id)
+                   if node.current_location_id else None)
+    if not current_loc or not current_loc.is_checkout_location():
+        return error('Item is not checked out', 422)
+
+    last_out = LocationMovement.query.filter_by(
+        node_id=node_id, movement_type='checked_out'
+    ).order_by(LocationMovement.moved_at.desc()).first()
+    if not last_out or not last_out.from_location_id:
+        return error('No previous location recorded for this item', 404)
+
+    dest = Location.query.filter_by(
+        id=last_out.from_location_id, institution_id=institution_id
+    ).first()
+    if not dest:
+        return error('The previous location no longer exists', 410)
+    if not dest.can_store_nodes:
+        return error('The previous location can no longer store items', 422)
+    if dest.capacity is not None and dest.stored_nodes.count() >= dest.capacity:
+        return error('The previous location is at full capacity', 409)
+
+    data = request.get_json(silent=True) or {}
+
+    db.session.execute(
+        location_node_association.delete().where(
+            location_node_association.c.node_id == node_id
+        )
+    )
+    db.session.execute(
+        location_node_association.insert().values(
+            location_id=dest.id, node_id=node_id
+        )
+    )
+    movement = LocationMovement(
+        node_id=node_id,
+        location_id=dest.id,
+        from_location_id=current_loc.id,
+        movement_type='checked_in',
+        notes=data.get('notes') or 'Returned to previous location',
+        moved_by_id=current_user.id,
+    )
+    db.session.add(movement)
+    _update_node_current_location(node, dest.id, db)
+    db.session.commit()
+    return success({
+        'message': 'Returned',
+        'location': serialize_location_stub(dest),
+        'movement': movement.to_dict(),
+    })

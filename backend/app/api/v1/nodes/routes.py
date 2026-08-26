@@ -9,7 +9,7 @@ from app.api.v1 import bp
 from app.api.v1.helpers import success, error, require_write
 from app.api.v1.nodes.serializers import (
     serialize_node_stub, serialize_node_detail, serialize_change,
-    serialize_attachment, serialize_note
+    serialize_attachment, serialize_note, compute_has_children
 )
 from app.extensions import db
 from app.models import Node, NodeStatus, NodeChange, NodeAttachment, NodeNote
@@ -47,7 +47,10 @@ def get_tree():
         query = query.where(Node.status == NodeStatus.PUBLISHED)
 
     roots = db.session.execute(query.order_by(Node.ref_code)).scalars().all()
-    return success([serialize_node_stub(n) for n in roots])
+    with_children = compute_has_children(roots)
+    return success([
+        serialize_node_stub(n, has_children=n.id in with_children) for n in roots
+    ])
 
 
 # GET /api/v1/nodes/<id>/children
@@ -63,12 +66,27 @@ def get_children(node_id):
         return error('Node not found', 404)
 
     include_drafts = request.args.get('include_drafts', 'true').lower() == 'true'
-    children_q = node.children.order_by(Node.local_ref)
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 200, type=int), 500)
 
+    children_q = sa.select(Node).where(Node.parent_id == node.id)
     if not include_drafts:
-        children_q = children_q.filter(Node.status == NodeStatus.PUBLISHED)
+        children_q = children_q.where(Node.status == NodeStatus.PUBLISHED)
+    children_q = children_q.order_by(Node.local_ref)
 
-    return success([serialize_node_stub(c) for c in children_q])
+    paginated = db.paginate(children_q, page=page, per_page=per_page, error_out=False)
+    with_children = compute_has_children(paginated.items)
+
+    return success(
+        [serialize_node_stub(c, has_children=c.id in with_children)
+         for c in paginated.items],
+        meta={
+            'page': paginated.page,
+            'per_page': per_page,
+            'total': paginated.total,
+            'pages': paginated.pages,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -139,9 +157,11 @@ def list_nodes():
 
     query = query.order_by(Node.ref_code)
     paginated = db.paginate(query, page=page, per_page=per_page, error_out=False)
+    with_children = compute_has_children(paginated.items)
 
     return success(
-        [serialize_node_stub(n) for n in paginated.items],
+        [serialize_node_stub(n, has_children=n.id in with_children)
+         for n in paginated.items],
         meta={
             'page': paginated.page,
             'per_page': per_page,
@@ -326,7 +346,10 @@ def delete_node(node_id):
     if not node:
         return error('Node not found', 404)
 
-    if node.children.count() > 0:
+    has_kids = db.session.execute(
+        sa.select(sa.exists().where(Node.parent_id == node.id))
+    ).scalar()
+    if has_kids:
         return error('Cannot delete a node that has children. Delete or move children first.', 409)
 
     db.session.delete(node)
@@ -369,11 +392,11 @@ def bulk_move_nodes():
                 ancestor = ancestor.parent
             else:
                 node.parent_id = parent_id
-                _refresh_subtree_refs(node)
+                node.refresh_ref_code()
                 moved.append(nid)
         else:
             node.parent_id = None
-            _refresh_subtree_refs(node)
+            node.refresh_ref_code()
             moved.append(nid)
 
     db.session.commit()
@@ -400,7 +423,10 @@ def bulk_delete_nodes():
         if not node:
             errors.append({'id': nid, 'error': 'Not found'})
             continue
-        if not force and node.children.count() > 0:
+        has_kids = db.session.execute(
+            sa.select(sa.exists().where(Node.parent_id == node.id))
+        ).scalar()
+        if not force and has_kids:
             errors.append({'id': nid, 'error': f'"{node.title or node.ref_code}" has children — use force delete to remove with all descendants'})
             continue
         db.session.delete(node)
@@ -458,13 +484,6 @@ def update_status(node_id):
 # ---------------------------------------------------------------------------
 # Move
 # ---------------------------------------------------------------------------
-
-def _refresh_subtree_refs(node: 'Node') -> None:
-    """Recursively recompute ref_codes for a node and all its descendants."""
-    node.refresh_ref_code()
-    for child in node.children.all():
-        _refresh_subtree_refs(child)
-
 
 # PATCH /api/v1/nodes/<id>/move
 @bp.route('/nodes/<int:node_id>/move', methods=['PATCH'])
@@ -525,7 +544,7 @@ def move_node(node_id):
         )
 
     # Cascade ref_code updates to the whole subtree
-    _refresh_subtree_refs(node)
+    node.refresh_ref_code()
 
     node.updated_by_id = current_user.id
     new_parent_title = node.parent.title if node.parent else 'root'
@@ -1083,6 +1102,7 @@ def get_node_locations(node_id):
                 'level_name': loc.level_name,
                 'full_path': loc.get_full_path(),
                 'can_store_nodes': loc.can_store_nodes,
+                'is_checkout': loc.is_checkout_location(),
             })
     return success(result)
 

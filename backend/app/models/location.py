@@ -5,6 +5,18 @@ import sqlalchemy.orm as so
 from app.extensions import db
 
 
+CHECKOUT_ROOT_CODE = '__checked_out__'
+
+DEFAULT_CHECKOUT_CATEGORIES = [
+    ('Reading room', 'READING-ROOM'),
+    ('Conservation', 'CONSERVATION'),
+    ('Exhibition', 'EXHIBITION'),
+    ('On loan', 'ON-LOAN'),
+    ('In transit', 'IN-TRANSIT'),
+    ('Digitisation', 'DIGITISATION'),
+]
+
+
 location_node_association = sa.Table(
     'location_node_association',
     db.Model.metadata,
@@ -67,6 +79,17 @@ class Location(db.Model):
 
     def __repr__(self):
         return f'<Location {self.get_full_path()}>'
+
+    def is_checkout_location(self) -> bool:
+        """True if this is the virtual 'Checked out' root or any of its
+        descendants (checkout categories). Items stored here count as
+        checked out rather than in physical storage."""
+        current = self
+        while current is not None:
+            if current.code == CHECKOUT_ROOT_CODE and current.parent_id is None:
+                return True
+            current = current.parent
+        return False
 
     def get_full_path(self) -> str:
         parts = []

@@ -13,6 +13,8 @@ def serialize_location_stub(loc: Location) -> dict:
         'stored_count': loc.stored_nodes.count() if loc.can_store_nodes else 0,
         'parent_id': loc.parent_id,
         'has_children': loc.children.count() > 0,
+        'location_type': loc.location_type,
+        'is_checkout': loc.is_checkout_location(),
     }
 
 
@@ -32,6 +34,8 @@ def serialize_location_detail(loc: Location) -> dict:
         'hierarchy_type_id': loc.hierarchy_type_id,
         'parent_id': loc.parent_id,
         'has_children': loc.children.count() > 0,
+        'location_type': loc.location_type,
+        'is_checkout': loc.is_checkout_location(),
         'created_at': loc.created_at.isoformat(),
     }
 

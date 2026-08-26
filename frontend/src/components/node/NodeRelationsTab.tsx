@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, X, User, Building2, UsersRound, Bot,
-  MapPin, Tag, Link, Search, ChevronDown
+  MapPin, Tag, Link, Search, ChevronDown,
+  ArrowUpFromLine, ArrowDownToLine
 } from 'lucide-react'
 import { nodeRelationsApi, agentsApi, locationsApi, classificationsApi, nodesApi } from '@/api'
 import { Spinner, TypePill } from '@/components/ui'
@@ -227,6 +228,7 @@ function AgentsSection({ nodeId }: { nodeId: number }) {
 
 function LocationsSection({ nodeId }: { nodeId: number }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [checkingIn, setCheckingIn] = useState(false)
   const [search, setSearch] = useState('')
   const [notes, setNotes] = useState('')
@@ -244,6 +246,15 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
     staleTime: 0,
   })
 
+  const [checkingOut, setCheckingOut] = useState(false)
+  const [checkoutCategoryId, setCheckoutCategoryId] = useState<string>('')
+
+  const { data: checkoutCats } = useQuery({
+    queryKey: ['checkout-categories'],
+    queryFn: () => locationsApi.getCheckoutCategories().then(r => r.data.data),
+    enabled: checkingOut,
+  })
+
   // Use check-in which enforces single location
   const checkInMutation = useMutation({
     mutationFn: () => locationsApi.checkIn(selectedLoc.id, nodeId, notes || undefined),
@@ -256,27 +267,51 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
   })
 
   const checkOutMutation = useMutation({
-    mutationFn: (locationId: number) => locationsApi.checkOut(locationId, nodeId),
+    mutationFn: (locationId: number) =>
+      locationsApi.checkOut(locationId, nodeId, undefined,
+        checkoutCategoryId ? parseInt(checkoutCategoryId) : undefined),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['node-locations', nodeId] })
       queryClient.invalidateQueries({ queryKey: ['node', nodeId] })
       queryClient.invalidateQueries({ queryKey: ['location-overview'] })
+      setCheckingOut(false)
+      setCheckoutCategoryId('')
+    },
+  })
+
+  const returnMutation = useMutation({
+    mutationFn: () => locationsApi.returnToPrevious(nodeId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['node-locations', nodeId] })
+      queryClient.invalidateQueries({ queryKey: ['node', nodeId] })
+      queryClient.invalidateQueries({ queryKey: ['location-overview'] })
+    },
+    onError: (err: any) => {
+      alert(err?.response?.data?.message ?? 'Return failed')
     },
   })
 
   if (isLoading) return <div className={styles.sectionLoading}><Spinner size={16} /></div>
 
   const current = linked?.[0]  // only ever one
-  const isCheckedOut = current && (current as any).code === '__checked_out__'
+  const isCheckedOut = current &&
+    ((current as any).is_checkout ?? (current as any).code === '__checked_out__')
 
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
         <span className={styles.sectionLabel}><MapPin size={13} /> Storage location</span>
-        {!checkingIn && (
-          <button className="btn btn-ghost btn-sm" onClick={() => setCheckingIn(true)}>
-            <Plus size={13} /> {current ? 'Move' : 'Check in'}
-          </button>
+        {!checkingIn && !checkingOut && (
+          <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
+            {current && !isCheckedOut && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setCheckingOut(true)}>
+                <ArrowUpFromLine size={13} /> Check out
+              </button>
+            )}
+            <button className="btn btn-ghost btn-sm" onClick={() => setCheckingIn(true)}>
+              <Plus size={13} /> {current ? 'Move' : 'Check in'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -285,28 +320,72 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
         <p className={styles.emptyState}>Not checked in to any location.</p>
       )}
       {current && (
-        <div className={styles.locationItem}>
-          <MapPin size={13} className={styles.locationItemIcon} />
+        <div className={`${styles.locationItem} ${isCheckedOut ? styles.locationItemCheckedOut : ''}`}>
+          <span className={styles.locationItemIcon}>
+            {isCheckedOut ? <ArrowUpFromLine size={13} /> : <MapPin size={13} />}
+          </span>
           <div className={styles.locationItemInfo}>
-            <span className={styles.locationItemName}>
-              {(current as any).full_path ?? current.name}
-            </span>
-            {isCheckedOut && (
-              <span style={{ fontSize: '10px', fontWeight: 700, marginLeft: 'var(--space-2)',
-                padding: '1px 5px', borderRadius: 3,
-                background: 'color-mix(in srgb, #d97706 10%, transparent)', color: '#d97706',
-                border: '1px solid color-mix(in srgb, #d97706 25%, transparent)' }}>
-                CHECKED OUT
+            {isCheckedOut ? (
+              <span className={styles.locationItemName}>
+                {current.name}
               </span>
+            ) : (
+              <button
+                className={styles.locationItemLink}
+                onClick={() => navigate('/app/locations', { state: { selectLocationId: current.id } })}
+                title="Open this location"
+              >
+                {(current as any).full_path ?? current.name}
+              </button>
+            )}
+            {isCheckedOut && (
+              <span className={styles.checkedOutBadge}>Checked out</span>
             )}
           </div>
-          {!isCheckedOut && (
-            <button className="btn btn-ghost btn-sm btn-icon"
-              title="Check out"
-              onClick={() => { if (confirm('Check out this item?')) checkOutMutation.mutate(current.id) }}>
-              <X size={13} />
+          {isCheckedOut && (
+            <button className="btn btn-secondary btn-sm"
+              title="Check back in to where it was checked out from"
+              disabled={returnMutation.isPending}
+              onClick={() => returnMutation.mutate()}>
+              {returnMutation.isPending ? <Spinner size={13} /> : <><ArrowDownToLine size={13} /> Return</>}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Check-out reason chooser */}
+      {checkingOut && current && !isCheckedOut && (
+        <div className={styles.movePanel}>
+          <div className={styles.movePanelHeader}>
+            <span><ArrowUpFromLine size={12} /> Check out — reason</span>
+            <button className="btn btn-ghost btn-sm btn-icon"
+              onClick={() => { setCheckingOut(false); setCheckoutCategoryId('') }}>
+              <X size={12} />
+            </button>
+          </div>
+          <div className={styles.checkoutPanelBody}>
+            <select
+              value={checkoutCategoryId}
+              onChange={e => setCheckoutCategoryId(e.target.value)}
+              className={styles.checkoutSelect}
+            >
+              <option value="">Uncategorised</option>
+              {(checkoutCats as any)?.categories?.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <div className={styles.checkoutPanelActions}>
+              <button className="btn btn-ghost btn-sm"
+                onClick={() => { setCheckingOut(false); setCheckoutCategoryId('') }}>
+                Cancel
+              </button>
+              <button className="btn btn-primary btn-sm"
+                disabled={checkOutMutation.isPending}
+                onClick={() => checkOutMutation.mutate(current.id)}>
+                {checkOutMutation.isPending ? <Spinner size={13} /> : <><ArrowUpFromLine size={13} /> Check out</>}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -703,15 +782,31 @@ export function NodeLocationsTab({ nodeId }: { nodeId: number }) {
 }
 
 function CurrentLocationName({ locationId }: { locationId: number }) {
+  const navigate = useNavigate()
   const { data } = useQuery({
     queryKey: ['location', locationId],
     queryFn: () => locationsApi.get(locationId).then((r: any) => r.data.data),
   })
   if (!data) return <Spinner size={12} />
+  const isVirtual = (data as any).code === '__checked_out__'
+  if (isVirtual) {
+    return (
+      <span style={{ color: 'var(--color-ink-muted)' }}>
+        {(data as any).full_path ?? (data as any).name}
+      </span>
+    )
+  }
   return (
-    <span style={{ color: 'var(--color-ink-muted)' }}>
+    <button
+      onClick={() => navigate('/app/locations', { state: { selectLocationId: locationId } })}
+      title="Open this location"
+      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+        font: 'inherit', color: 'var(--color-accent)', textDecoration: 'underline',
+        textDecorationColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',
+        textUnderlineOffset: 2 }}
+    >
       {(data as any).full_path ?? (data as any).name}
-    </span>
+    </button>
   )
 }
 

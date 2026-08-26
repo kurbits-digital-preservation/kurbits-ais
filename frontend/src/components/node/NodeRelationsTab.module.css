@@ -359,3 +359,92 @@
   font-family: var(--font-sans);
 }
 .schemeBack:hover { background: color-mix(in srgb, var(--color-accent-bg) 70%, var(--color-bg)); }
+/* ─── Storage location: current item ─────────────────────────────── */
+.emptyState {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  font-style: italic;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.locationItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin: 0 var(--space-4) var(--space-2);
+  background: var(--color-surface);
+}
+.locationItemCheckedOut {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+
+.locationItemIcon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--color-ink-faint);
+}
+.locationItemCheckedOut .locationItemIcon {
+  color: var(--color-warning);
+}
+
+.locationItemInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.locationItemName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.locationItemLink {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+.locationItemLink:hover { text-decoration: underline; }
+
+.checkedOutBadge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning);
+  color: #fff;
+}
+
+/* ─── Check-out reason panel (reuses .movePanel wrapper) ──────────── */
+.checkoutPanelBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.checkoutSelect {
+  width: 100%;
+  font-size: var(--text-sm);
+}
+
+.checkoutPanelActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}

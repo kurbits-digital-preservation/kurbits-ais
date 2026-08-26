@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import { ChevronRight, ChevronDown, Loader2, FilePlus } from 'lucide-react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { nodesApi } from '@/api'
 import type { NodeStub } from '@/types'
 import styles from './NodeTree.module.css'
@@ -32,11 +32,25 @@ interface NodeRowProps {
 function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onAddChild, selectedIds, onToggleSelect }: NodeRowProps) {
   const expanded = expandedIds.has(node.id)
 
-  const { data: childrenData, isLoading } = useQuery({
+  const {
+    data: childrenPages,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['node-children', node.id],
-    queryFn: () => nodesApi.getChildren(node.id).then(r => r.data.data),
+    queryFn: ({ pageParam }) =>
+      nodesApi.getChildren(node.id, pageParam).then(r => r.data),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.meta && lastPage.meta.page < lastPage.meta.pages
+        ? lastPage.meta.page + 1
+        : undefined,
     enabled: expanded && node.has_children,
   })
+
+  const childrenData = childrenPages?.pages.flatMap(page => page.data)
 
   const toggle = useCallback((e: React.MouseEvent) => {
     e.stopPropagation()
@@ -121,6 +135,21 @@ function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onA
               onToggleSelect={onToggleSelect}
             />
           ))}
+
+          {hasNextPage && (
+            <button
+              className={styles.loadMore}
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              style={{ paddingLeft: `${12 + (depth + 1) * 18}px` }}
+            >
+              {isFetchingNextPage ? (
+                <Loader2 size={12} className={styles.spinner} />
+              ) : (
+                'Show more…'
+              )}
+            </button>
+          )}
         </div>
       )}
     </div>
