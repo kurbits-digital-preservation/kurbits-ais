@@ -102,6 +102,7 @@ def serialize_node_detail(node: Node) -> dict:
         'attachments': [serialize_attachment(a) for a in node.attachments
                         if a.representation_id is None],
         'notes': [serialize_note(n) for n in node.notes],
+        'identifiers': [i.to_dict() for i in node.identifiers],
     }
 
 

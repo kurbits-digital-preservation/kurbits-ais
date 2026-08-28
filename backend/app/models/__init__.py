@@ -14,6 +14,8 @@ from app.models.node import (
     NodeStatus,
     NodeRelationType,
     node_association,
+    IdentifierScheme,
+    NodeIdentifier,
 )
 from app.models.agent import (
     Agent,
@@ -78,10 +80,13 @@ __all__ = [
     'Bookmark',
     'InstitutionAIConfig',
     'BackgroundTask',
+    'NodeIdentifier',
+    'IdentifierScheme',
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 
 from app.models.geo import AgentPlace, NodePlace, Tag, node_tags_table, agent_tags_table, PlaceType, TagCategory  # noqa: F401
 from app.models.flag import NodeFlag, FLAG_TYPES, SEVERITIES, STATUSES  # noqa: F401
+
 
 from app.models.acquisitions import SubmissionAgreement, SAAttachment, Delivery, Accession, accession_nodes, DeliveryChecklistTemplate  # noqa: F401

@@ -2328,3 +2328,378 @@ def transcribe_attachment(node_id, attachment_id):
     run_in_background(current_app._get_current_object(), task.id, run_whisper)
 
     return success({'task_id': task.id, 'status': 'pending', 'model_size': model_size}, 201)
+
+# ---------------------------------------------------------------------------
+# Identifiers
+# ---------------------------------------------------------------------------
+
+# GET /api/v1/nodes/<id>/identifiers
+@bp.route('/nodes/<int:node_id>/identifiers', methods=['GET'])
+@login_required
+def list_node_identifiers(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+    return success([i.to_dict() for i in node.identifiers])
+
+
+# POST /api/v1/nodes/<id>/identifiers
+@bp.route('/nodes/<int:node_id>/identifiers', methods=['POST'])
+@login_required
+@require_write
+def add_node_identifier(node_id):
+    from app.models.node import NodeIdentifier, IdentifierScheme
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    scheme_id = data.get('scheme_id')
+    value = (data.get('value') or '').strip()
+    if not scheme_id:
+        return error('scheme_id is required', 400)
+    if not value:
+        return error('value is required', 400)
+
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Identifier scheme not found', 404)
+
+    # Global uniqueness per scheme
+    clash = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
+    if clash:
+        return error(
+            f'That {scheme.name} identifier is already used by another record.', 409)
+
+    make_primary = data.get('is_primary', False)
+    if make_primary:
+        for existing in node.identifiers:
+            if existing.scheme_id == scheme_id:
+                existing.is_primary = False
+
+    ident = NodeIdentifier(
+        node_id=node_id,
+        scheme_id=scheme_id,
+        value=value,
+        is_primary=make_primary,
+        note=data.get('note'),
+        created_by_id=current_user.id,
+    )
+    db.session.add(ident)
+    db.session.commit()
+    return success(ident.to_dict(), 201)
+
+
+# PATCH /api/v1/nodes/<id>/identifiers/<ident_id>
+@bp.route('/nodes/<int:node_id>/identifiers/<int:ident_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_node_identifier(node_id, ident_id):
+    from app.models.node import NodeIdentifier
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    ident = NodeIdentifier.query.filter_by(id=ident_id, node_id=node_id).first()
+    if not ident:
+        return error('Identifier not found', 404)
+
+    data = request.get_json(silent=True) or {}
+
+    if 'value' in data:
+        new_value = (data['value'] or '').strip()
+        if not new_value:
+            return error('value cannot be empty', 400)
+        if new_value != ident.value:
+            clash = NodeIdentifier.query.filter_by(
+                scheme_id=ident.scheme_id, value=new_value).first()
+            if clash:
+                return error('That identifier value is already in use.', 409)
+        ident.value = new_value
+
+    if 'note' in data:
+        ident.note = data['note']
+
+    if data.get('is_primary'):
+        for existing in node.identifiers:
+            if existing.scheme_id == ident.scheme_id and existing.id != ident.id:
+                existing.is_primary = False
+        ident.is_primary = True
+    elif 'is_primary' in data and not data['is_primary']:
+        ident.is_primary = False
+
+    db.session.commit()
+    return success(ident.to_dict())
+
+
+# DELETE /api/v1/nodes/<id>/identifiers/<ident_id>
+@bp.route('/nodes/<int:node_id>/identifiers/<int:ident_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_node_identifier(node_id, ident_id):
+    from app.models.node import NodeIdentifier
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    ident = NodeIdentifier.query.filter_by(id=ident_id, node_id=node_id).first()
+    if not ident:
+        return error('Identifier not found', 404)
+
+    db.session.delete(ident)
+    db.session.commit()
+    return success({'message': 'Identifier deleted'})
+
+
+# POST /api/v1/nodes/<id>/identifiers/generate
+# Mint an identifier by calling the scheme's configured external service.
+@bp.route('/nodes/<int:node_id>/identifiers/generate', methods=['POST'])
+@login_required
+@require_write
+def generate_node_identifier(node_id):
+    from app.models.node import NodeIdentifier, IdentifierScheme
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    scheme_id = data.get('scheme_id')
+    if not scheme_id:
+        return error('scheme_id is required', 400)
+
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Identifier scheme not found', 404)
+    if not scheme.generator_url:
+        return error(f'{scheme.name} has no generator service configured.', 422)
+
+    # Build the substitution context
+    target_url = ''
+    if scheme.target_url_template:
+        target_url = (scheme.target_url_template
+                      .replace('{ref_code}', node.ref_code or '')
+                      .replace('{node_id}', str(node.id)))
+    ctx = {
+        'node_id': str(node.id),
+        'ref_code': node.ref_code or '',
+        'title': node.title or '',
+        'target_url': target_url,
+        'shoulder': scheme.generator_shoulder or '',
+    }
+
+    def _subst(obj):
+        """Recursively substitute {placeholders} in a JSON-ish body template."""
+        if isinstance(obj, str):
+            out = obj
+            for k, v in ctx.items():
+                out = out.replace('{' + k + '}', v)
+            return out
+        if isinstance(obj, dict):
+            return {k: _subst(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_subst(v) for v in obj]
+        return obj
+
+    # Default body mirrors the simple contract; a template overrides it entirely
+    if scheme.generator_body_template:
+        body = _subst(scheme.generator_body_template)
+    else:
+        body = {'node_id': node.id, 'ref_code': node.ref_code, 'title': node.title}
+
+    headers = {'Content-Type': 'application/json'}
+    if scheme.generator_headers:
+        headers.update(scheme.generator_headers)
+
+    import requests
+    try:
+        resp = requests.post(
+            scheme.generator_url,
+            json=body,
+            headers=headers,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except requests.HTTPError as e:
+        detail = ''
+        try:
+            detail = f' — {e.response.text[:200]}'
+        except Exception:
+            pass
+        return error(f'Generator service returned {e.response.status_code}{detail}', 502)
+    except Exception as e:
+        return error(f'Generator service error: {str(e)}', 502)
+
+    # Extract the value via the configured response path
+    def _resolve(obj, path):
+        if not path:
+            return obj
+        for key in path.split('.'):
+            if isinstance(obj, dict):
+                obj = obj.get(key)
+            elif isinstance(obj, list) and key.isdigit():
+                obj = obj[int(key)] if int(key) < len(obj) else None
+            else:
+                return None
+        return obj
+
+    raw = _resolve(payload, scheme.generator_response_path or 'value')
+    value = (str(raw).strip() if raw is not None else '')
+    if not value:
+        path_hint = scheme.generator_response_path or 'value'
+        return error(
+            f'Could not find the identifier at "{path_hint}" in the service response.', 502)
+
+    clash = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
+    if clash:
+        return error(
+            f'Generator returned a {scheme.name} value that is already in use.', 409)
+
+    ident = NodeIdentifier(
+        node_id=node_id,
+        scheme_id=scheme_id,
+        value=value,
+        is_primary=data.get('is_primary', False),
+        note=data.get('note'),
+        created_by_id=current_user.id,
+    )
+    db.session.add(ident)
+    db.session.commit()
+    return success(ident.to_dict(), 201)
+
+
+# ---------------------------------------------------------------------------
+# Identifier schemes (admin-managed vocabulary)
+# ---------------------------------------------------------------------------
+
+# GET /api/v1/identifier-schemes
+@bp.route('/identifier-schemes', methods=['GET'])
+@login_required
+def list_identifier_schemes():
+    from app.models.node import IdentifierScheme
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
+
+    q = IdentifierScheme.query.filter_by(institution_id=institution_id)
+    if not include_inactive:
+        q = q.filter_by(is_active=True)
+    schemes = q.order_by(IdentifierScheme.sort_order, IdentifierScheme.name).all()
+    return success([s.to_dict() for s in schemes])
+
+
+# POST /api/v1/identifier-schemes
+@bp.route('/identifier-schemes', methods=['POST'])
+@login_required
+@require_write
+def create_identifier_scheme():
+    from app.models.node import IdentifierScheme
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return error('name is required', 400)
+
+    exists = IdentifierScheme.query.filter_by(
+        institution_id=institution_id, name=name).first()
+    if exists:
+        return error(f'A scheme named "{name}" already exists.', 409)
+
+    scheme = IdentifierScheme(
+        institution_id=institution_id,
+        name=name,
+        description=data.get('description'),
+        url_template=(data.get('url_template') or '').strip() or None,
+        generator_url=(data.get('generator_url') or '').strip() or None,
+        generator_headers=data.get('generator_headers') or None,
+        generator_body_template=data.get('generator_body_template') or None,
+        generator_response_path=(data.get('generator_response_path') or '').strip() or None,
+        generator_shoulder=(data.get('generator_shoulder') or '').strip() or None,
+        target_url_template=(data.get('target_url_template') or '').strip() or None,
+        is_active=data.get('is_active', True),
+        sort_order=data.get('sort_order', 0),
+    )
+    db.session.add(scheme)
+    db.session.commit()
+    return success(scheme.to_dict(), 201)
+
+
+# PATCH /api/v1/identifier-schemes/<id>
+@bp.route('/identifier-schemes/<int:scheme_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_identifier_scheme(scheme_id):
+    from app.models.node import IdentifierScheme
+    institution_id = current_user.active_institution_id
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Scheme not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        new_name = (data['name'] or '').strip()
+        if not new_name:
+            return error('name cannot be empty', 400)
+        clash = IdentifierScheme.query.filter_by(
+            institution_id=institution_id, name=new_name).filter(
+            IdentifierScheme.id != scheme_id).first()
+        if clash:
+            return error(f'A scheme named "{new_name}" already exists.', 409)
+        scheme.name = new_name
+    if 'description' in data:
+        scheme.description = data['description']
+    if 'url_template' in data:
+        scheme.url_template = (data['url_template'] or '').strip() or None
+    if 'generator_url' in data:
+        scheme.generator_url = (data['generator_url'] or '').strip() or None
+    if 'generator_headers' in data:
+        scheme.generator_headers = data['generator_headers'] or None
+    if 'generator_body_template' in data:
+        scheme.generator_body_template = data['generator_body_template'] or None
+    if 'generator_response_path' in data:
+        scheme.generator_response_path = (data['generator_response_path'] or '').strip() or None
+    if 'generator_shoulder' in data:
+        scheme.generator_shoulder = (data['generator_shoulder'] or '').strip() or None
+    if 'target_url_template' in data:
+        scheme.target_url_template = (data['target_url_template'] or '').strip() or None
+    if 'is_active' in data:
+        scheme.is_active = data['is_active']
+    if 'sort_order' in data:
+        scheme.sort_order = data['sort_order']
+
+    db.session.commit()
+    return success(scheme.to_dict())
+
+
+# DELETE /api/v1/identifier-schemes/<id>
+@bp.route('/identifier-schemes/<int:scheme_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_identifier_scheme(scheme_id):
+    from app.models.node import IdentifierScheme, NodeIdentifier
+    institution_id = current_user.active_institution_id
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Scheme not found', 404)
+
+    in_use = NodeIdentifier.query.filter_by(scheme_id=scheme_id).count()
+    if in_use > 0:
+        return error(
+            f'{in_use} record(s) use this scheme. Deactivate it instead of deleting.', 409)
+
+    db.session.delete(scheme)
+    db.session.commit()
+    return success({'message': 'Scheme deleted'})

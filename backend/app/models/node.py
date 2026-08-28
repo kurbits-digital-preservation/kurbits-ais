@@ -160,6 +160,11 @@ class Node(db.Model):
         'NodeNote', back_populates='node', cascade='all, delete-orphan'
     )
 
+    identifiers: so.Mapped[List['NodeIdentifier']] = so.relationship(
+        'NodeIdentifier', back_populates='node', cascade='all, delete-orphan',
+        order_by='NodeIdentifier.created_at'
+    )
+
     __table_args__ = (
         sa.UniqueConstraint('local_ref', 'parent_id', 'institution_id', name='uq_local_ref_per_parent'),
         # Serves children lookups AND their ORDER BY local_ref in one index
@@ -441,3 +446,118 @@ class NodeNote(db.Model):
 
     def __repr__(self):
         return f'<NodeNote {self.note_type} on node {self.node_id}>'
+
+
+
+
+class IdentifierScheme(db.Model):
+    """Admin-managed list of identifier schemes (ARK, Handle, DOI, ISBN, …).
+
+    Mirrors the NodeRelationType pattern: one configurable vocabulary per
+    institution, referenced by NodeIdentifier rows.
+    """
+    __tablename__ = 'identifier_schemes'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    institution_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('institutions.id', ondelete='CASCADE'))
+    name: so.Mapped[str] = so.mapped_column(sa.String(100))          # e.g. "ARK"
+    description: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+
+    # Optional URL template for resolving the identifier, {value} is substituted.
+    # e.g. "https://n2t.net/{value}" or "https://doi.org/{value}"
+    url_template: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
+
+    # Optional external service endpoint the "fetch" hook POSTs to, to mint a value.
+    generator_url: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
+    # Auth/content headers sent with the mint request, e.g. {"Authorization": "Bearer …"}
+    generator_headers: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True)
+    # JSON body template. Placeholders {node_id} {ref_code} {title} {target_url} {shoulder}
+    # are substituted. e.g. {"shoulder": "{shoulder}", "target_url": "{target_url}", "label": "{title}"}
+    generator_body_template: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True)
+    # Dot-path to the minted value in the response, e.g. "pid" or "data.identifier"
+    generator_response_path: so.Mapped[Optional[str]] = so.mapped_column(sa.String(200), nullable=True)
+    # Fixed shoulder/namespace for this scheme (substituted into {shoulder})
+    generator_shoulder: so.Mapped[Optional[str]] = so.mapped_column(sa.String(200), nullable=True)
+    # Template to build the target_url from a node, {ref_code} {node_id} substituted
+    target_url_template: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
+
+    is_active: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=True)
+    sort_order: so.Mapped[int] = so.mapped_column(sa.Integer, default=0)
+
+    __table_args__ = (
+        sa.UniqueConstraint('institution_id', 'name', name='uq_identifier_scheme_per_institution'),
+    )
+
+    def __repr__(self):
+        return f'<IdentifierScheme {self.name}>'
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'url_template': self.url_template,
+            'generator_url': self.generator_url,
+            'generator_headers': self.generator_headers or {},
+            'generator_body_template': self.generator_body_template or {},
+            'generator_response_path': self.generator_response_path,
+            'generator_shoulder': self.generator_shoulder,
+            'target_url_template': self.target_url_template,
+            'has_generator': bool(self.generator_url),
+            'is_active': self.is_active,
+            'sort_order': self.sort_order,
+        }
+
+
+class NodeIdentifier(db.Model):
+    """A single external/persistent identifier attached to a node.
+
+    A node can have many identifiers (one ARK, one DOI, several legacy IDs…).
+    Identifier values are globally unique per scheme: no two nodes share an ARK.
+    """
+    __tablename__ = 'node_identifiers'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    node_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('nodes.id', ondelete='CASCADE'))
+    scheme_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('identifier_schemes.id', ondelete='RESTRICT'))
+    value: so.Mapped[str] = so.mapped_column(sa.String(500))
+    is_primary: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=False)
+    note: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+
+    created_at: so.Mapped[datetime] = so.mapped_column(
+        default=lambda: datetime.now(timezone.utc))
+    created_by_id: so.Mapped[Optional[int]] = so.mapped_column(
+        sa.ForeignKey('users.id', name='fk_node_identifier_created_by'), nullable=True)
+
+    node: so.Mapped['Node'] = so.relationship('Node', back_populates='identifiers')
+    scheme: so.Mapped['IdentifierScheme'] = so.relationship('IdentifierScheme')
+    created_by: so.Mapped[Optional['User']] = so.relationship('User', foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        # Global uniqueness of a value within a scheme
+        sa.UniqueConstraint('scheme_id', 'value', name='uq_identifier_value_per_scheme'),
+        sa.Index('ix_node_identifiers_node', 'node_id'),
+    )
+
+    def __repr__(self):
+        return f'<NodeIdentifier {self.value}>'
+
+    def to_dict(self) -> dict:
+        url = None
+        if self.scheme and self.scheme.url_template:
+            url = self.scheme.url_template.replace('{value}', self.value)
+        return {
+            'id': self.id,
+            'node_id': self.node_id,
+            'scheme_id': self.scheme_id,
+            'scheme_name': self.scheme.name if self.scheme else None,
+            'value': self.value,
+            'is_primary': self.is_primary,
+            'note': self.note,
+            'resolve_url': url,
+            'created_at': self.created_at.isoformat(),
+            'created_by': self.created_by.username if self.created_by else None,
+        }

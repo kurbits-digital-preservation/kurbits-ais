@@ -25,7 +25,8 @@ import RapidEntryModal from '@/components/node/RapidEntryModal'
 import type { NodeStub, NodeDetail, NodeStatus } from '@/types'
 import styles from './ResourcesPage.module.css'
 import RepresentationsTab from '@/components/node/RepresentationsTab'
-import { Layers, Copy } from 'lucide-react'
+import NodeIdentifiersTab from '@/components/node/NodeIdentifiersTab'
+import { Layers, Copy, Fingerprint } from 'lucide-react'
 import BookmarkButton from '@/components/layout/BookmarkButton'
 import OcrButton from '@/components/node/OcrButton'
 
@@ -682,7 +683,7 @@ function NodeDetailPanel({
   onSelectChild: (node: NodeStub) => void
 }) {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history' | 'representations'>('details')
+  const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history' | 'representations' | 'identifiers'>('details')
   const [showMove, setShowMove] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -800,6 +801,7 @@ function NodeDetailPanel({
   {[
     { key: 'details',         icon: <FileText size={13} />,   label: 'Details' },
     { key: 'relations',       icon: <Link size={13} />,       label: 'Relations' },
+    { key: 'identifiers',     icon: <Fingerprint size={13} />, label: `Identifiers${data.identifiers?.length ? ` (${data.identifiers.length})` : ''}` },
     { key: 'locations',       icon: <MapPin size={13} />,     label: 'Locations' },
     { key: 'classifications', icon: <Tag size={13} />,        label: 'Classifications' },
     { key: 'places',          icon: <MapPin size={13} />,     label: 'Places' },
@@ -835,6 +837,7 @@ function NodeDetailPanel({
       <div className={styles.detailContent}>
         {activeTab === 'details'     && <DetailsTab node={data} onSelectChild={onSelectChild} />}
         {activeTab === 'relations'       && <NodeRelationsTab nodeId={nodeId} />}
+        {activeTab === 'identifiers'     && <NodeIdentifiersTab nodeId={nodeId} />}
         {activeTab === 'locations'       && <NodeLocationsTab nodeId={nodeId} />}
         {activeTab === 'classifications' && <NodeClassificationsTab nodeId={nodeId} />}
         {activeTab === 'places'          && <PlacesPanel entityType="node" entityId={nodeId} />}
@@ -1266,7 +1269,6 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                 </button>
               </div>
             </div>
-
 
             {/* Expanded technical metadata panel */}
             {isExpanded && (

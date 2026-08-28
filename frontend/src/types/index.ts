@@ -121,6 +121,31 @@ export interface NodeDetail extends NodeStub {
   notes: NodeNote[]
   is_object: boolean
   representations: RepresentationStub[] 
+  identifiers: NodeIdentifier[]
+}
+
+export interface NodeIdentifier {
+  id: number
+  node_id: number
+  scheme_id: number
+  scheme_name: string | null
+  value: string
+  is_primary: boolean
+  note: string | null
+  resolve_url: string | null
+  created_at: string
+  created_by: string | null
+}
+
+export interface IdentifierScheme {
+  id: number
+  name: string
+  description: string | null
+  url_template: string | null
+  generator_url: string | null
+  has_generator: boolean
+  is_active: boolean
+  sort_order: number
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────

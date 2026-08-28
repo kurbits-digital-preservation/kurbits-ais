@@ -113,6 +113,12 @@ ocr: (nodeId: number, attachmentId: number, forceOcr: boolean = false) =>
 getTextUrl: (nodeId: number, attachmentId: number) =>
   `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/text`,
 
+  getIdentifiers: (nodeId: number) => api.get(`/nodes/${nodeId}/identifiers`),
+  addIdentifier: (nodeId: number, data: any) => api.post(`/nodes/${nodeId}/identifiers`, data),
+  updateIdentifier: (nodeId: number, id: number, data: any) => api.patch(`/nodes/${nodeId}/identifiers/${id}`, data),
+  deleteIdentifier: (nodeId: number, id: number) => api.delete(`/nodes/${nodeId}/identifiers/${id}`),
+  generateIdentifier: (nodeId: number, schemeId: number) => api.post(`/nodes/${nodeId}/identifiers/generate`, { scheme_id: schemeId }),
+
 transcribe: (nodeId: number, attachmentId: number, modelSize: string = 'medium') =>
   api.post<{ status: string; data: { task_id: string; status: string; model_size: string } }>(
     `/nodes/${nodeId}/attachments/${attachmentId}/transcribe`,
@@ -796,4 +802,12 @@ export const portalApi = {
 
   bulkSync: () =>
     api.post<{ status: string; data: any }>('/portal/sync'),
+}
+
+export const identifierSchemesApi = {
+  list: (includeInactive = false) =>
+    api.get('/identifier-schemes', { params: { include_inactive: includeInactive } }),
+  create: (data: any) => api.post('/identifier-schemes', data),
+  update: (id: number, data: any) => api.patch(`/identifier-schemes/${id}`, data),
+  delete: (id: number) => api.delete(`/identifier-schemes/${id}`),
 }
