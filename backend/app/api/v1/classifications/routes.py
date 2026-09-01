@@ -10,6 +10,7 @@ from app.api.v1.classifications.serializers import (
 from app.api.v1.nodes.serializers import serialize_node_stub
 from app.extensions import db
 from app.models import Classification, ClassificationChange
+from app.models.classification import BpmnTaskLink, RecordsVocabularyTerm, DEFAULT_RECORDS_VOCAB
 from app.models.classification import classification_node_association
 import sqlalchemy as sa
 
@@ -560,11 +561,26 @@ def retire_classification(classification_id):
     return success(serialize_classification_detail(c))
 
 
-# PATCH /api/v1/classifications/<id>/diagram
-@bp.route('/classifications/<int:classification_id>/diagram', methods=['PATCH'])
+# GET /api/v1/classifications/<id>/bpmn
+# Returns the raw BPMN 2.0 XML for this classification (or null).
+@bp.route('/classifications/<int:classification_id>/bpmn', methods=['GET'])
+@login_required
+def get_classification_bpmn(classification_id):
+    institution_id = current_user.active_institution_id
+    c = Classification.query.filter_by(
+        id=classification_id, institution_id=institution_id
+    ).first()
+    if not c:
+        return error('Classification not found', 404)
+    return success({'bpmn_xml': c.bpmn_xml})
+
+
+# PATCH /api/v1/classifications/<id>/bpmn
+# Save (or clear) the BPMN 2.0 XML for this classification.
+@bp.route('/classifications/<int:classification_id>/bpmn', methods=['PATCH'])
 @login_required
 @require_write
-def update_diagram(classification_id):
+def update_classification_bpmn(classification_id):
     institution_id = current_user.active_institution_id
     c = Classification.query.filter_by(
         id=classification_id, institution_id=institution_id
@@ -573,9 +589,82 @@ def update_diagram(classification_id):
         return error('Classification not found', 404)
 
     data = request.get_json(silent=True) or {}
-    c.diagram = data.get('diagram') or None
+    xml = data.get('bpmn_xml')
+    c.bpmn_xml = xml.strip() if xml and xml.strip() else None
+
+    # Rebuild the task→classification link projection. The frontend extracts
+    # links from the diagram's extensionElements and sends them here; the XML
+    # itself remains the source of truth.
+    BpmnTaskLink.query.filter_by(diagram_classification_id=c.id).delete()
+    if c.bpmn_xml:
+        records = data.get('task_links') or []
+        seen = set()
+        for rec in records:
+            task_id = (rec.get('task_bpmn_id') or '').strip()
+            if not task_id or task_id in seen:
+                continue
+            seen.add(task_id)
+
+            # Classification link is OPTIONAL — a record exists by being drawn.
+            linked_id = rec.get('linked_classification_id')
+            if linked_id:
+                target = Classification.query.filter_by(
+                    id=linked_id, institution_id=institution_id).first()
+                if not target:
+                    linked_id = None
+
+            db.session.add(BpmnTaskLink(
+                diagram_classification_id=c.id,
+                linked_classification_id=linked_id,
+                task_bpmn_id=task_id,
+                task_label=(rec.get('task_label') or '').strip()[:300] or None,
+                retention_period=(rec.get('retention_period') or '').strip()[:120] or None,
+                retention_rule=(rec.get('retention_rule') or '').strip()[:200] or None,
+                disposal_action=(rec.get('disposal_action') or '').strip()[:120] or None,
+                security_class=(rec.get('security_class') or '').strip()[:120] or None,
+                medium_format=(rec.get('medium_format') or '').strip()[:120] or None,
+                legal_basis=(rec.get('legal_basis') or '').strip()[:300] or None,
+                description=(rec.get('description') or '').strip() or None,
+                produced_by=(rec.get('produced_by') or '').strip()[:500] or None,
+                used_by=(rec.get('used_by') or '').strip()[:500] or None,
+            ))
+
     db.session.commit()
-    return success(serialize_classification_detail(c))
+    return success({'bpmn_xml': c.bpmn_xml, 'has_bpmn': bool(c.bpmn_xml)})
+
+
+# GET /api/v1/classifications/<id>/produced-by
+# Reverse lookup: which process diagrams have a task linking to THIS class.
+@bp.route('/classifications/<int:classification_id>/produced-by', methods=['GET'])
+@login_required
+def get_classification_produced_by(classification_id):
+    institution_id = current_user.active_institution_id
+    c = Classification.query.filter_by(
+        id=classification_id, institution_id=institution_id
+    ).first()
+    if not c:
+        return error('Classification not found', 404)
+
+    links = BpmnTaskLink.query.filter_by(
+        linked_classification_id=classification_id).all()
+    result = []
+    for link in links:
+        diagram_c = link.diagram_classification
+        if not diagram_c:
+            continue
+        result.append({
+            'task_bpmn_id': link.task_bpmn_id,
+            'task_label': link.task_label,
+            'diagram_classification_id': diagram_c.id,
+            'diagram_name': diagram_c.name,
+            'diagram_code': diagram_c.get_full_code(),
+            'retention_period': link.retention_period,
+            'retention_rule': link.retention_rule,
+            'disposal_action': link.disposal_action,
+            'security_class': link.security_class,
+            'medium_format': link.medium_format,
+        })
+    return success(result)
 
 
 # POST /api/v1/classifications/import
@@ -642,7 +731,6 @@ def import_classification():
         obj.level_name = level
         obj.description = node_data.get('description') or None
         obj.scope_note  = node_data.get('scope_note') or None
-        obj.diagram     = node_data.get('diagram') or None
         obj.status      = node_data.get('status', 'draft')
         obj.version_label = node_data.get('version_label') or None
         obj.created_by_id = obj.created_by_id or current_user.id
@@ -694,7 +782,6 @@ def create_major_version(classification_id):
             level_name=source.level_name,
             description=source.description,
             scope_note=source.scope_note,
-            diagram=source.diagram,
             hierarchy_type_id=source.hierarchy_type_id,
             parent=new_parent,
             status='draft',
@@ -711,3 +798,101 @@ def create_major_version(classification_id):
     new_root = copy_node(root, None)
     db.session.commit()
     return success(serialize_classification_detail(new_root), 201)
+
+
+# GET /api/v1/classifications/<id>/records
+# List every record (data object) declared in this diagram, with its metadata.
+@bp.route('/classifications/<int:classification_id>/records', methods=['GET'])
+@login_required
+def list_classification_records(classification_id):
+    institution_id = current_user.active_institution_id
+    c = Classification.query.filter_by(
+        id=classification_id, institution_id=institution_id).first()
+    if not c:
+        return error('Classification not found', 404)
+
+    links = BpmnTaskLink.query.filter_by(diagram_classification_id=c.id).all()
+    result = []
+    for link in links:
+        linked = link.linked_classification
+        d = link.to_dict()
+        d['record_name'] = link.task_label
+        d['linked_code'] = linked.get_full_code() if linked else None
+        d['linked_name'] = linked.name if linked else None
+        result.append(d)
+    result.sort(key=lambda r: (r.get('record_name') or '').lower())
+    return success(result)
+
+
+# ── Records-management vocabularies (admin-managed dropdown values) ──
+
+def _seed_records_vocab(institution_id):
+    existing = RecordsVocabularyTerm.query.filter_by(institution_id=institution_id).count()
+    if existing:
+        return
+    for field, values in DEFAULT_RECORDS_VOCAB.items():
+        for i, v in enumerate(values):
+            db.session.add(RecordsVocabularyTerm(
+                institution_id=institution_id, field=field, value=v, sort_order=i))
+    db.session.flush()
+
+
+# GET /api/v1/records-vocabulary
+@bp.route('/records-vocabulary', methods=['GET'])
+@login_required
+def get_records_vocabulary():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    _seed_records_vocab(institution_id)
+    db.session.commit()
+    terms = RecordsVocabularyTerm.query.filter_by(
+        institution_id=institution_id).order_by(
+        RecordsVocabularyTerm.field, RecordsVocabularyTerm.sort_order,
+        RecordsVocabularyTerm.value).all()
+    grouped = {'disposal': [], 'security': [], 'medium': []}
+    for t in terms:
+        grouped.setdefault(t.field, []).append(t.to_dict())
+    return success(grouped)
+
+
+# POST /api/v1/records-vocabulary
+@bp.route('/records-vocabulary', methods=['POST'])
+@login_required
+@require_write
+def add_records_vocabulary_term():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    data = request.get_json(silent=True) or {}
+    field = (data.get('field') or '').strip()
+    value = (data.get('value') or '').strip()
+    if field not in ('disposal', 'security', 'medium'):
+        return error('Invalid field', 400)
+    if not value:
+        return error('value is required', 400)
+    exists = RecordsVocabularyTerm.query.filter_by(
+        institution_id=institution_id, field=field, value=value).first()
+    if exists:
+        return error('That value already exists.', 409)
+    term = RecordsVocabularyTerm(
+        institution_id=institution_id, field=field, value=value,
+        sort_order=data.get('sort_order', 0))
+    db.session.add(term)
+    db.session.commit()
+    return success(term.to_dict(), 201)
+
+
+# DELETE /api/v1/records-vocabulary/<id>
+@bp.route('/records-vocabulary/<int:term_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_records_vocabulary_term(term_id):
+    institution_id = current_user.active_institution_id
+    term = RecordsVocabularyTerm.query.filter_by(
+        id=term_id, institution_id=institution_id).first()
+    if not term:
+        return error('Term not found', 404)
+    db.session.delete(term)
+    db.session.commit()
+    return success({'message': 'Deleted'})

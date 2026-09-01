@@ -35,8 +35,9 @@ class Classification(db.Model):
     version: so.Mapped[int] = so.mapped_column(sa.Integer, default=1, server_default='1')
     version_label: so.Mapped[Optional[str]] = so.mapped_column(sa.String(50), nullable=True)
 
-    # Optional Mermaid diagram (process flows, org charts, etc.)
-    diagram: so.Mapped[Optional[str]] = so.mapped_column(sa.Text, nullable=True)
+    # Optional BPMN 2.0 process diagram (standard XML). Used for
+    # process-based archival description (verksamhetsbaserad arkivredovisning).
+    bpmn_xml: so.Mapped[Optional[str]] = so.mapped_column(sa.Text, nullable=True)
 
     hierarchy_type_id: so.Mapped[int] = so.mapped_column(
         sa.ForeignKey('hierarchy_types.id', name='fk_classification_hierarchy_type')
@@ -181,7 +182,7 @@ class Classification(db.Model):
             'status': self.status,
             'version': self.version,
             'version_label': self.version_label,
-            'diagram': self.diagram,
+            'has_bpmn': bool(self.bpmn_xml),
         }
 
     def record_change(self, change_type: str, description: str,
@@ -217,3 +218,91 @@ class ClassificationChange(db.Model):
 
     def __repr__(self):
         return f'<ClassificationChange {self.change_type} on classification {self.classification_id}>'
+
+
+class BpmnTaskLink(db.Model):
+    """Projection of the task→classification links embedded in a diagram's BPMN XML.
+
+    The BPMN XML (on Classification.bpmn_xml) is the source of truth; this table
+    is rebuilt whenever a diagram is saved, to make the reverse lookup
+    ("which processes produce records in this class") a cheap query.
+    """
+    __tablename__ = 'bpmn_task_links'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    # The classification that OWNS the diagram (the process node)
+    diagram_classification_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('classifications.id', ondelete='CASCADE'))
+    # The classification the task points AT (the class/series producing records)
+    linked_classification_id: so.Mapped[Optional[int]] = so.mapped_column(
+        sa.ForeignKey('classifications.id', ondelete='CASCADE'), nullable=True)
+    task_bpmn_id: so.Mapped[str] = so.mapped_column(sa.String(120))   # element id in the XML
+    task_label: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+    # Retention (gallring) captured on the handlingsslag data object
+    retention_period: so.Mapped[Optional[str]] = so.mapped_column(sa.String(120), nullable=True)
+    retention_rule: so.Mapped[Optional[str]] = so.mapped_column(sa.String(200), nullable=True)
+    disposal_action: so.Mapped[Optional[str]] = so.mapped_column(sa.String(120), nullable=True)
+    security_class: so.Mapped[Optional[str]] = so.mapped_column(sa.String(120), nullable=True)
+    medium_format: so.Mapped[Optional[str]] = so.mapped_column(sa.String(120), nullable=True)
+    legal_basis: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+    description: so.Mapped[Optional[str]] = so.mapped_column(sa.Text, nullable=True)
+    # Activities connected to this record via data associations (text summaries).
+    produced_by: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
+    used_by: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
+
+    diagram_classification: so.Mapped['Classification'] = so.relationship(
+        'Classification', foreign_keys=[diagram_classification_id])
+    linked_classification: so.Mapped['Classification'] = so.relationship(
+        'Classification', foreign_keys=[linked_classification_id])
+
+    __table_args__ = (
+        sa.Index('ix_bpmn_task_links_linked', 'linked_classification_id'),
+        sa.Index('ix_bpmn_task_links_diagram', 'diagram_classification_id'),
+    )
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'task_bpmn_id': self.task_bpmn_id,
+            'task_label': self.task_label,
+            'linked_classification_id': self.linked_classification_id,
+            'diagram_classification_id': self.diagram_classification_id,
+            'retention_period': self.retention_period,
+            'retention_rule': self.retention_rule,
+            'disposal_action': self.disposal_action,
+            'security_class': self.security_class,
+            'medium_format': self.medium_format,
+            'legal_basis': self.legal_basis,
+            'description': self.description,
+            'produced_by': self.produced_by,
+            'used_by': self.used_by,
+        }
+
+
+class RecordsVocabularyTerm(db.Model):
+    """Admin-managed list values for records-management dropdown fields
+    (disposal action, security classification, medium/format).
+    """
+    __tablename__ = 'records_vocabulary_terms'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    institution_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('institutions.id', ondelete='CASCADE'))
+    field: so.Mapped[str] = so.mapped_column(sa.String(40))   # disposal | security | medium
+    value: so.Mapped[str] = so.mapped_column(sa.String(120))
+    sort_order: so.Mapped[int] = so.mapped_column(sa.Integer, default=0)
+
+    __table_args__ = (
+        sa.UniqueConstraint('institution_id', 'field', 'value', name='uq_records_vocab_term'),
+        sa.Index('ix_records_vocab_field', 'institution_id', 'field'),
+    )
+
+    def to_dict(self) -> dict:
+        return {'id': self.id, 'field': self.field, 'value': self.value, 'sort_order': self.sort_order}
+
+
+DEFAULT_RECORDS_VOCAB = {
+    'disposal': ['Destroy', 'Preserve', 'Transfer', 'Review'],
+    'security': ['Public', 'Internal', 'Confidential', 'Secret'],
+    'medium': ['Paper', 'Digital', 'Hybrid', 'Microform', 'Audiovisual'],
+}

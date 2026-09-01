@@ -34,7 +34,9 @@ from app.models.location import (
 from app.models.classification import (
     Classification,
     ClassificationChange,
+    BpmnTaskLink,
     classification_node_association,
+    RecordsVocabularyTerm
 )
 
 from app.models.integration import ExternalIntegration
@@ -82,6 +84,8 @@ __all__ = [
     'BackgroundTask',
     'NodeIdentifier',
     'IdentifierScheme',
+    'BpmnTaskLink',
+    'RecordsVocabularyTerm'
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 

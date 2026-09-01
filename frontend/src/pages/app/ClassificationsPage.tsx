@@ -5,10 +5,11 @@ import {
   Plus, Tag, Pencil, Trash2, X, Save,
   History, FileText, Globe, ChevronRight,
   CalendarRange, RotateCcw,
-  Eye, Archive, BarChart2, Upload, Check, GitCommit, Search
+  Eye, Archive, Upload, Check, GitCommit, Search, Workflow
 } from 'lucide-react'
 import { classificationsApi, hierarchyApi, nodesApi } from '@/api'
 import ClassificationTree from '@/components/tree/ClassificationTree'
+import ClassificationBpmnTab, { ProducedByPanel } from '@/components/classification/ClassificationBpmnTab'
 import { PageShell, SidebarPanel, EmptyState, Tabs, FieldList, Spinner } from '@/components/ui'
 import HierarchyLevelSelect from '@/components/ui/HierarchyLevelSelect'
 import type { ClassificationStub } from '@/types'
@@ -140,6 +141,7 @@ function DetailsTab({ classification }: { classification: any }) {
             : null,
         },
       ]} />
+      <ProducedByPanel classificationId={classification.id} />
       <div className={styles.detailFooter}>
         <span>Created by {classification.created_by ?? '—'}</span>
         <span>Updated {new Date(classification.updated_at).toLocaleDateString()}</span>
@@ -433,7 +435,7 @@ function ClassificationDetailPanel({
   const tabs = [
     { key: 'details', icon: <FileText size={13} />,      label: 'Details' },
     { key: 'nodes',   icon: <Globe size={13} />,         label: `Resources${classification.node_count ? ` (${classification.node_count})` : ''}` },
-    { key: 'diagram', icon: <BarChart2 size={13} />,     label: 'Diagram' },
+    { key: 'process', icon: <Workflow size={13} />,      label: classification.has_bpmn ? 'Process ●' : 'Process' },
     { key: 'history', icon: <History size={13} />,       label: 'History' },
   ]
 
@@ -541,7 +543,7 @@ function ClassificationDetailPanel({
       <div className={styles.detailBody}>
         {tab === 'details' && <DetailsTab classification={classification} />}
         {tab === 'nodes'   && <LinkedNodesTab classification={classification} />}
-        {tab === 'diagram' && <DiagramTab classification={classification} />}
+        {tab === 'process' && <ClassificationBpmnTab classification={classification} />}
         {tab === 'history' && <HistoryTab classificationId={classificationId} />}
       </div>
     </div>
@@ -636,123 +638,6 @@ function RetireButton({ classificationId, hasChildren, onDone }: {
       </button>
     </div>
   )
-}
-
-// ─── Diagram tab ──────────────────────────────────────────────────────
-
-function DiagramTab({ classification }: { classification: any }) {
-  const queryClient = useQueryClient()
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(classification.diagram ?? '')
-
-  const mutation = useMutation({
-    mutationFn: () => classificationsApi.updateDiagram(classification.id, draft || null),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['classification', classification.id] })
-      setEditing(false)
-    },
-  })
-
-  return (
-    <div style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-      {editing ? (
-        <>
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-faint)' }}>
-            Enter a <a href="https://mermaid.js.org" target="_blank" rel="noreferrer">Mermaid</a> diagram. Use <code>graph TD</code>, <code>flowchart LR</code>, <code>sequenceDiagram</code>, etc.
-          </p>
-          <textarea
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            rows={12}
-            style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)', resize: 'vertical' }}
-            placeholder='graph TD\n  A[Start] --> B[Process]'
-            autoFocus
-          />
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => { setEditing(false); setDraft(classification.diagram ?? '') }}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-              <Save size={13} /> Save diagram
-            </button>
-          </div>
-        </>
-      ) : classification.diagram ? (
-        <>
-          <MermaidRenderer source={classification.diagram} />
-          {classification.status !== 'published' && (
-            <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setEditing(true)}>
-              <Pencil size={13} /> Edit diagram
-            </button>
-          )}
-        </>
-      ) : (
-        <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--color-ink-faint)' }}>
-          <BarChart2 size={32} style={{ marginBottom: 'var(--space-3)', opacity: 0.3 }} />
-          <p>No diagram yet.</p>
-          {classification.status !== 'published' && (
-            <button className="btn btn-secondary btn-sm" style={{ marginTop: 'var(--space-3)' }} onClick={() => setEditing(true)}>
-              Add Mermaid diagram
-            </button>
-          )}
-          {classification.status === 'published' && (
-            <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)', marginTop: 'var(--space-2)' }}>
-              Create a new version to add a diagram
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Mermaid renderer ─────────────────────────────────────────────────
-
-function MermaidRenderer({ source }: { source: string }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const idRef = useRef(`mermaid-${Math.random().toString(36).slice(2)}`)
-  const [renderError, setRenderError] = useState('')
-
-  useEffect(() => {
-    if (!ref.current || !source) return
-    setRenderError('')
-    const el = ref.current
-    const diagramId = idRef.current
-
-    const doRender = (mermaid: any) => {
-      mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' })
-      mermaid.render(diagramId, source)
-        .then(({ svg }: { svg: string }) => { if (el) el.innerHTML = svg })
-        .catch((e: unknown) => setRenderError(String(e)))
-    }
-
-    const win = window as any
-    if (win.mermaid) {
-      doRender(win.mermaid)
-    } else {
-      const existing = document.getElementById('mermaid-cdn')
-      if (!existing) {
-        const s = document.createElement('script')
-        s.id = 'mermaid-cdn'
-        s.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js'
-        s.onload = () => doRender(win.mermaid)
-        s.onerror = () => setRenderError('Failed to load Mermaid from CDN')
-        document.head.appendChild(s)
-      } else {
-        // Script tag exists but not loaded yet — poll briefly
-        let attempts = 0
-        const poll = setInterval(() => {
-          if (win.mermaid) { clearInterval(poll); doRender(win.mermaid) }
-          if (++attempts > 20) { clearInterval(poll); setRenderError('Mermaid load timeout') }
-        }, 200)
-      }
-    }
-  }, [source])
-
-  if (renderError) return (
-    <div style={{ padding: 'var(--space-4)', background: 'var(--color-error-bg)', borderRadius: 'var(--radius-md)', color: 'var(--color-error)', fontSize: 'var(--text-sm)' }}>
-      Diagram error: {renderError}
-    </div>
-  )
-  return <div ref={ref} style={{ overflow: 'auto' }} />
 }
 
 // ─── New Version button ───────────────────────────────────────────────

@@ -41,7 +41,6 @@ def serialize_classification_detail(c: Classification) -> dict:
         'status': getattr(c, 'status', 'draft'),
         'version': getattr(c, 'version', 1),
         'version_label': getattr(c, 'version_label', None),
-        'diagram': getattr(c, 'diagram', None),
         'created_at': c.created_at.isoformat(),
         'updated_at': c.updated_at.isoformat(),
         'created_by': c.created_by.username if c.created_by else None,

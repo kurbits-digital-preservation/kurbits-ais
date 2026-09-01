@@ -302,6 +302,17 @@ export const classificationsApi = {
 
   getHistory: (classificationId: number) =>
     api.get(`/classifications/${classificationId}/history`),
+
+  getBpmn: (id: number) => api.get(`/classifications/${id}/bpmn`),
+  updateBpmn: (id: number, bpmnXml: string | null, taskLinks?: any[]) =>
+    api.patch(`/classifications/${id}/bpmn`, { bpmn_xml: bpmnXml, task_links: taskLinks ?? [] }),
+  getProducedBy: (id: number) => api.get(`/classifications/${id}/produced-by`),
+    getRecords: (id: number) => api.get(`/classifications/${id}/records`),
+  getRecordsVocabulary: () => api.get('/records-vocabulary'),
+  addRecordsVocabTerm: (field: string, value: string) =>
+    api.post('/records-vocabulary', { field, value }),
+  deleteRecordsVocabTerm: (id: number) =>
+    api.delete(`/records-vocabulary/${id}`),
 }
 
 // ─── Hierarchy management ─────────────────────────────────────────────
