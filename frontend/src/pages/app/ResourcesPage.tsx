@@ -701,11 +701,34 @@ function NodeDetailPanel({
   })
 
   const deleteMutation = useMutation({
-    mutationFn: () => nodesApi.delete(nodeId),
+    mutationFn: (force: boolean) => nodesApi.delete(nodeId, force),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
+      queryClient.invalidateQueries({ queryKey: ['node-children'] })
     },
+    onError: (err: any) => alert(err?.response?.data?.message ?? 'Delete failed'),
   })
+
+  const handleDelete = async () => {
+    if (!data) return
+    let descendants = 0
+    try {
+      const res = await nodesApi.descendantCount(nodeId)
+      descendants = res.data.data.descendant_count
+    } catch {
+      descendants = 0
+    }
+    if (descendants > 0) {
+      const ok = confirm(
+        `"${data.title}" has ${descendants} descendant record${descendants !== 1 ? 's' : ''}.\n\n` +
+        `Deleting it will permanently delete this node AND all ${descendants} of them ` +
+        `(${descendants + 1} records in total). This cannot be undone.\n\nAre you absolutely sure?`
+      )
+      if (ok) deleteMutation.mutate(true)
+    } else {
+      if (confirm(`Delete "${data.title}"? This cannot be undone.`)) deleteMutation.mutate(false)
+    }
+  }
 
   if (isLoading) return <div className={styles.detailLoading}>Loading…</div>
   if (!data) return null
@@ -745,7 +768,7 @@ function NodeDetailPanel({
             </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
-              onClick={() => { if (confirm(`Delete "${data.title}"?`)) deleteMutation.mutate() }}
+              onClick={handleDelete}
               title="Delete"
             >
               <Trash2 size={14} />

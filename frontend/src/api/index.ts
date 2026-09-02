@@ -38,8 +38,11 @@ export const nodesApi = {
   update: (nodeId: number, data: Record<string, unknown>) =>
     api.patch<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}`, data),
 
-  delete: (nodeId: number) =>
-    api.delete(`/nodes/${nodeId}`),
+  delete: (id: number, force = false) =>
+    api.delete(`/nodes/${id}`, { params: { force } }),
+
+  descendantCount: (id: number) =>
+    api.get(`/nodes/${id}/descendant-count`),
 
   updateStatus: (nodeId: number, status: string) =>
     api.patch(`/nodes/${nodeId}/status`, { status }),
