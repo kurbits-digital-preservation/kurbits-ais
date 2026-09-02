@@ -1,0 +1,101 @@
+.facets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-3);
+}
+
+.facetGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.facetTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-ink-faint);
+  margin-bottom: var(--space-1);
+}
+
+.facetClear {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.facetValues {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.facetValue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  text-align: left;
+  width: 100%;
+}
+.facetValue:hover { background: var(--color-bg-subtle); }
+.facetValueActive {
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.facetLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.facetCount {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  font-variant-numeric: tabular-nums;
+}
+.facetValueActive .facetCount { color: var(--color-accent); }
+
+.recordTypeRow {
+  display: flex;
+  gap: 4px;
+}
+.recordTypeBtn {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--color-ink-muted);
+}
+.recordTypeBtn:hover { border-color: var(--color-accent); }
+.recordTypeActive {
+  background: var(--color-accent-bg);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+  font-weight: 600;
+}

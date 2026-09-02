@@ -35,10 +35,12 @@ def global_search():
         page = 1
 
     filters = {}
-    for key in ('status', 'level', 'hierarchy_type_id', 'date_from', 'date_to', 'agent_type'):
+    int_keys = ('hierarchy_type_id', 'classification_id')
+    for key in ('status', 'level', 'hierarchy_type_id', 'classification_id',
+                'date_from', 'date_to', 'agent_type'):
         val = request.args.get(key, '').strip()
         if val:
-            filters[key] = int(val) if key == 'hierarchy_type_id' else val
+            filters[key] = int(val) if key in int_keys else val
 
     from app.search import search as do_search
     results = do_search(

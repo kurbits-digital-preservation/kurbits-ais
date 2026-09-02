@@ -9,7 +9,7 @@ import {
 import { searchApi, hierarchyApi, savedSearchesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import styles from './SearchPage.module.css'
-
+import SearchFacets from './SearchFacets'
 // ─── Constants ────────────────────────────────────────────────────────
 
 const AGENT_ICONS: Record<string, typeof User> = {
@@ -17,7 +17,7 @@ const AGENT_ICONS: Record<string, typeof User> = {
 }
 const NODE_STATUSES = ['draft', 'published', 'restricted']
 const AGENT_TYPES   = ['person', 'organization', 'family', 'software']
-const FILTER_KEYS   = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types']
+const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types', 'classification_id', 'hierarchy_type_id']
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -85,49 +85,17 @@ function AgentRow({ item, onClick }: { item: any; onClick: () => void }) {
 
 // ─── Filter panel ─────────────────────────────────────────────────────
 
-function FilterPanel({ params, setParam, clearParam, levels }: {
+function FilterPanel({ params, setParam, clearParam }: {
   params: URLSearchParams
   setParam: (k: string, v: string) => void
   clearParam: (k: string) => void
-  levels: string[]
 }) {
   const types = params.get('types') ?? 'nodes,agents'
-  const showNodeFilters  = types.includes('nodes')
-  const showAgentFilters = types.includes('agents')
+  const showNodeFilters = types.includes('nodes')
+  const hasDateFilter = params.has('date_from') || params.has('date_to')
   return (
     <div className={styles.filters}>
-      <div className={styles.filterGroup}>
-        <label className={styles.filterLabel}>Record type</label>
-        {[
-          { value: 'nodes,agents', label: 'All' },
-          { value: 'nodes',        label: 'Resources only' },
-          { value: 'agents',       label: 'Agents only' },
-        ].map(opt => (
-          <label key={opt.value} className={styles.radioLabel}>
-            <input type="radio" checked={types === opt.value} onChange={() => setParam('types', opt.value)} />
-            {opt.label}
-          </label>
-        ))}
-      </div>
-      {showNodeFilters && (<>
-        <div className={styles.filterGroup}>
-          <label className={styles.filterLabel}>Status</label>
-          <select value={params.get('status') ?? ''}
-            onChange={e => e.target.value ? setParam('status', e.target.value) : clearParam('status')}>
-            <option value="">Any</option>
-            {NODE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-        {levels.length > 0 && (
-          <div className={styles.filterGroup}>
-            <label className={styles.filterLabel}>Level</label>
-            <select value={params.get('level') ?? ''}
-              onChange={e => e.target.value ? setParam('level', e.target.value) : clearParam('level')}>
-              <option value="">Any</option>
-              {levels.map(l => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </div>
-        )}
+      {showNodeFilters && (
         <div className={styles.filterGroup}>
           <label className={styles.filterLabel}>Date range</label>
           <div className={styles.dateRow}>
@@ -139,26 +107,17 @@ function FilterPanel({ params, setParam, clearParam, levels }: {
               onChange={e => e.target.value ? setParam('date_to', e.target.value) : clearParam('date_to')} />
           </div>
         </div>
-      </>)}
-      {showAgentFilters && (
-        <div className={styles.filterGroup}>
-          <label className={styles.filterLabel}>Agent type</label>
-          <select value={params.get('agent_type') ?? ''}
-            onChange={e => e.target.value ? setParam('agent_type', e.target.value) : clearParam('agent_type')}>
-            <option value="">Any</option>
-            {AGENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
       )}
-      {FILTER_KEYS.filter(k => k !== 'types').some(k => params.has(k)) && (
+      {hasDateFilter && (
         <button className={styles.clearFilters}
-          onClick={() => FILTER_KEYS.filter(k => k !== 'types').forEach(clearParam)}>
-          <X size={12} /> Clear filters
+          onClick={() => { clearParam('date_from'); clearParam('date_to') }}>
+          <X size={12} /> Clear dates
         </button>
       )}
     </div>
   )
 }
+
 
 // ─── Saved searches panel ─────────────────────────────────────────────
 
@@ -391,10 +350,17 @@ export default function SearchPage() {
         <aside className={styles.sidebar}>
           {showFilters && (
             <div className={styles.filterPanel}>
-              <FilterPanel params={searchParams} setParam={setParam} clearParam={clearParam} levels={allLevels ?? []} />
+              <FilterPanel params={searchParams} setParam={setParam} clearParam={clearParam} />
             </div>
           )}
+          <SearchFacets
+            facets={data?.facets}
+            params={searchParams}
+            setParam={setParam}
+            clearParam={clearParam}
+          />
           <SavedSearchesPanel onLoad={handleLoadSaved} />
+
         </aside>
 
         {/* ── Search results ── */}

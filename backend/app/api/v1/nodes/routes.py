@@ -338,7 +338,6 @@ def update_node(node_id):
 
 # DELETE /api/v1/nodes/<id>
 # GET /api/v1/nodes/<id>/descendant-count
-# How many descendants a node has — used to confirm a cascade delete.
 @bp.route('/nodes/<int:node_id>/descendant-count', methods=['GET'])
 @login_required
 def get_descendant_count(node_id):
@@ -347,11 +346,10 @@ def get_descendant_count(node_id):
     if not node:
         return error('Node not found', 404)
     ids = _collect_subtree_ids(node.id)
-    return success({'descendant_count': len(ids) - 1})  # exclude the node itself
+    return success({'descendant_count': len(ids) - 1})
 
 
 def _collect_subtree_ids(root_id: int) -> list:
-    """Breadth-first collection of a node's id plus all descendant ids."""
     all_ids = [root_id]
     frontier = [root_id]
     while frontier:
@@ -388,12 +386,8 @@ def delete_node(node_id):
         db.session.commit()
         return success({'message': 'Node deleted', 'deleted_count': 1})
 
-    # Cascade: delete the whole subtree, deepest first, so no row is ever an
-    # orphaned parent mid-delete. Works regardless of DB-level cascade settings.
     ids = _collect_subtree_ids(node.id)
-    db.session.execute(
-        sa.delete(Node).where(Node.id.in_(ids))
-    )
+    db.session.execute(sa.delete(Node).where(Node.id.in_(ids)))
     db.session.commit()
     return success({'message': 'Node and descendants deleted', 'deleted_count': len(ids)})
 
@@ -2089,11 +2083,24 @@ def print_labels():
     node_ids = data.get('node_ids', [])
     fmt = data.get('format', 'avery_l7163')
     copies = max(1, min(int(data.get('copies', 1)), 10))
+    template_id = data.get('template_id')
 
     if not node_ids:
         return error('node_ids is required', 400)
     if len(node_ids) > 200:
         return error('Maximum 200 labels per request', 400)
+
+    # Optional saved WYSIWYG template. When present it dictates both the
+    # element layout and the physical format.
+    template_elements = None
+    if template_id:
+        from app.models.label_template import LabelTemplate
+        tmpl = LabelTemplate.query.filter_by(
+            id=template_id, institution_id=institution_id).first()
+        if not tmpl:
+            return error('Label template not found', 404)
+        template_elements = tmpl.elements or []
+        fmt = tmpl.format_key or fmt
 
     nodes = db.session.execute(
         sa.select(Node)
@@ -2119,6 +2126,7 @@ def print_labels():
             if loc:
                 location_path = loc.get_full_path()
 
+        parent = node.parent if node.parent_id else None
         labels.append(LabelData(
             ref_code=node.ref_code or node.local_ref,
             title=node.title,
@@ -2128,11 +2136,15 @@ def print_labels():
             date_to=node.date_end.strftime('%Y') if node.date_end else None,
             institution_name=inst_name,
             location_path=location_path,
+            parent_ref_code=(parent.ref_code or parent.local_ref) if parent else None,
+            parent_title=parent.title if parent else None,
+            parent_date_from=parent.date_start.strftime('%Y') if parent and parent.date_start else None,
+            parent_date_to=parent.date_end.strftime('%Y') if parent and parent.date_end else None,
             copies=copies,
         ))
 
     try:
-        pdf_bytes = generate_label_pdf(labels, format_key=fmt)
+        pdf_bytes = generate_label_pdf(labels, format_key=fmt, template_elements=template_elements)
     except Exception as e:
         current_app.logger.error(f'Label generation failed: {e}')
         return error(f'Label generation failed: {e}', 500)
@@ -2744,3 +2756,123 @@ def delete_identifier_scheme(scheme_id):
     db.session.delete(scheme)
     db.session.commit()
     return success({'message': 'Scheme deleted'})
+
+
+# ── Label templates (WYSIWYG designer) ────────────────────────────────
+
+# GET /api/v1/label-templates
+@bp.route('/label-templates', methods=['GET'])
+@login_required
+def list_label_templates():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    from app.models.label_template import LabelTemplate
+    templates = LabelTemplate.query.filter_by(
+        institution_id=institution_id).order_by(LabelTemplate.name).all()
+    return success([t.to_dict() for t in templates])
+
+
+# GET /api/v1/label-templates/<id>
+@bp.route('/label-templates/<int:template_id>', methods=['GET'])
+@login_required
+def get_label_template(template_id):
+    institution_id = current_user.active_institution_id
+    from app.models.label_template import LabelTemplate
+    t = LabelTemplate.query.filter_by(
+        id=template_id, institution_id=institution_id).first()
+    if not t:
+        return error('Template not found', 404)
+    return success(t.to_dict())
+
+
+# POST /api/v1/label-templates
+@bp.route('/label-templates', methods=['POST'])
+@login_required
+@require_write
+def create_label_template():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    from app.models.label_template import LabelTemplate
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    format_key = (data.get('format_key') or '').strip()
+    if not name:
+        return error('name is required', 400)
+    if not format_key:
+        return error('format_key is required', 400)
+    if LabelTemplate.query.filter_by(institution_id=institution_id, name=name).first():
+        return error(f'A template named "{name}" already exists.', 409)
+
+    make_default = bool(data.get('is_default'))
+    if make_default:
+        LabelTemplate.query.filter_by(
+            institution_id=institution_id, is_default=True).update({'is_default': False})
+
+    t = LabelTemplate(
+        institution_id=institution_id,
+        name=name,
+        format_key=format_key,
+        is_default=make_default,
+        elements=data.get('elements') or [],
+        updated_by_id=current_user.id,
+    )
+    db.session.add(t)
+    db.session.commit()
+    return success(t.to_dict(), 201)
+
+
+# PUT /api/v1/label-templates/<id>
+@bp.route('/label-templates/<int:template_id>', methods=['PUT'])
+@login_required
+@require_write
+def update_label_template(template_id):
+    institution_id = current_user.active_institution_id
+    from app.models.label_template import LabelTemplate
+    t = LabelTemplate.query.filter_by(
+        id=template_id, institution_id=institution_id).first()
+    if not t:
+        return error('Template not found', 404)
+    data = request.get_json(silent=True) or {}
+
+    if 'name' in data:
+        name = (data['name'] or '').strip()
+        if not name:
+            return error('name cannot be empty', 400)
+        clash = LabelTemplate.query.filter_by(
+            institution_id=institution_id, name=name).filter(
+            LabelTemplate.id != template_id).first()
+        if clash:
+            return error(f'A template named "{name}" already exists.', 409)
+        t.name = name
+    if 'format_key' in data:
+        t.format_key = (data['format_key'] or '').strip()
+    if 'elements' in data:
+        t.elements = data['elements'] or []
+    if 'is_default' in data:
+        if data['is_default']:
+            LabelTemplate.query.filter_by(
+                institution_id=institution_id, is_default=True).filter(
+                LabelTemplate.id != template_id).update({'is_default': False})
+        t.is_default = bool(data['is_default'])
+
+    t.updated_by_id = current_user.id
+    db.session.commit()
+    return success(t.to_dict())
+
+
+# DELETE /api/v1/label-templates/<id>
+@bp.route('/label-templates/<int:template_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_label_template(template_id):
+    institution_id = current_user.active_institution_id
+    from app.models.label_template import LabelTemplate
+    t = LabelTemplate.query.filter_by(
+        id=template_id, institution_id=institution_id).first()
+    if not t:
+        return error('Template not found', 404)
+    db.session.delete(t)
+    db.session.commit()
+    return success({'message': 'Deleted'})

@@ -136,6 +136,12 @@ def _pg_node_query(
     if filters.get('hierarchy_type_id'):
         where.append("n.hierarchy_type_id = :hierarchy_type_id")
         params['hierarchy_type_id'] = filters['hierarchy_type_id']
+    if filters.get('classification_id'):
+        where.append(
+            "EXISTS (SELECT 1 FROM classification_node_association cna "
+            "WHERE cna.node_id = n.id AND cna.classification_id = :classification_id)"
+        )
+        params['classification_id'] = int(filters['classification_id'])
     if filters.get('date_from'):
         where.append("n.date_start >= :date_from")
         params['date_from'] = filters['date_from']
@@ -321,6 +327,15 @@ def _sqlite_node_query(
         query = query.filter(Node.level_of_description == filters['level'])
     if filters.get('hierarchy_type_id'):
         query = query.filter(Node.hierarchy_type_id == filters['hierarchy_type_id'])
+    if filters.get('classification_id'):
+        from app.models.classification import classification_node_association as _cna
+        query = query.filter(
+            Node.id.in_(
+                sa.select(_cna.c.node_id).where(
+                    _cna.c.classification_id == int(filters['classification_id'])
+                )
+            )
+        )
     if filters.get('date_from'):
         query = query.filter(Node.date_start >= filters['date_from'])
     if filters.get('date_to'):
@@ -499,6 +514,128 @@ def _sqlite_agent_query(
 
 # ── Public API ─────────────────────────────────────────────────────────
 
+def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
+    """Compute facet counts for a search, respecting the query and active filters.
+
+    Uses the ORM so it runs identically on PostgreSQL and SQLite. Each facet is a
+    GROUP BY over the matching NODE set (agent_type facet is over matching AGENTS).
+    Counts reflect the current text query plus all OTHER active filters, so the
+    numbers show what you'd get if you added that facet value.
+    """
+    import sqlalchemy as sa
+    from app.extensions import db
+    from app.models.node import Node
+    from app.models.agent import Agent
+    from app.models.classification import Classification, classification_node_association as CNA
+
+    q = (q or '').strip()
+    pattern = f'%{q}%'
+    facets: dict = {'agent_type': [], 'classification': [], 'hierarchy_type': [],
+                    'level': [], 'status': []}
+    if len(q) < 2:
+        return facets
+
+    # ── Base NODE filter (text + all filters EXCEPT the one being faceted) ──
+    def _node_base(exclude: str = ''):
+        query = db.session.query(Node.id).filter(
+            Node.institution_id == institution_id,
+            sa.or_(
+                Node.title.ilike(pattern),
+                Node.ref_code.ilike(pattern),
+                Node.description.ilike(pattern),
+                Node.scope_and_content.ilike(pattern),
+                Node.arrangement.ilike(pattern),
+                sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
+            )
+        )
+        if exclude != 'status' and filters.get('status'):
+            query = query.filter(Node.status == filters['status'])
+        if exclude != 'level' and filters.get('level'):
+            query = query.filter(Node.level_of_description == filters['level'])
+        if exclude != 'hierarchy_type' and filters.get('hierarchy_type_id'):
+            query = query.filter(Node.hierarchy_type_id == filters['hierarchy_type_id'])
+        if exclude != 'classification' and filters.get('classification_id'):
+            query = query.filter(
+                Node.id.in_(
+                    sa.select(CNA.c.node_id).where(
+                        CNA.c.classification_id == int(filters['classification_id'])
+                    )
+                )
+            )
+        if filters.get('date_from'):
+            query = query.filter(Node.date_start >= filters['date_from'])
+        if filters.get('date_to'):
+            query = query.filter(Node.date_end <= filters['date_to'])
+        return query
+
+    # ── Level facet ──
+    for level, count in (
+        db.session.query(Node.level_of_description, sa.func.count())
+        .filter(Node.id.in_(_node_base('level').subquery().select()))
+        .group_by(Node.level_of_description).all()
+    ):
+        if level:
+            facets['level'].append({'value': level, 'count': count})
+    facets['level'].sort(key=lambda x: -x['count'])
+
+    # ── Status facet ──
+    for status, count in (
+        db.session.query(Node.status, sa.func.count())
+        .filter(Node.id.in_(_node_base('status').subquery().select()))
+        .group_by(Node.status).all()
+    ):
+        if status:
+            val = status.value if hasattr(status, 'value') else status
+            facets['status'].append({'value': val, 'count': count})
+    facets['status'].sort(key=lambda x: -x['count'])
+
+    # ── Hierarchy type facet ──
+    from app.models.hierarchy import HierarchyType
+    for ht_id, name, count in (
+        db.session.query(HierarchyType.id, HierarchyType.name, sa.func.count(Node.id))
+        .join(Node, Node.hierarchy_type_id == HierarchyType.id)
+        .filter(Node.id.in_(_node_base('hierarchy_type').subquery().select()))
+        .group_by(HierarchyType.id, HierarchyType.name).all()
+    ):
+        facets['hierarchy_type'].append({'value': str(ht_id), 'label': name, 'count': count})
+    facets['hierarchy_type'].sort(key=lambda x: -x['count'])
+
+    # ── Classification facet (flat, across schemes) ──
+    base_ids = _node_base('classification').subquery().select()
+    rows = (
+        db.session.query(Classification.id, Classification.name, Classification.code, sa.func.count(CNA.c.node_id))
+        .join(CNA, CNA.c.classification_id == Classification.id)
+        .filter(CNA.c.node_id.in_(base_ids))
+        .group_by(Classification.id, Classification.name, Classification.code)
+        .all()
+    )
+    facets['classification'] = sorted(
+        [{'value': str(cid), 'label': f'{name}', 'code': code, 'count': cnt}
+         for cid, name, code, cnt in rows],
+        key=lambda x: -x['count']
+    )[:30]  # cap to the 30 most-populated classes
+
+    # ── Agent type facet (over matching AGENTS, not nodes) ──
+    agent_base = db.session.query(Agent.id).filter(
+        Agent.institution_id == institution_id,
+        sa.or_(
+            Agent.name.ilike(pattern),
+            Agent.authorized_form.ilike(pattern),
+        )
+    )
+    for atype, count in (
+        db.session.query(Agent.agent_type, sa.func.count())
+        .filter(Agent.id.in_(agent_base.subquery().select()))
+        .group_by(Agent.agent_type).all()
+    ):
+        if atype:
+            val = atype.value if hasattr(atype, 'value') else atype
+            facets['agent_type'].append({'value': val, 'count': count})
+    facets['agent_type'].sort(key=lambda x: -x['count'])
+
+    return facets
+
+
 def search(
     q: str,
     institution_id: int,
@@ -562,4 +699,5 @@ def search(
         'page': page,
         'per_page': limit,
         'pages': max(1, (total + limit - 1) // limit),
+        'facets': compute_facets(q, institution_id, filters),
     }
