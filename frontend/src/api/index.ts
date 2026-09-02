@@ -92,8 +92,12 @@ bulkDelete: (node_ids: number[], force = false) =>
     `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/download`,
 
 
-  printLabels: (nodeIds: number[], format: string, copies: number, includeDescendants = false) =>
-  api.post('/nodes/labels', { node_ids: nodeIds, format, copies, include_descendants: includeDescendants }, { responseType: 'arraybuffer' }),
+  printLabels: (nodeIds: number[], format: string, copies: number,
+                includeDescendants: boolean, templateId?: number | null) =>
+    api.post('/nodes/labels',
+      { node_ids: nodeIds, format, copies,
+        include_descendants: includeDescendants, template_id: templateId },
+      { responseType: 'blob' }),
 
   findingAid: (nodeId: number) =>
     api.get(`/nodes/${nodeId}/finding-aid`, { responseType: 'blob' }),
@@ -821,4 +825,12 @@ export const identifierSchemesApi = {
   create: (data: any) => api.post('/identifier-schemes', data),
   update: (id: number, data: any) => api.patch(`/identifier-schemes/${id}`, data),
   delete: (id: number) => api.delete(`/identifier-schemes/${id}`),
+}
+
+export const labelTemplatesApi = {
+  list: () => api.get('/label-templates'),
+  get: (id: number) => api.get(`/label-templates/${id}`),
+  create: (data: any) => api.post('/label-templates', data),
+  update: (id: number, data: any) => api.put(`/label-templates/${id}`, data),
+  delete: (id: number) => api.delete(`/label-templates/${id}`),
 }

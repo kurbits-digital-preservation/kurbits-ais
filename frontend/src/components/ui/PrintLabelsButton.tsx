@@ -1,12 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Printer, ChevronDown, Loader2 } from 'lucide-react'
-import { nodesApi } from '@/api'
+import { nodesApi, labelTemplatesApi } from '@/api'
 
 const FORMATS = [
-  { value: 'standard_90x45', label: 'Standard arkivetikett (12 per ark, 90×45 mm)' },
-  { value: 'single',          label: 'Enskild etikett (A4 helsida)' },
-  { value: 'avery_l7163',     label: 'Avery L7163 (14 per ark, 99×38 mm)' },
-  { value: 'avery_l7160',     label: 'Avery L7160 (21 per ark, 64×38 mm)' },
+  { value: 'standard_90x45',       label: 'Standard arkivetikett (12/ark, 90×45 mm)' },
+  { value: 'avery_l7163',          label: 'Avery L7163 (14/ark, 99×38 mm)' },
+  { value: 'avery_l7160',          label: 'Avery L7160 (21/ark, 64×38 mm)' },
+  { value: 'box_portrait_70x100',  label: 'Arkivbox (6/ark, 70×100 mm)' },
+  { value: 'spine_portrait_40x150',label: 'Ryggetikett (4/ark, 40×150 mm)' },
+  { value: 'single',               label: 'Enskild etikett (A4 helsida)' },
+  { value: 'single_portrait',      label: 'Enskild stående (A4)' },
 ]
 
 interface Props {
@@ -17,11 +21,17 @@ interface Props {
 export default function PrintLabelsButton({ nodeIds, label }: Props) {
   const [open, setOpen] = useState(false)
   const [format, setFormat] = useState('standard_90x45')
+  const [templateId, setTemplateId] = useState<number | null>(null)
   const [copies, setCopies] = useState(1)
   const [includeDescendants, setIncludeDescendants] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+
+  const { data: templates } = useQuery({
+    queryKey: ['label-templates'],
+    queryFn: () => labelTemplatesApi.list().then(r => r.data.data),
+  })
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -36,7 +46,7 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
     setLoading(true)
     setError('')
     try {
-      const res = await nodesApi.printLabels(nodeIds, format, copies, includeDescendants)
+      const res = await nodesApi.printLabels(nodeIds, format, copies, includeDescendants, templateId)
       const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -92,14 +102,28 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
           padding: 'var(--space-4)',
           display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
         }}>
-          <div className="form-group" style={{ margin: 0 }}>
-            <label>Label format</label>
-            <select value={format} onChange={e => setFormat(e.target.value)}>
-              {FORMATS.map(f => (
-                <option key={f.value} value={f.value}>{f.label}</option>
-              ))}
-            </select>
-          </div>
+          {templates && templates.length > 0 && (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Design template</label>
+              <select value={templateId ?? ''} onChange={e => setTemplateId(e.target.value ? parseInt(e.target.value) : null)}>
+                <option value="">Built-in layout</option>
+                {templates.map((t: any) => (
+                  <option key={t.id} value={t.id}>{t.name}{t.is_default ? ' (default)' : ''}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {!templateId && (
+            <div className="form-group" style={{ margin: 0 }}>
+              <label>Label format</label>
+              <select value={format} onChange={e => setFormat(e.target.value)}>
+                {FORMATS.map(f => (
+                  <option key={f.value} value={f.value}>{f.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="form-group" style={{ margin: 0 }}>
             <label>Copies per label</label>

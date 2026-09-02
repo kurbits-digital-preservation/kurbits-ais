@@ -43,8 +43,9 @@ from app.models.integration import ExternalIntegration
 from app.models.representation import RepresentationType, NodeRepresentation
 from app.models.saved_search import SavedSearch
 from app.models.history import RecentItem, Bookmark
-from app.models.ai_config import InstitutionAIConfig
+from app.models.ai_config import InstitutionAIConfig # noqa: F401
 from app.models.background_task import BackgroundTask  # noqa: F401
+from app.models.label_template import LabelTemplate # noqa: F401
 __all__ = [
     'Institution',
     'user_institution_association',
@@ -85,12 +86,12 @@ __all__ = [
     'NodeIdentifier',
     'IdentifierScheme',
     'BpmnTaskLink',
-    'RecordsVocabularyTerm'
+    'RecordsVocabularyTerm',
+    'LabelTemplate',
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 
 from app.models.geo import AgentPlace, NodePlace, Tag, node_tags_table, agent_tags_table, PlaceType, TagCategory  # noqa: F401
 from app.models.flag import NodeFlag, FLAG_TYPES, SEVERITIES, STATUSES  # noqa: F401
-
 
 from app.models.acquisitions import SubmissionAgreement, SAAttachment, Delivery, Accession, accession_nodes, DeliveryChecklistTemplate  # noqa: F401

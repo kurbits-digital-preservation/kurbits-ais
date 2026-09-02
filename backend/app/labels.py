@@ -27,6 +27,10 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.graphics.barcode import code128
+from reportlab.graphics.barcode import qr as qr_barcode
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
+import base64 as _base64
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.utils import simpleSplit
@@ -61,8 +65,8 @@ FORMATS: dict[str, LabelFormat] = {
         margin_top=10 * mm,
         gap_h=0, gap_v=0,
     ),
-    'museiservice_90x45': LabelFormat(
-        name='Museiservice arkivetikett (12 per ark, 90×45 mm)',
+    'standard_90x45': LabelFormat(
+        name='Standard arkivetikett (12 per ark, 90×45 mm)',
         page_width=210 * mm,
         page_height=297 * mm,
         label_width=90 * mm,
@@ -96,6 +100,40 @@ FORMATS: dict[str, LabelFormat] = {
         gap_h=2.54 * mm,
         gap_v=0,
     ),
+    # ── Portrait formats ──────────────────────────────────────────────
+    'box_portrait_70x100': LabelFormat(
+        name='Archive box, portrait (6 per ark, 70×100 mm)',
+        page_width=210 * mm,
+        page_height=297 * mm,
+        label_width=70 * mm,
+        label_height=100 * mm,
+        cols=2, rows=2,
+        margin_left=25 * mm,
+        margin_top=25 * mm,
+        gap_h=20 * mm, gap_v=20 * mm,
+    ),
+    'spine_portrait_40x150': LabelFormat(
+        name='Spine label, portrait (4 per ark, 40×150 mm)',
+        page_width=210 * mm,
+        page_height=297 * mm,
+        label_width=40 * mm,
+        label_height=150 * mm,
+        cols=4, rows=1,
+        margin_left=13 * mm,
+        margin_top=20 * mm,
+        gap_h=6 * mm, gap_v=0,
+    ),
+    'single_portrait': LabelFormat(
+        name='Single portrait (A4)',
+        page_width=210 * mm,
+        page_height=297 * mm,
+        label_width=190 * mm,
+        label_height=277 * mm,
+        cols=1, rows=1,
+        margin_left=10 * mm,
+        margin_top=10 * mm,
+        gap_h=0, gap_v=0,
+    ),
 }
 
 
@@ -111,7 +149,24 @@ class LabelData:
     date_to: Optional[str]
     institution_name: str
     location_path: Optional[str] = None
+    parent_ref_code: Optional[str] = None
+    parent_title: Optional[str] = None
+    parent_date_from: Optional[str] = None
+    parent_date_to: Optional[str] = None
     copies: int = 1
+
+    @staticmethod
+    def _year_range(a, b) -> str:
+        if a and b:
+            ya, yb = str(a)[:4], str(b)[:4]
+            return f'{ya}–{yb}' if ya != yb else ya
+        if a:
+            return str(a)[:4]
+        return ''
+
+    @property
+    def parent_date_string(self) -> str:
+        return self._year_range(self.parent_date_from, self.parent_date_to)
 
     @property
     def date_string(self) -> str:
@@ -267,9 +322,144 @@ def _draw_label(c: canvas.Canvas, label: LabelData, fmt: LabelFormat,
     c.drawRightString(x + w - pad, y + 1 * mm, label.institution_name)
 
 
+# ── Template-driven rendering (WYSIWYG) ───────────────────────────────
+
+def _field_value(label, field):
+    if field == 'ref_code':      return label.ref_code or ''
+    if field == 'title':         return label.title or ''
+    if field == 'level':         return (label.level or '').upper()
+    if field == 'date':          return label.date_string
+    if field == 'local_ref':     return label.local_ref or ''
+    if field == 'location':      return label.location_path or ''
+    if field == 'institution':   return label.institution_name or ''
+    if field == 'parent_ref_code': return label.parent_ref_code or ''
+    if field == 'parent_title':    return label.parent_title or ''
+    if field == 'parent_date':     return label.parent_date_string
+    return ''
+
+
+def _draw_text_element(c, el, label, x0, y0, w, h):
+    ex = x0 + el.get('x', 0) * w
+    ey_top = y0 + h - el.get('y', 0) * h
+    ew = el.get('w', 1) * w
+    eh = el.get('h', 0.1) * h
+    text = _field_value(label, el.get('field', '')) if el.get('type') == 'field' else el.get('text', '')
+    if not text:
+        return
+    font = 'Helvetica-Bold' if el.get('bold') else 'Helvetica'
+    size = el.get('font_size') or max(6, eh / mm * 2.0)
+    color = el.get('color') or '#1a1a2e'
+    align = el.get('align', 'left')
+    c.setFillColor(colors.HexColor(color))
+    c.setFont(font, size)
+    lines = simpleSplit(text, font, size, ew)
+    line_h = size * 0.352778 * mm * 1.25
+    ty = ey_top - size * 0.352778 * mm
+    for line in lines:
+        if ty < ey_top - eh - line_h:
+            break
+        if align == 'center':
+            c.drawCentredString(ex + ew / 2, ty, line)
+        elif align == 'right':
+            c.drawRightString(ex + ew, ty, line)
+        else:
+            c.drawString(ex, ty, line)
+        ty -= line_h
+
+
+def _draw_barcode_element(c, el, label, x0, y0, w, h):
+    ex = x0 + el.get('x', 0) * w
+    ey = y0 + h - (el.get('y', 0) + el.get('h', 0.2)) * h
+    ew = el.get('w', 0.9) * w
+    eh = el.get('h', 0.2) * h
+    value = _field_value(label, el.get('field', 'ref_code')) or label.ref_code or ''
+    if not value:
+        return
+    try:
+        bc = code128.Code128(value, barHeight=eh, barWidth=0.4, quiet=False, humanReadable=False)
+        scale = ew / bc.width if bc.width > ew else 1.0
+        c.saveState()
+        c.translate(ex, ey)
+        c.scale(scale, 1)
+        bc.drawOn(c, 0, 0)
+        c.restoreState()
+    except Exception:
+        pass
+
+
+def _draw_qr_element(c, el, label, x0, y0, w, h):
+    ex = x0 + el.get('x', 0) * w
+    size = min(el.get('w', 0.2) * w, el.get('h', 0.2) * h)
+    ey = y0 + h - (el.get('y', 0) * h) - size
+    value = _field_value(label, el.get('field', 'ref_code')) or label.ref_code or ''
+    if not value:
+        return
+    try:
+        widget = qr_barcode.QrCodeWidget(value)
+        b = widget.getBounds()
+        wpx = b[2] - b[0]
+        hpx = b[3] - b[1]
+        d = Drawing(size, size, transform=[size / wpx, 0, 0, size / hpx, 0, 0])
+        d.add(widget)
+        renderPDF.draw(d, c, ex, ey)
+    except Exception:
+        pass
+
+
+def _draw_image_element(c, el, x0, y0, w, h):
+    data = el.get('image_data')
+    if not data:
+        return
+    ex = x0 + el.get('x', 0) * w
+    ew = el.get('w', 0.2) * w
+    eh = el.get('h', 0.2) * h
+    ey = y0 + h - (el.get('y', 0) * h) - eh
+    try:
+        if data.startswith('data:'):
+            data = data.split(',', 1)[1]
+        raw = _base64.b64decode(data)
+        from reportlab.lib.utils import ImageReader
+        img = ImageReader(io.BytesIO(raw))
+        c.drawImage(img, ex, ey, width=ew, height=eh, preserveAspectRatio=True, mask='auto')
+    except Exception:
+        pass
+
+
+def render_template(c, label, fmt, x, y, elements):
+    w, h = fmt.label_width, fmt.label_height
+    c.setStrokeColor(colors.HexColor('#cccccc'))
+    c.setLineWidth(0.3)
+    c.rect(x, y, w, h)
+    for el in elements or []:
+        t = el.get('type')
+        rot = int(el.get('rotation', 0)) % 360
+
+        # Rotate the whole element around its centre so browser and PDF agree.
+        if rot:
+            cx = x + (el.get('x', 0) + el.get('w', 0.1) / 2) * w
+            cy = y + h - (el.get('y', 0) + el.get('h', 0.1) / 2) * h
+            c.saveState()
+            c.translate(cx, cy)
+            c.rotate(rot)
+            c.translate(-cx, -cy)
+
+        if t in ('field', 'text'):
+            _draw_text_element(c, el, label, x, y, w, h)
+        elif t == 'barcode':
+            _draw_barcode_element(c, el, label, x, y, w, h)
+        elif t == 'qr':
+            _draw_qr_element(c, el, label, x, y, w, h)
+        elif t == 'image':
+            _draw_image_element(c, el, x, y, w, h)
+
+        if rot:
+            c.restoreState()
+
+
 # ── Main PDF generator ────────────────────────────────────────────────
 
-def generate_label_pdf(labels: list[LabelData], format_key: str = 'avery_l7163') -> bytes:
+def generate_label_pdf(labels: list[LabelData], format_key: str = 'avery_l7163',
+                       template_elements=None) -> bytes:
     """
     Generate a PDF containing all labels and return as bytes.
     """
@@ -304,7 +494,10 @@ def generate_label_pdf(labels: list[LabelData], format_key: str = 'avery_l7163')
             y_from_top = fmt.margin_top + row * (fmt.label_height + fmt.gap_v)
             y = fmt.page_height - y_from_top - fmt.label_height
 
-            _draw_label(c, label, fmt, x, y)
+            if template_elements:
+                render_template(c, label, fmt, x, y, template_elements)
+            else:
+                _draw_label(c, label, fmt, x, y)
 
     c.save()
     return buf.getvalue()

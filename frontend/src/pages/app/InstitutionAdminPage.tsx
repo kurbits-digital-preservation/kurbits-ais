@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users, Settings, Shield, Pencil, Trash2, BookOpen, Layers,
   X, Save, Plus, ChevronDown, Check, AlertCircle,
-  UserPlus, Building2, Link, Mic, Fingerprint, ListChecks
+  UserPlus, Building2, Link, Mic, Fingerprint, ListChecks, Printer
 } from 'lucide-react'
 import { institutionApi, portalApi } from '@/api'
 import { useAuthStore } from '@/store/auth'
@@ -16,6 +16,7 @@ import IntegrationsTab from './IntegrationsTab'
 import WhisperConfigTab from './WhisperConfigTab'
 import IdentifierSchemesTab from './IdentifierSchemesTab'
 import RecordsVocabularyTab from './RecordsVocabularyTab'
+import LabelDesigner from './LabelDesigner'
 import { Zap, RefreshCw, Globe } from 'lucide-react'
 
 // ─── Constants ────────────────────────────────────────────────────────
@@ -588,6 +589,7 @@ export default function InstitutionAdminPage() {
     { key: 'ai',           icon: <Mic size={14} />,      label: 'Transcription' },
     { key: 'identifiers',  icon: <Fingerprint size={14} />, label: 'Identifier schemes' },
     { key: 'records-vocab', icon: <ListChecks size={14} />, label: 'Records values' },
+    { key: 'labels',        icon: <Printer size={14} />,   label: 'Label designer' },
     { key: 'portal', icon: <Globe size={14} />, label: 'Portal' },
   ]
 
@@ -621,6 +623,7 @@ export default function InstitutionAdminPage() {
         )}
         {tab === 'identifiers'  && <IdentifierSchemesTab />}
         {tab === 'records-vocab' && <RecordsVocabularyTab />}
+        {tab === 'labels' && <LabelDesigner />}
         {tab === 'portal' && <PortalTab />}
       </div>
     </div>
