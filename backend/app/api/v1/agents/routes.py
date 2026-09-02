@@ -722,3 +722,28 @@ def remove_agent_tag(agent_id, tag_id):
         agent.tags.remove(tag)
         db.session.commit()
     return success({'message': 'Removed'})
+
+from flask import Response
+from app.eaccpf.exporter import export_agent_eac
+
+
+@bp.route('/agents/<int:agent_id>/export/eac', methods=['GET'])
+@login_required
+def export_agent_eaccpf(agent_id):
+    institution_id = current_user.active_institution_id
+    agent = Agent.query.filter_by(id=agent_id, institution_id=institution_id).first()
+    if not agent:
+        return error('Agent not found', 404)
+
+    xml = export_agent_eac(agent, agent.institution if hasattr(agent, 'institution') else None)
+
+    safe_name = (agent.authorized_form or agent.name or f'agent-{agent_id}')
+    safe_name = ''.join(c if c.isalnum() or c in '-_ ' else '_' for c in safe_name).strip()[:80]
+
+    return Response(
+        xml,
+        mimetype='application/xml',
+        headers={
+            'Content-Disposition': f'attachment; filename="{safe_name or f"agent-{agent_id}"}.eac.xml"'
+        },
+    )

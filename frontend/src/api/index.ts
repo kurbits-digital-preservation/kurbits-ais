@@ -149,6 +149,8 @@ export const agentsApi = {
 
   delete: (agentId: number) => api.delete(`/agents/${agentId}`),
 
+  exportEacUrl: (id: number) => `/api/v1/agents/${id}/export/eac`,
+
   getNodes: (agentId: number, q?: string) =>
     api.get(`/agents/${agentId}/nodes`, { params: { q } }),
 

@@ -5,7 +5,7 @@ import {
   Plus, Users, User, Building2, UsersRound, Bot,
   Pencil, Trash2, Link, FileText, StickyNote,
   X, Save, ExternalLink, Globe, Upload, Check, AlertCircle,
-  MapPin, Tag as Tag2, Search
+  MapPin, Tag as Tag2, Search, Download
 } from 'lucide-react'
 import { agentsApi, agentsImportApi, nodesApi} from '@/api'
 import PlacesPanel from '@/components/geo/PlacesPanel'
@@ -662,6 +662,13 @@ function AgentDetailPanel({
               subtitle={agent.agent_type}
             />
             <CopyAgentLinkButton agentId={agentId} agentName={agent.name} />
+              <a      className="btn btn-ghost btn-sm btn-icon"
+              href={agentsApi.exportEacUrl(agentId)}
+              download
+              title="Export as EAC-CPF"
+            >
+              <Download size={14} />
+            </a>
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(agent)} title="Edit">
               <Pencil size={14} />
             </button>
