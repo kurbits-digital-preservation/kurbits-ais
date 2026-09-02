@@ -1,0 +1,47 @@
+{
+  "app": {
+    "name": "Kurbits",
+    "tagline": "Arkivinformationssystem"
+  },
+  "nav": {
+    "resources": "Resurser",
+    "agents": "Agenter",
+    "locations": "Förvaring",
+    "classifications": "Klassificering",
+    "flags": "Flaggor",
+    "acquisitions": "Förvärv",
+    "search": "Sök",
+    "administration": "Administration",
+    "logout": "Logga ut",
+    "selectInstitution": "Välj institution",
+    "language": "Språk"
+  },
+  "login": {
+    "email": "E-post",
+    "password": "Lösenord",
+    "signIn": "Logga in",
+    "signingIn": "Loggar in…",
+    "error": "Fel e-post eller lösenord"
+  },
+  "flags": {
+    "title": "Flaggor",
+    "all": "Alla",
+    "assignedToMe": "Tilldelade mig",
+    "unassigned": "Ej tilldelade",
+    "noFlags": "Inga öppna flaggor.",
+    "severity": "Allvarlighetsgrad",
+    "status": "Status",
+    "open": "Öppen",
+    "inProgress": "Pågående",
+    "resolved": "Löst"
+  },
+  "common": {
+    "save": "Spara",
+    "cancel": "Avbryt",
+    "delete": "Ta bort",
+    "edit": "Redigera",
+    "add": "Lägg till",
+    "close": "Stäng",
+    "loading": "Laddar…"
+  }
+}

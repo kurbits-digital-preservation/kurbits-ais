@@ -8,20 +8,23 @@ import { useAuthStore } from '@/store/auth'
 import { authApi } from '@/api'
 import styles from './AppLayout.module.css'
 import { GlobalSearchModal, SearchTrigger } from './GlobalSearch'
+import { useTranslation } from 'react-i18next'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { Clock } from 'lucide-react'
 import HistoryPopover from './HistoryPopover'
 
 const NAV_ITEMS = [
-  { to: '/app/resources',          icon: FolderOpen,  label: 'Resources' },
-  { to: '/app/agents',             icon: Users,       label: 'Agents' },
-  { to: '/app/locations',          icon: MapPin,      label: 'Locations' },
-  { to: '/app/classifications',    icon: Tag,         label: 'Classifications' },
-  { to: '/app/flags',              icon: Flag,        label: 'Flags' },
-  { to: '/app/acquisitions',       icon: PackageOpen, label: 'Acquisitions' },
+  { to: '/app/resources',          icon: FolderOpen,  key: 'resources' },
+  { to: '/app/agents',             icon: Users,       key: 'agents' },
+  { to: '/app/locations',          icon: MapPin,      key: 'locations' },
+  { to: '/app/classifications',    icon: Tag,         key: 'classifications' },
+  { to: '/app/flags',              icon: Flag,        key: 'flags' },
+  { to: '/app/acquisitions',       icon: PackageOpen, key: 'acquisitions' },
 ]
 
 export default function AppLayout() {
   const { user, setUser, logout } = useAuthStore()
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [institutionMenuOpen, setInstitutionMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -59,7 +62,7 @@ export default function AppLayout() {
           <span className={styles.wordmark}>Kurbits</span>
 
           <nav className={styles.topbarNav}>
-            {NAV_ITEMS.map(({ to, label }) => (
+            {NAV_ITEMS.map(({ to, key }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -68,7 +71,7 @@ export default function AppLayout() {
                   `${styles.topbarNavItem} ${isActive ? styles.topbarNavItemActive : ''}`
                 }
               >
-                {label}
+                {t(`nav.${key}`)}
               </NavLink>
             ))}
           </nav>
@@ -80,7 +83,7 @@ export default function AppLayout() {
             }
           >
             <Search size={14} />
-            Search
+            {t('nav.search')}
           </NavLink>
         </div>
 
@@ -93,7 +96,7 @@ export default function AppLayout() {
                 onClick={() => setInstitutionMenuOpen(!institutionMenuOpen)}
               >
                 <Building2 size={13} />
-                <span>{user!.active_institution?.name ?? 'Select institution'}</span>
+                <span>{user!.active_institution?.name ?? t('nav.selectInstitution')}</span>
                 {user!.active_institution && (
                   <span className={styles.refPrefix}>{user!.active_institution!.ref_prefix}</span>
                 )}
@@ -121,19 +124,20 @@ export default function AppLayout() {
               )}
             </div>
           )}
+            <LanguageSwitcher />
             <HistoryPopover />
           <NavLink
             to="/app/administration"
             className={({ isActive }) =>
               `${styles.topbarNavItem} ${isActive ? styles.topbarNavItemActive : ''}`
             }
-            title="Administration"
+            title={t('nav.administration')}
           >
             <Settings size={14} />
           </NavLink>
 
           <span className={styles.username}>{user?.username}</span>
-          <button className="btn btn-ghost btn-icon" onClick={handleLogout} title="Log out">
+          <button className="btn btn-ghost btn-icon" onClick={handleLogout} title={t('nav.logout')}>
             <LogOut size={15} />
           </button>
         </div>

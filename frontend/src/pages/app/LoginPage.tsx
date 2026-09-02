@@ -3,11 +3,14 @@ import type { FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '@/api'
 import { useAuthStore } from '@/store/auth'
+import { useTranslation } from 'react-i18next'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 import styles from './LoginPage.module.css'
 
 export default function LoginPage() {
   const navigate = useNavigate()
   const { setUser } = useAuthStore()
+  const { t } = useTranslation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -33,14 +36,14 @@ export default function LoginPage() {
       <div className={styles.panel}>
         <div className={styles.header}>
           <img src="/kurbits.png" alt="Kurbits" className={styles.logo} />
-          <p className={styles.tagline}>Archival Information System</p>
+          <p className={styles.tagline}>{t('app.tagline')}</p>
         </div>
 
         <form className={styles.form} onSubmit={handleSubmit}>
           {error && <div className={styles.error}>{error}</div>}
 
           <div className="form-group">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">{t('login.email')}</label>
             <input
               id="email"
               type="email"
@@ -53,7 +56,7 @@ export default function LoginPage() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('login.password')}</label>
             <input
               id="password"
               type="password"
@@ -68,7 +71,7 @@ export default function LoginPage() {
             className={`btn btn-primary ${styles.submitBtn}`}
             disabled={loading}
           >
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('login.signingIn') : t('login.signIn')}
           </button>
         </form>
       </div>

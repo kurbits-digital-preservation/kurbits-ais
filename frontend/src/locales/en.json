@@ -1,0 +1,47 @@
+{
+  "app": {
+    "name": "Kurbits",
+    "tagline": "Archival Information System"
+  },
+  "nav": {
+    "resources": "Resources",
+    "agents": "Agents",
+    "locations": "Locations",
+    "classifications": "Classifications",
+    "flags": "Flags",
+    "acquisitions": "Acquisitions",
+    "search": "Search",
+    "administration": "Administration",
+    "logout": "Log out",
+    "selectInstitution": "Select institution",
+    "language": "Language"
+  },
+  "login": {
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "error": "Incorrect email or password"
+  },
+  "flags": {
+    "title": "Flags",
+    "all": "All",
+    "assignedToMe": "Assigned to me",
+    "unassigned": "Unassigned",
+    "noFlags": "No open flags.",
+    "severity": "Severity",
+    "status": "Status",
+    "open": "Open",
+    "inProgress": "In progress",
+    "resolved": "Resolved"
+  },
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "close": "Close",
+    "loading": "Loading…"
+  }
+}
