@@ -5,8 +5,6 @@
 ---
 
 Kurbits stödjer import av exportfiler från **Visual Arkiv 7** via ett kommandoradsverktyg.
-Verifierade versioner av VA för Allmänna Arkivschemat: **7.0.5.1**, **7.1.6.0**
-
 
 > ⚠️ **Viktigt:** Importfunktionen är enbart testad mot Visual Arkiv 7 och enbart mot arkiv som förtecknats enligt **Allmänna Arkivschemat** (AA-schemat) med seriebeteckningar på formen Y + Z + A (t.ex. A1, F2a). Stöd för verksamhetsbaserad arkivredovisning (processorienterad förteckning) finns inte implementerat i nuläget.
 >
@@ -99,14 +97,16 @@ flask import-visual-arkiv --institution-id 1 --file devdata/VA7_export.xml --bat
 
 ## Alla flaggor
 
-| Flagga | Typ | Standard | Beskrivning |
-|---|---|---|---|
-| `--institution-id` | Heltal | *Krävs* | ID för den institution som data ska importeras till |
-| `--file` | Sökväg | *Krävs* | Sökväg till VA7 XML-exportfilen |
-| `--force-agents` | Flagga | Av | Uppdatera befintliga agenter istället för att hoppa över dem |
-| `--dry-run` | Flagga | Av | Tolka filen och räkna poster utan att skriva till databasen |
-| `--batch-size` | Heltal | 50 | Töm databasen var N:e arkivbildare |
-| `--verbose` | Flagga | Av | Visa varje skapad post i terminalen |
+| Flagga             | Typ | Standard | Beskrivning                                                           |
+|--------------------|---|---|-----------------------------------------------------------------------|
+| `--institution-id` | Heltal | *Krävs* | ID för den institution som data ska importeras till                   |
+| `--file`           | Sökväg | *Krävs* | Sökväg till VA7 XML-exportfilen                                       |
+| `--force-agents`   | Flagga | Av | Uppdatera befintliga agenter istället för att hoppa över dem          |
+| `--dry-run`        | Flagga | Av | Tolka filen och räkna poster utan att skriva till databasen           |
+| `--batch-size`     | Heltal | 50 | Töm databasen var N:e arkivbildare                                    |
+| `--verbose`        | Flagga | Av | Visa varje skapad post i terminalen                                   |
+| `--parse-codes`    | Flagga | Av | Skapar trädstruktur utifrån VA platta struktur för AA                 |
+
 
 ---
 
@@ -145,22 +145,8 @@ SE-INST/1/A1/1     ← Volume (volym 1)
 ## Kända begränsningar
 
 - **Enbart VA7** — Formatet för VA5 och VA6 skiljer sig och stöds inte.
-- **Enbart Allmänna Arkivschemat** — Seriebeteckningar förutsätts följa Y+Z+A-strukturen. Verksamhetsbaserad arkivredovisning med processer och aktiviteter hanteras inte.
 - **Inga digitala objekt** — Eventuella bifogade filer eller digitala objekt i VA-exporten importeras inte.
 - **Inga ärendemeningar eller handlingstyper** — Dessa nivåer under volymen importeras inte i nuläget.
 - **Teckenkodning** — Filen förutsätts ha iso-8859-1-kodning med en XML-deklaration som anger detta. Filer utan kodningsdeklaration tolkas som UTF-8.
 
 ---
-
-## Framtida utveckling
-
-Stöd för **verksamhetsbaserad arkivredovisning** (processorienterad förteckning enligt RA-FS 2008:4) är inte implementerat. Detta beror på att:
-
-1. Strukturen skiljer sig avsevärt från Allmänna Arkivschemat
-2. Det saknas testdata från verkliga institutioner
-
-Om du vill bidra till att lägga till stöd för verksamhetsbaserad redovisning välkomnas:
-
-- **Utvecklingsbidrag** (pull requests) mot projektets repo
-- **Exempelfiler** — VA7-exportfiler med verksamhetsbaserad redovisning som kan användas för att testa och utveckla importfunktionen
-

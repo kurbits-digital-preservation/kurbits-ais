@@ -30,9 +30,11 @@ Shows the node's name, code, scope note, and any external identifiers. The **Res
 
 Lists all resources linked to this node. Clicking a resource opens it directly.
 ![05_linked_resource.png](assets/05_linked_resource.png)
-## The Diagram tab
+## The Process tab
 
-Shows the node's position in the hierarchy as a visual diagram — its parent chain above and its children below.
+Classification nodes can carry a **BPMN process diagram** that documents the business process behind the records — useful for process-based archival description (*verksamhetsbaserad arkivredovisning*). See [Process descriptions](11-process-descriptions.md) for the full guide.
+
+In short: the Process tab lets you draw the activities, decisions, and records of a process using standard BPMN 2.0 notation, link the records produced to a records classification, and record retention and other records-management metadata on each one.
 
 ![05_diagram.png](assets/05_diagram.png)
 
