@@ -18,3 +18,10 @@ Kurbits is an archival information and collection management system for archives
 **Flags** are internal workflow markers for resources that need attention — metadata issues, conservation concerns, rights questions.
 
 **Acquisitions** covers the intake workflow: submission agreements with depositors, deliveries of material, and the accessions that result.
+
+
+## Change logs
+
+### [V 1.1 (2026-09-03)](change_logs/1_1.md)
+
+
