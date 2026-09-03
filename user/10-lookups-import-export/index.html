@@ -1,0 +1,1233 @@
+
+<!doctype html>
+<html lang="sv" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../09-administration/">
+      
+      
+        <link rel="next" href="../visual-arkiv-import/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Import / Export / Lookups - KURBITS AIS Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#authority-lookups-import-and-export" class="md-skip">
+          Gå till innehållet
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Sidhuvud">
+    <a href="../.." title="KURBITS AIS Documentation" class="md-header__button md-logo" aria-label="KURBITS AIS Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            KURBITS AIS Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Import / Export / Lookups
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Sök" placeholder="Sök" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Sök">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Rensa" aria-label="Rensa" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initialiserar sök
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="KURBITS AIS Documentation" class="md-nav__button md-logo" aria-label="KURBITS AIS Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    KURBITS AIS Documentation
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    User manual
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    User manual
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../01-getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting-started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02-resources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../03-agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../04-locations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Locations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../05-classifications/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Classifications
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../06-flags/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flags
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../07-acquisitions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Acquisitions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../08-search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../09-administration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Administration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Import / Export / Lookups
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Import / Export / Lookups
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Innehållsförteckning">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Innehållsförteckning
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authority-lookups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authority lookups
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authority lookups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#wikidata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wikidata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viaf-virtual-international-authority-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VIAF (Virtual International Authority File)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orcid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ORCID
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-identifier-lookup-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How identifier lookup works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Import">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ead-import-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EAD import (resources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#oai-pmh-harvest-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAI-PMH harvest (resources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#eac-cpf-import-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EAC-CPF import (agents)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visual-arkiv-import-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visual Arkiv import (CLI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-template-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata template import
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Export">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ead-export-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EAD export (resources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-export-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other export formats
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../visual-arkiv-import/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Visual-Arkiv
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Innehållsförteckning">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Innehållsförteckning
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#authority-lookups" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Authority lookups
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Authority lookups">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#wikidata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Wikidata
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#viaf-virtual-international-authority-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        VIAF (Virtual International Authority File)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orcid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ORCID
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-identifier-lookup-works" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How identifier lookup works
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Import
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Import">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ead-import-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EAD import (resources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#oai-pmh-harvest-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAI-PMH harvest (resources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#eac-cpf-import-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EAC-CPF import (agents)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#visual-arkiv-import-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Visual Arkiv import (CLI)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#metadata-template-import" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metadata template import
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#export" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Export
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Export">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ead-export-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        EAD export (resources)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-export-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other export formats
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="authority-lookups-import-and-export">Authority lookups, import and export</h1>
+<h2 id="authority-lookups">Authority lookups</h2>
+<p>Kurbits integrates with several external authority systems to help you identify and enrich agent and place records without manual data entry.</p>
+<h3 id="wikidata">Wikidata</h3>
+<p>Wikidata is a free, collaborative knowledge base maintained by the Wikimedia Foundation. Kurbits uses it in two places.</p>
+<p><strong>Agent identifiers</strong> — When editing an agent, you can paste a Wikidata QID (e.g. <code>Q42</code>) or a full Wikidata URL into the Wikidata identifier field. Kurbits will look up the entity and fill in:
+<img alt="10_wikidata.png" src="../assets/10_wikidata.png" /></p>
+<ul>
+<li>Authorised form of name</li>
+<li>Dates of existence</li>
+<li>Description / biographical note</li>
+<li>VIAF identifier (if present on the Wikidata record)</li>
+</ul>
+<p><strong>Places</strong> — On the Places tab of any resource or agent, the Wikidata search widget lets you search for geographic places by name. Selecting a result fills in:</p>
+<ul>
+<li>Place name</li>
+<li>Wikidata identifier</li>
+<li>Coordinates (latitude and longitude, from P625)</li>
+<li>Inception date (P571) → date from</li>
+<li>Dissolved / abolished date (P576) → date to</li>
+<li>Description → note
+<img alt="10_places_1.png" src="../assets/10_places_1.png" /></li>
+</ul>
+<p><img alt="10_places_2.png" src="../assets/10_places_2.png" /></p>
+<p>This is particularly useful for historical places — parishes, municipalities, estates — that have Wikidata entries with well-maintained coordinates and dates.</p>
+<h3 id="viaf-virtual-international-authority-file">VIAF (Virtual International Authority File)</h3>
+<p>VIAF is a joint project of national libraries worldwide that aggregates authority records across many library systems. When you paste a VIAF identifier or URL into the VIAF field on an agent record, Kurbits retrieves:</p>
+<ul>
+<li>Authorised form of name (preferred heading from VIAF)</li>
+<li>Source authority links (Library of Congress, Biblioteka Narodowa, etc.)</li>
+</ul>
+<p>VIAF is especially useful for well-known authors, historical figures, and corporate bodies that have been catalogued by major libraries.</p>
+<h3 id="orcid">ORCID</h3>
+<p>ORCID is a persistent identifier system for researchers and academics. When you paste an ORCID iD (format <code>0000-0002-1825-0097</code>) or ORCID URL into the identifier field on a person record, Kurbits validates and normalises the identifier.</p>
+<p>ORCID integration is primarily useful for collections with contemporary academic or scientific material where creators have registered ORCIDs.</p>
+<p><img alt="10_ORCID.png" src="../assets/10_ORCID.png" /></p>
+<h3 id="how-identifier-lookup-works">How identifier lookup works</h3>
+<p>On an agent's Details tab, the identifier fields (Wikidata, VIAF, ORCID) each have a <strong>lookup button</strong>. Paste or type the identifier and click the button — Kurbits calls the external API and pre-fills whatever fields it can retrieve. You can always edit the result before saving.</p>
+<p>If a field is already filled, the lookup will offer to overwrite it. No changes are saved until you click <strong>Save</strong>.</p>
+<hr />
+<h2 id="import">Import</h2>
+<h3 id="ead-import-resources">EAD import (resources)</h3>
+<p>Kurbits can import archival descriptions in <strong>EAD 2002</strong> (Encoded Archival Description) format. This is the standard XML format used by most archival management systems for exchange.</p>
+<p>To import:</p>
+<ol>
+<li>Open the <strong>Resources</strong> page</li>
+<li>Click the <strong>Import</strong> button in the toolbar</li>
+<li>Choose <strong>EAD file</strong> and upload your <code>.xml</code> file</li>
+<li>Review the preview and confirm</li>
+</ol>
+<p><img alt="10_EAD_import.png" src="../assets/10_EAD_import.png" /></p>
+<p>Imported records are created as new nodes. If a record with the same reference code already exists, it will be updated. Notes, agents, dates, levels of description, and scope notes are all mapped from the EAD elements.</p>
+<h3 id="oai-pmh-harvest-resources">OAI-PMH harvest (resources)</h3>
+<p>Kurbits can harvest records from any OAI-PMH compliant repository — other archival systems, library catalogues, or aggregators.</p>
+<p>To harvest:</p>
+<ol>
+<li>Open the <strong>Resources</strong> page and click <strong>Import</strong></li>
+<li>Choose <strong>OAI-PMH</strong></li>
+<li>Enter the base URL of the OAI-PMH endpoint (e.g. <code>https://oai-pmh.riksarkivet.se/OAI</code>) for Swedish national Archives</li>
+<li>Click <strong>Identify</strong> to verify the endpoint and see available metadata formats</li>
+<li>Choose a format and set any date filters</li>
+<li>Click <strong>Harvest</strong></li>
+<li><img alt="10_OAI-PMH.png" src="../assets/10_OAI-PMH.png" /></li>
+</ol>
+<p>Harvested records are created or updated based on their OAI identifier. Large harvests may take some time.</p>
+<p><img alt="10_OAI-PMH_result.png" src="../assets/10_OAI-PMH_result.png" /></p>
+<h3 id="eac-cpf-import-agents">EAC-CPF import (agents)</h3>
+<p>Agent authority records can be imported from <strong>EAC-CPF</strong> (Encoded Archival Context — Corporate Bodies, Persons, and Families) XML files. This is the standard format for exchanging authority records between archival systems.</p>
+<p>To import:</p>
+<ol>
+<li>Open the <strong>Agents</strong> page</li>
+<li>Click <strong>Import EAC-CPF</strong></li>
+<li>Upload your <code>.xml</code> file</li>
+<li>Choose whether to update existing records (matched by name) or only create new ones</li>
+<li>Confirm</li>
+</ol>
+<h3 id="visual-arkiv-import-cli">Visual Arkiv import (CLI)</h3>
+<p>See the separate guide: <a href="../visual-arkiv-import/">Visual Arkiv import</a> (Swedish).</p>
+<h3 id="metadata-template-import">Metadata template import</h3>
+<p>Standard metadata templates (Dublin Core, Dublin Core Terms, Photographic records) can be imported from the Administration panel. See <a href="../09-administration/">Administration → Field templates</a>.</p>
+<p><img alt="10_metadata.png" src="../assets/10_metadata.png" /></p>
+<hr />
+<h2 id="export">Export</h2>
+<h3 id="ead-export-resources">EAD export (resources)</h3>
+<p>Any resource can be exported as an EAD 2002 XML file. The export includes the selected node and optionally all its descendants.</p>
+<p>To export:</p>
+<ol>
+<li>Select a node in the Resources tree</li>
+<li>Click the <strong>Export</strong> button in the toolbar</li>
+<li>Choose <strong>Full export</strong> (node + all descendants) or <strong>Single record</strong> (this node only)</li>
+<li>The file downloads immediately</li>
+</ol>
+<p><img alt="10_metadata.png" src="../assets/10_metadata.png" /></p>
+<p>The exported EAD file follows the EAD 2002 standard and can be imported into other archival management systems that support EAD.</p>
+<h3 id="other-export-formats">Other export formats</h3>
+<p>Depending on your institution's configuration, additional export formats may be available — for example Dublin Core XML or RDF. These appear in the export dropdown alongside EAD.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": [], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Kopierat till urklipp", "clipboard.copy": "Kopiera till urklipp", "search.result.more.one": "1 till p\u00e5 denna sida", "search.result.more.other": "# till p\u00e5 denna sida", "search.result.none": "Inga s\u00f6kresultat", "search.result.one": "1 s\u00f6kresultat", "search.result.other": "# s\u00f6kresultat", "search.result.placeholder": "Skriv s\u00f6kord", "search.result.term.missing": "Saknas", "select.version": "V\u00e4lj version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
