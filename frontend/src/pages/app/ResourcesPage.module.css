@@ -1025,3 +1025,70 @@
   min-width: 40px;
   text-align: center;
 }
+/* ─── Attachment technical metadata panel ────────────────────────── */
+.attachmentTechPanel {
+  border-top: 1px solid var(--color-border);
+  padding: var(--space-4);
+  background: var(--color-bg-subtle);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.attachmentTechGrid {
+  display: grid;
+  grid-template-columns: minmax(90px, max-content) 1fr;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--text-xs);
+  align-items: baseline;
+}
+
+.attachmentTechGrid dt {
+  color: var(--color-ink-faint);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 10px;
+  padding-top: 2px;
+  white-space: nowrap;
+}
+
+.attachmentTechGrid dd {
+  color: var(--color-ink);
+  margin: 0;
+  font-size: var(--text-xs);
+  min-width: 0;
+  word-break: break-word;
+}
+
+/* zebra separation between rows without borders */
+.attachmentTechGrid dt:nth-of-type(even),
+.attachmentTechGrid dd:nth-of-type(even) {
+  /* kept subtle; grid rows already read cleanly */
+}
+
+/* ─── EXIF / IPTC collapsible ─────────────────────────────────────── */
+.exifDetails {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px dashed var(--color-border);
+  font-size: var(--text-xs);
+}
+
+.exifDetails summary {
+  cursor: pointer;
+  color: var(--color-ink-muted);
+  font-weight: 600;
+  font-size: 11px;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.exifDetails summary::before {
+  content: '▸';
+  font-size: 9px;
+  transition: transform 0.12s ease;
+  color: var(--color-ink-faint);
+}
+.exifDetails[open] summary::before { transform: rotate(90deg); }
+.exifDetails summary:hover { color: var(--color-accent); }
