@@ -724,6 +724,7 @@ def remove_agent_tag(agent_id, tag_id):
     return success({'message': 'Removed'})
 
 from flask import Response
+import sqlalchemy as sa
 from app.eaccpf.exporter import export_agent_eac
 
 
@@ -735,7 +736,26 @@ def export_agent_eaccpf(agent_id):
     if not agent:
         return error('Agent not found', 404)
 
-    xml = export_agent_eac(agent, agent.institution if hasattr(agent, 'institution') else None)
+    # ── Load linked resources (agent -> nodes) for resourceRelation ──
+    from app.models.agent import agent_node_association
+    from app.models.node import Node
+    rows = db.session.execute(
+        sa.select(agent_node_association.c.node_id, agent_node_association.c.relation_type)
+        .where(agent_node_association.c.agent_id == agent_id)
+    ).all()
+    resource_links = []
+    for node_id, relation_type in rows:
+        node = Node.query.get(node_id)
+        if node:
+            resource_links.append({
+                'ref_code': node.ref_code or node.local_ref,
+                'title': node.title,
+                'relation_type': relation_type,
+            })
+    agent.resource_links = resource_links
+
+    institution = agent.institution if hasattr(agent, 'institution') else None
+    xml = export_agent_eac(agent, institution)
 
     safe_name = (agent.authorized_form or agent.name or f'agent-{agent_id}')
     safe_name = ''.join(c if c.isalnum() or c in '-_ ' else '_' for c in safe_name).strip()[:80]

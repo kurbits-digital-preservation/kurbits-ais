@@ -20,6 +20,37 @@ _ENTITY_TYPE = {
     'software': 'corporateBody',   # no EAC entityType for software; nearest is corporateBody
 }
 
+# Kurbits agent->resource relationship names -> EAC-CPF resourceRelationType.
+# EAC-CPF 2010 allows: creatorOf | subjectOf | other (+ arcrole for detail).
+_RESOURCE_REL_TYPE = {
+    'creator': 'creatorOf',
+    'author': 'creatorOf',
+    'publisher': 'creatorOf',
+    'contributor': 'creatorOf',
+    'subject': 'subjectOf',
+    'custodian': 'other',
+    'owner': 'other',
+}
+
+# Kurbits agent<->agent relationship names -> EAC-CPF cpfRelationType.
+# EAC-CPF 2010 allows: identity | hierarchical | temporal | family | associative.
+_CPF_REL_TYPE = {
+    'member of': 'hierarchical',
+    'member': 'hierarchical',
+    'part of': 'hierarchical',
+    'parent of': 'hierarchical',
+    'child of': 'hierarchical',
+    'predecessor of': 'temporal',
+    'successor of': 'temporal',
+    'predecessor': 'temporal',
+    'successor': 'temporal',
+    'controlled by': 'hierarchical',
+    'controls': 'hierarchical',
+    'family': 'family',
+    'associated with': 'associative',
+    'associative': 'associative',
+}
+
 
 def _sub(parent, tag, text=None, **attrs):
     el = etree.SubElement(parent, f'{{{EAC_NS}}}{tag}')
@@ -168,6 +199,45 @@ def export_agent_eac(agent, institution=None) -> bytes:
             _sub(ev, 'agentType', 'human')
             _sub(ev, 'agent', getattr(n, 'created_by', None) or 'Kurbits')
             desc_ev = _sub(ev, 'eventDescription', content.strip()[:500])
+
+    # ── Relations: resourceRelation (to resources) + cpfRelation (to agents) ──
+    resource_links = list(getattr(agent, 'resource_links', None) or [])
+    agent_relations = list(getattr(agent, 'relations', None) or [])
+
+    if resource_links or agent_relations:
+        relations = _sub(cpf, 'relations')
+
+        for rl in resource_links:
+            # rl expected shape: {ref_code, title, relation_type} or object with attrs
+            ref_code = rl.get('ref_code') if isinstance(rl, dict) else getattr(rl, 'ref_code', None)
+            title = rl.get('title') if isinstance(rl, dict) else getattr(rl, 'title', None)
+            rtype = (rl.get('relation_type') if isinstance(rl, dict)
+                     else getattr(rl, 'relation_type', None)) or ''
+            eac_type = _RESOURCE_REL_TYPE.get(rtype.lower(), 'other')
+            rr = _sub(relations, 'resourceRelation', resourceRelationType=eac_type)
+            if ref_code:
+                rr.set(f'{{{XLINK_NS}}}href', str(ref_code))
+            if rtype:
+                rr.set(f'{{{XLINK_NS}}}arcrole', rtype)
+            _sub(rr, 'relationEntry', title or ref_code or '')
+
+        for ar in agent_relations:
+            # ar expected shape from serializer: {agent: {name,...}, association_type, direction}
+            if isinstance(ar, dict):
+                other = ar.get('agent') or {}
+                other_name = (other.get('name') if isinstance(other, dict) else None) or ar.get('name')
+                rtype = ar.get('association_type') or ar.get('relation_type') or ''
+            else:
+                other = getattr(ar, 'agent', None)
+                other_name = getattr(other, 'name', None) if other else getattr(ar, 'name', None)
+                rtype = getattr(ar, 'association_type', None) or getattr(ar, 'relation_type', '') or ''
+            if not other_name:
+                continue
+            eac_type = _CPF_REL_TYPE.get(rtype.lower(), 'associative')
+            cr = _sub(relations, 'cpfRelation', cpfRelationType=eac_type)
+            if rtype:
+                cr.set(f'{{{XLINK_NS}}}arcrole', rtype)
+            _sub(cr, 'relationEntry', other_name)
 
     return etree.tostring(
         root, xml_declaration=True, encoding='UTF-8', pretty_print=True
