@@ -459,15 +459,24 @@ const { data: config, isLoading } = useQuery({
       </p>
 
       <div className={styles.settingsGrid}>
-        <div className="form-group" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+        <label htmlFor="portal-enabled" style={{
+          gridColumn: '1 / -1',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-2)',
+          cursor: 'pointer',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--color-ink)',
+        }}>
           <input
             type="checkbox"
             id="portal-enabled"
             checked={form.enabled}
             onChange={set('enabled')}
+            style={{ width: 'auto', margin: 0, flexShrink: 0 }}
           />
-          <label htmlFor="portal-enabled" style={{ margin: 0 }}>Enable portal publishing for this institution</label>
-        </div>
+          Enable portal publishing for this institution
+        </label>
 
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label>Webhook URL</label>
