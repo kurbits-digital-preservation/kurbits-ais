@@ -636,6 +636,141 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
     return facets
 
 
+# ── File search (phase 1: metadata + filename, grouped by node) ───────
+
+def _file_query(q, institution_id, filters, limit, offset):
+    """Search node attachments by filename and technical metadata.
+
+    Returns file matches grouped by their parent node. Uses the ORM so it runs
+    identically on PostgreSQL and SQLite; every predicate is over indexed or
+    cheap columns (no OCR text — that is phase 2, opt-in and separately indexed).
+
+    filters keys used here:
+        file_mime       exact MIME type, e.g. 'image/jpeg'
+        file_pronom     exact PRONOM id, e.g. 'fmt/41'
+        file_min_size   bytes (integer)
+        file_max_size   bytes (integer)
+        file_has_checksum   'true' -> only files with a sha256
+        file_min_width / file_min_height  image dimension floors
+    """
+    import sqlalchemy as sa
+    from app.extensions import db
+    from app.models.node import Node, NodeAttachment
+
+    pattern = f'%{q}%'
+
+    base = (
+        db.session.query(NodeAttachment)
+        .join(Node, NodeAttachment.node_id == Node.id)
+        .filter(Node.institution_id == institution_id)
+    )
+
+    # Filename match (original + stored). Cheap ILIKE on short strings.
+    base = base.filter(
+        sa.or_(
+            NodeAttachment.original_filename.ilike(pattern),
+            NodeAttachment.filename.ilike(pattern),
+        )
+    )
+
+    # ── Technical-metadata filters ──
+    if filters.get('file_mime'):
+        base = base.filter(NodeAttachment.mime_type == filters['file_mime'])
+    if filters.get('file_pronom'):
+        base = base.filter(NodeAttachment.pronom_id == filters['file_pronom'])
+    if filters.get('file_min_size'):
+        base = base.filter(NodeAttachment.file_size >= int(filters['file_min_size']))
+    if filters.get('file_max_size'):
+        base = base.filter(NodeAttachment.file_size <= int(filters['file_max_size']))
+    if str(filters.get('file_has_checksum', '')).lower() == 'true':
+        base = base.filter(NodeAttachment.checksum_sha256.isnot(None))
+    if filters.get('file_min_width'):
+        base = base.filter(NodeAttachment.image_width >= int(filters['file_min_width']))
+    if filters.get('file_min_height'):
+        base = base.filter(NodeAttachment.image_height >= int(filters['file_min_height']))
+
+    # Total distinct nodes (for pagination of node groups)
+    node_id_rows = base.with_entities(NodeAttachment.node_id).distinct().all()
+    total_nodes = len(node_id_rows)
+
+    # Page over node groups, ordered by node id for stability
+    page_node_ids = [r[0] for r in sorted(node_id_rows)][offset:offset + limit]
+    if not page_node_ids:
+        return [], total_nodes
+
+    # Fetch the matching files for the paged nodes
+    files = (
+        base.filter(NodeAttachment.node_id.in_(page_node_ids))
+        .order_by(NodeAttachment.node_id, NodeAttachment.original_filename)
+        .all()
+    )
+
+    # Group by node
+    nodes = {n.id: n for n in Node.query.filter(Node.id.in_(page_node_ids)).all()}
+    grouped: dict = {}
+    for f in files:
+        grouped.setdefault(f.node_id, []).append(f)
+
+    results = []
+    for node_id in page_node_ids:
+        node = nodes.get(node_id)
+        if not node:
+            continue
+        matched = grouped.get(node_id, [])
+        results.append({
+            'type': 'file_group',
+            'id': node.id,
+            'node_id': node.id,
+            'title': node.title,
+            'ref_code': node.ref_code,
+            'level': node.level_of_description,
+            'match_count': len(matched),
+            'files': [
+                {
+                    'id': f.id,
+                    'filename': f.original_filename,
+                    'mime_type': f.mime_type,
+                    'pronom_id': f.pronom_id,
+                    'file_size': f.file_size,
+                    'image_width': f.image_width,
+                    'image_height': f.image_height,
+                    'has_checksum': f.checksum_sha256 is not None,
+                }
+                for f in matched
+            ],
+            'rank': float(len(matched)),
+        })
+
+    return results, total_nodes
+
+
+def _file_match_count(q, institution_id):
+    """Cheap COUNT of distinct nodes that have a filename-matching file.
+
+    Used to show a "N files also match" hint in the non-file search modes,
+    without running the full grouped file fetch. Filename only (no metadata
+    filters), so it stays a single indexed predicate.
+    """
+    import sqlalchemy as sa
+    from app.extensions import db
+    from app.models.node import Node, NodeAttachment
+
+    pattern = f'%{q}%'
+    count = (
+        db.session.query(sa.func.count(sa.distinct(NodeAttachment.node_id)))
+        .join(Node, NodeAttachment.node_id == Node.id)
+        .filter(
+            Node.institution_id == institution_id,
+            sa.or_(
+                NodeAttachment.original_filename.ilike(pattern),
+                NodeAttachment.filename.ilike(pattern),
+            ),
+        )
+        .scalar()
+    )
+    return int(count or 0)
+
+
 def search(
     q: str,
     institution_id: int,
@@ -652,7 +787,7 @@ def search(
     q = q.strip()
     if not q or len(q) < 2:
         return {
-            'nodes': [], 'agents': [], 'total': 0,
+            'nodes': [], 'agents': [], 'files': [], 'total': 0,
             'query': q, 'engine': 'none', 'page': page, 'per_page': limit,
         }
 
@@ -664,6 +799,7 @@ def search(
 
     node_results, node_total = [], 0
     agent_results, agent_total = [], 0
+    file_results, file_total = [], 0
 
     if 'nodes' in types:
         fn = _pg_node_query if pg else _sqlite_node_query
@@ -673,27 +809,40 @@ def search(
         fn = _pg_agent_query if pg else _sqlite_agent_query
         agent_results, agent_total = fn(q, institution_id, filters, limit, offset)
 
-    # Merge and sort by rank when both types requested
-    if 'nodes' in types and 'agents' in types:
+    file_match_hint = 0
+    if 'files' in types:
+        file_results, file_total = _file_query(q, institution_id, filters, limit, offset)
+    else:
+        # Cheap hint for the "N files also match" link in textual modes.
+        file_match_hint = _file_match_count(q, institution_id)
+
+    # Merge and sort by rank across the requested textual types (files stay
+    # in their own list — they are a distinct result category).
+    text_types = [t for t in types if t in ('nodes', 'agents')]
+    if len(text_types) > 1:
         all_results = sorted(
             node_results + agent_results,
             key=lambda r: r['rank'], reverse=True
         )
-        total = node_total + agent_total
-    elif 'nodes' in types:
+    elif 'nodes' in text_types:
         all_results = node_results
-        total = node_total
-    else:
+    elif 'agents' in text_types:
         all_results = agent_results
-        total = agent_total
+    else:
+        all_results = file_results
+
+    total = node_total + agent_total + file_total
 
     return {
         'results': all_results,
         'nodes': node_results,
         'agents': agent_results,
+        'files': file_results,
         'total': total,
         'node_total': node_total,
         'agent_total': agent_total,
+        'file_total': file_total,
+        'file_match_hint': file_match_hint,
         'query': q,
         'engine': engine_name,
         'page': page,

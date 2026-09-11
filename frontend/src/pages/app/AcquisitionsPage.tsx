@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import {
   FileText, Truck, Archive, Plus, Pencil, Trash2, X, Save,
   Check, ChevronRight, Paperclip, Link2, Upload, AlertCircle,
-  CheckSquare, Square, ExternalLink, Download, Search
+  CheckSquare, Square, ExternalLink, Download, Search, LayoutDashboard
 } from 'lucide-react'
 import { acquisitionsApi, agentsApi, checklistTemplatesApi } from '@/api'
 import { Spinner, Tabs } from '@/components/ui'
@@ -13,6 +13,7 @@ import styles from './AcquisitionsPage.module.css'
 // ─── Constants ────────────────────────────────────────────────────────
 
 const SA_STATUSES = ['draft', 'active', 'suspended', 'terminated']
+const ATTENTION_PREVIEW = 5
 const DELIVERY_STATUSES = [
   { value: 'expected',            label: 'Expected' },
   { value: 'received',            label: 'Received' },
@@ -83,6 +84,59 @@ function AgentTypeahead({ value, label, onChange, placeholder = 'Search agents�
               onMouseDown={() => { onChange(a.id, a.name); setQ(a.name); setOpen(false) }}>
               <span className={styles.typeaheadName}>{a.name}</span>
               <span className={styles.typeaheadMeta}>{a.agent_type}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Reference typeahead (SA / delivery pickers) ──────────────────────
+
+function RefTypeahead({ items, value, onChange, placeholder, refKey }: {
+  items: any[]
+  value: any
+  onChange: (id: number | null) => void
+  placeholder: string
+  refKey: 'reference_number' | 'accession_number'
+}) {
+  const selected = items.find((i: any) => String(i.id) === String(value))
+  const [q, setQ] = useState(selected ? `${selected[refKey]} — ${selected.title}` : '')
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    const sel = items.find((i: any) => String(i.id) === String(value))
+    setQ(sel ? `${sel[refKey]} — ${sel.title}` : '')
+  }, [value, items])
+
+  const ql = q.toLowerCase()
+  const filtered = q && !selected
+    ? items.filter((i: any) =>
+        (i[refKey] ?? '').toLowerCase().includes(ql) ||
+        (i.title ?? '').toLowerCase().includes(ql))
+    : items
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        value={q}
+        onChange={e => { setQ(e.target.value); setOpen(true); if (!e.target.value) onChange(null) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={placeholder}
+      />
+      {open && filtered.length > 0 && (
+        <div className={styles.typeaheadMenu}>
+          <button className={styles.typeaheadItem}
+            onMouseDown={() => { onChange(null); setQ(''); setOpen(false) }}>
+            <span className={styles.typeaheadMeta}>None</span>
+          </button>
+          {filtered.slice(0, 12).map((i: any) => (
+            <button key={i.id} className={styles.typeaheadItem}
+              onMouseDown={() => { onChange(i.id); setQ(`${i[refKey]} — ${i.title}`); setOpen(false) }}>
+              <span className={styles.typeaheadName}>{i.title}</span>
+              <span className={styles.typeaheadMeta}>{i[refKey]}</span>
             </button>
           ))}
         </div>
@@ -353,12 +407,13 @@ function DeliveryForm({ initial, onSave, onCancel, isSaving }: {
         </div>
         <div className="form-group">
           <label>Submission agreement</label>
-          <select value={form.submission_agreement_id} onChange={set('submission_agreement_id')}>
-            <option value="">None</option>
-            {(sas as any[] ?? []).map((s: any) => (
-              <option key={s.id} value={s.id}>{s.reference_number} — {s.title}</option>
-            ))}
-          </select>
+          <RefTypeahead
+            items={(sas as any[]) ?? []}
+            value={form.submission_agreement_id}
+            onChange={id => setForm(p => ({ ...p, submission_agreement_id: id ?? '' as any }))}
+            placeholder="Search agreements…"
+            refKey="reference_number"
+          />
         </div>
         <div className="form-group">
           <label>Status</label>
@@ -442,7 +497,13 @@ function Checklist({ delivery }: { delivery: any }) {
 
   const mutation = useMutation({
     mutationFn: (checklist: any[]) => acquisitionsApi.updateChecklist(delivery.id, checklist),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['delivery', delivery.id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['delivery', delivery.id] })
+      // The Overview dashboard and the Deliveries list both read off the
+      // ['deliveries'] list query (for checklist completion), so that needs
+      // invalidating too or they show stale data until an unrelated refetch.
+      queryClient.invalidateQueries({ queryKey: ['deliveries'] })
+    },
   })
 
   const toggle = (idx: number) => {
@@ -665,21 +726,23 @@ function AccessionForm({ initial, onSave, onCancel, isSaving }: {
         </div>
         <div className="form-group">
           <label>Delivery</label>
-          <select value={form.delivery_id} onChange={set('delivery_id')}>
-            <option value="">None</option>
-            {(deliveries as any[] ?? []).map((d: any) => (
-              <option key={d.id} value={d.id}>{d.reference_number} — {d.title}</option>
-            ))}
-          </select>
+          <RefTypeahead
+            items={(deliveries as any[]) ?? []}
+            value={form.delivery_id}
+            onChange={id => setForm(p => ({ ...p, delivery_id: id ?? '' as any }))}
+            placeholder="Search deliveries…"
+            refKey="reference_number"
+          />
         </div>
         <div className="form-group">
           <label>Submission agreement</label>
-          <select value={form.submission_agreement_id} onChange={set('submission_agreement_id')}>
-            <option value="">None</option>
-            {(sas as any[] ?? []).map((s: any) => (
-              <option key={s.id} value={s.id}>{s.reference_number} — {s.title}</option>
-            ))}
-          </select>
+          <RefTypeahead
+            items={(sas as any[]) ?? []}
+            value={form.submission_agreement_id}
+            onChange={id => setForm(p => ({ ...p, submission_agreement_id: id ?? '' as any }))}
+            placeholder="Search agreements…"
+            refKey="reference_number"
+          />
         </div>
         <div className="form-group">
           <label>Creator (if different from depositor)</label>
@@ -857,66 +920,261 @@ function Field({ label, value, multi }: { label: string; value: string; multi?: 
 // ─── Generic list + detail panel ─────────────────────────────────────
 
 function ListPanel<T extends { id: number; reference_number?: string; accession_number?: string; title: string; status: string }>({
-  items, isLoading, selectedId, onSelect, onNew, newLabel, statusLabel,
+  items, isLoading, selectedId, onSelect, onNew, newLabel, heading, statuses, statusLabel,
+  presetFilter, onPresetFilterConsumed, accessions,
 }: {
   items: T[]; isLoading: boolean; selectedId: number | null
   onSelect: (item: T) => void; onNew: () => void; newLabel: string
+  heading: string
+  statuses?: { value: string; label: string }[]
   statusLabel?: (s: string) => string
+  // Special cross-referenced filters set from the Overview dashboard's
+  // "View all" links — distinct from the plain status chips.
+  presetFilter?: string | null
+  onPresetFilterConsumed?: () => void
+  accessions?: any[]
 }) {
   const [q, setQ] = useState('')
-  const filtered = q
-    ? items.filter(i =>
-        (i.reference_number ?? i.accession_number ?? '').toLowerCase().includes(q.toLowerCase()) ||
-        i.title.toLowerCase().includes(q.toLowerCase())
-      )
-    : items
+  const [statusFilter, setStatusFilter] = useState('')
+  const [specialFilter, setSpecialFilter] = useState<string | null>(null)
+
+  // Adopt an incoming preset filter (from Overview) once, then let the page
+  // clear it so navigating away and back doesn't re-trigger it.
+  useEffect(() => {
+    if (presetFilter) {
+      setSpecialFilter(presetFilter)
+      setStatusFilter('')
+      onPresetFilterConsumed?.()
+    }
+  }, [presetFilter])
+
+  const accessionedIds = new Set((accessions ?? []).map((a: any) => a.delivery_id).filter(Boolean))
+
+  const filtered = items.filter((i: any) => {
+    if (statusFilter && i.status !== statusFilter) return false
+    if (specialFilter === 'unaccessioned' && accessionedIds.has(i.id)) return false
+    if (specialFilter === 'checklist_incomplete') {
+      const chk = (i as any).checklist ?? []
+      if (chk.length === 0 || !chk.some((c: any) => !c.checked)) return false
+    }
+    if (q) {
+      const ql = q.toLowerCase()
+      return (i.reference_number ?? i.accession_number ?? '').toLowerCase().includes(ql) ||
+             i.title.toLowerCase().includes(ql)
+    }
+    return true
+  })
+
+  const SPECIAL_LABELS: Record<string, string> = {
+    unaccessioned: 'Not yet accessioned',
+    checklist_incomplete: 'Incomplete checklist',
+  }
 
   return (
     <div className={styles.list}>
-      <div className={styles.listHeader}>
-        <div className={styles.listSearch}>
-          <Search size={13} className={styles.listSearchIcon} />
-          <input
-            className={styles.listSearchInput}
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            placeholder="Search…"
-          />
-          {q && <button className={styles.listSearchClear} onClick={() => setQ('')}><X size={11} /></button>}
-        </div>
+      <div className={styles.listTopBar}>
+        <h2 className={styles.listHeading}>{heading}</h2>
         <button className="btn btn-primary btn-sm" onClick={onNew}>
           <Plus size={13} /> {newLabel}
         </button>
       </div>
-      {isLoading && <div style={{ padding: 'var(--space-4)' }}><Spinner size={16} /></div>}
-      {!isLoading && filtered.length === 0 && (
-        <p className={styles.empty}>{q ? `No results for "${q}"` : 'Nothing here yet.'}</p>
+
+      <div className={styles.listSearch}>
+        <Search size={13} className={styles.listSearchIcon} />
+        <input
+          className={styles.listSearchInput}
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search…"
+        />
+        {q && <button className={styles.listSearchClear} onClick={() => setQ('')}><X size={11} /></button>}
+      </div>
+
+      {specialFilter && (
+        <div className={styles.specialFilterBar}>
+          <span className={styles.specialFilterChip}>
+            {SPECIAL_LABELS[specialFilter] ?? specialFilter}
+            <button onClick={() => setSpecialFilter(null)}><X size={11} /></button>
+          </span>
+        </div>
       )}
-      {filtered.map(item => (
-        <button key={item.id} className={`${styles.listItem} ${item.id === selectedId ? styles.listItemActive : ''}`}
-          onClick={() => onSelect(item)}>
-          <div className={styles.listItemLeft}>
-            <code className={styles.listItemRef}>{item.reference_number ?? item.accession_number}</code>
-            <span className={styles.listItemTitle}>{item.title}</span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <StatusBadge status={item.status} label={statusLabel?.(item.status)} />
-            <ChevronRight size={13} style={{ color: 'var(--color-ink-faint)' }} />
-          </div>
-        </button>
-      ))}
+
+      {statuses && statuses.length > 0 && (
+        <div className={styles.statusFilterBar}>
+          <button
+            className={`${styles.statusChip} ${statusFilter === '' ? styles.statusChipActive : ''}`}
+            onClick={() => setStatusFilter('')}
+          >All</button>
+          {statuses.map(s => (
+            <button
+              key={s.value}
+              className={`${styles.statusChip} ${statusFilter === s.value ? styles.statusChipActive : ''}`}
+              onClick={() => setStatusFilter(statusFilter === s.value ? '' : s.value)}
+            >{s.label}</button>
+          ))}
+        </div>
+      )}
+
+      <div className={styles.listScroll}>
+        {isLoading && <div style={{ padding: 'var(--space-4)' }}><Spinner size={16} /></div>}
+        {!isLoading && filtered.length === 0 && (
+          <p className={styles.empty}>{q || statusFilter ? 'No matches.' : 'Nothing here yet.'}</p>
+        )}
+        {filtered.map(item => (
+          <button key={item.id} className={`${styles.listItem} ${item.id === selectedId ? styles.listItemActive : ''}`}
+            onClick={() => onSelect(item)}>
+            <div className={styles.listItemLeft}>
+              <code className={styles.listItemRef}>{item.reference_number ?? item.accession_number}</code>
+              <span className={styles.listItemTitle}>{item.title}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+              <StatusBadge status={item.status} label={statusLabel?.(item.status)} />
+              <ChevronRight size={13} style={{ color: 'var(--color-ink-faint)' }} />
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
 
 // ─── Main page ────────────────────────────────────────────────────────
 
-type Section = 'agreements' | 'deliveries' | 'accessions'
+type Section = 'overview' | 'agreements' | 'deliveries' | 'accessions'
+
+// ─── Overview dashboard ────────────────────────────────────────────────
+// Pure derived view over the already-loaded SA/delivery/accession lists —
+// no extra API calls. Surfaces pipeline counts, checklist progress, and a
+// small "needs attention" list built from real status/link cross-references
+// (no invented date fields).
+
+function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
+  sas: any[]; deliveries: any[]; accessions: any[]
+  onNavigate: (section: Section, id: number, presetFilter?: string) => void
+}) {
+  const saCounts: Record<string, number> = {}
+  for (const s of sas) saCounts[s.status] = (saCounts[s.status] ?? 0) + 1
+
+  const delCounts: Record<string, number> = {}
+  for (const d of deliveries) delCounts[d.status] = (delCounts[d.status] ?? 0) + 1
+
+  const accessionedDeliveryIds = new Set(
+    accessions.map((a: any) => a.delivery_id).filter(Boolean)
+  )
+
+  // Received (or later-stage) deliveries with no accession yet — a real gap,
+  // not a guessed deadline.
+  const awaitingAccession = deliveries.filter((d: any) =>
+    ['received', 'in_review', 'accepted', 'partially_accepted'].includes(d.status) &&
+    !accessionedDeliveryIds.has(d.id)
+  )
+
+  // Deliveries with an incomplete checklist (checklist array present, not all done).
+  const incompleteChecklists = deliveries.filter((d: any) => {
+    const items = d.checklist ?? []
+    return items.length > 0 && items.some((i: any) => !i.checked)
+  })
+
+  return (
+    <div className={styles.overview}>
+      {/* ── Status breakdowns ── */}
+      <div className={styles.overviewGrid}>
+        <div className={styles.overviewPanel}>
+          <h3 className={styles.overviewPanelTitle}>Agreements by status</h3>
+          {SA_STATUSES.map(s => (
+            <div key={s} className={styles.statusBar}>
+              <span className={styles.statusBarLabel}>{s}</span>
+              <div className={styles.statusBarTrack}>
+                <div className={styles.statusBarFill}
+                  style={{ width: sas.length ? `${((saCounts[s] ?? 0) / sas.length) * 100}%` : '0%' }} />
+              </div>
+              <span className={styles.statusBarCount}>{saCounts[s] ?? 0}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className={styles.overviewPanel}>
+          <h3 className={styles.overviewPanelTitle}>Deliveries by status</h3>
+          {DELIVERY_STATUSES.map(s => (
+            <div key={s.value} className={styles.statusBar}>
+              <span className={styles.statusBarLabel}>{s.label}</span>
+              <div className={styles.statusBarTrack}>
+                <div className={styles.statusBarFill}
+                  style={{ width: deliveries.length ? `${((delCounts[s.value] ?? 0) / deliveries.length) * 100}%` : '0%' }} />
+              </div>
+              <span className={styles.statusBarCount}>{delCounts[s.value] ?? 0}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Needs attention ── */}
+      <div className={styles.overviewPanel}>
+        <h3 className={styles.overviewPanelTitle}>Needs attention</h3>
+
+        {awaitingAccession.length === 0 && incompleteChecklists.length === 0 && (
+          <p className={styles.empty}>Nothing needs attention right now.</p>
+        )}
+
+        {awaitingAccession.length > 0 && (
+          <div className={styles.attentionGroup}>
+            <div className={styles.attentionGroupHeader}>
+              <span className={styles.attentionGroupTitle}>
+                Received, not yet accessioned ({awaitingAccession.length})
+              </span>
+              {awaitingAccession.length > ATTENTION_PREVIEW && (
+                <button className={styles.attentionViewAll}
+                  onClick={() => onNavigate('deliveries', 0, 'unaccessioned')}>
+                  View all {awaitingAccession.length} →
+                </button>
+              )}
+            </div>
+            {awaitingAccession.slice(0, ATTENTION_PREVIEW).map((d: any) => (
+              <button key={d.id} className={styles.attentionRow} onClick={() => onNavigate('deliveries', d.id)}>
+                <code className={styles.listItemRef}>{d.reference_number}</code>
+                <span className={styles.attentionRowTitle}>{d.title}</span>
+                <StatusBadge status={d.status}
+                  label={DELIVERY_STATUSES.find(x => x.value === d.status)?.label} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {incompleteChecklists.length > 0 && (
+          <div className={styles.attentionGroup}>
+            <div className={styles.attentionGroupHeader}>
+              <span className={styles.attentionGroupTitle}>
+                Incomplete checklist ({incompleteChecklists.length})
+              </span>
+              {incompleteChecklists.length > ATTENTION_PREVIEW && (
+                <button className={styles.attentionViewAll}
+                  onClick={() => onNavigate('deliveries', 0, 'checklist_incomplete')}>
+                  View all {incompleteChecklists.length} →
+                </button>
+              )}
+            </div>
+            {incompleteChecklists.slice(0, ATTENTION_PREVIEW).map((d: any) => {
+              const items = d.checklist ?? []
+              const done = items.filter((i: any) => i.checked).length
+              return (
+                <button key={d.id} className={styles.attentionRow} onClick={() => onNavigate('deliveries', d.id)}>
+                  <code className={styles.listItemRef}>{d.reference_number}</code>
+                  <span className={styles.attentionRowTitle}>{d.title}</span>
+                  <span className={styles.attentionRowProgress}>{done}/{items.length} done</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 export default function AcquisitionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [section, setSection] = useState<Section>(
-    (searchParams.get('section') as Section) ?? 'agreements'
+    (searchParams.get('section') as Section) ?? 'overview'
   )
   const [selectedId, setSelectedId] = useState<number | null>(
     searchParams.get('id') ? parseInt(searchParams.get('id')!) : null
@@ -927,6 +1185,12 @@ export default function AcquisitionsPage() {
   const select = (id: number) => { setSelectedId(id); setMode('list') }
   const deselect = () => { setSelectedId(null); setMode('list') }
   const switchSection = (s: Section) => { setSection(s); setSelectedId(null); setMode('list') }
+  const [presetFilter, setPresetFilter] = useState<string | null>(null)
+  const navigateFromOverview = (s: Section, id: number, filter?: string) => {
+    setSection(s); setMode('list')
+    setSelectedId(id > 0 ? id : null)
+    setPresetFilter(filter ?? null)
+  }
 
   // SA
   const { data: sas = [], isLoading: loadingSAs } = useQuery({
@@ -991,6 +1255,7 @@ export default function AcquisitionsPage() {
   })
 
   const SECTION_TABS = [
+    { key: 'overview',    icon: <LayoutDashboard size={14} />, label: 'Overview' },
     { key: 'agreements',  icon: <FileText size={14} />, label: `Agreements${sas.length ? ` (${(sas as any[]).length})` : ''}` },
     { key: 'deliveries',  icon: <Truck size={14} />,    label: `Deliveries${deliveries.length ? ` (${(deliveries as any[]).length})` : ''}` },
     { key: 'accessions',  icon: <Archive size={14} />,  label: `Accessions${accessions.length ? ` (${(accessions as any[]).length})` : ''}` },
@@ -1015,19 +1280,32 @@ export default function AcquisitionsPage() {
 
       <div className={styles.body}>
         {/* List */}
+        {section === 'overview' && (
+          <OverviewSection
+            sas={sas as any[]} deliveries={deliveries as any[]} accessions={accessions as any[]}
+            onNavigate={navigateFromOverview}
+          />
+        )}
         {section === 'agreements' && (
           <ListPanel
             items={sas as any[]} isLoading={loadingSAs} selectedId={selectedId}
             onSelect={i => select(i.id)} onNew={() => { setSelectedId(null); setMode('create') }}
-            newLabel="New agreement"
+            newLabel="New"
+            heading="Agreements"
+            statuses={SA_STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
           />
         )}
         {section === 'deliveries' && (
           <ListPanel
             items={deliveries as any[]} isLoading={loadingDels} selectedId={selectedId}
             onSelect={i => select(i.id)} onNew={() => { setSelectedId(null); setMode('create') }}
-            newLabel="New delivery"
+            newLabel="New"
+            heading="Deliveries"
+            statuses={DELIVERY_STATUSES}
             statusLabel={s => DELIVERY_STATUSES.find(x => x.value === s)?.label ?? s}
+            presetFilter={presetFilter}
+            onPresetFilterConsumed={() => setPresetFilter(null)}
+            accessions={accessions as any[]}
           />
         )}
         {section === 'accessions' && (
@@ -1035,11 +1313,13 @@ export default function AcquisitionsPage() {
             items={(accessions as any[]).map((a: any) => ({ ...a, reference_number: a.accession_number }))}
             isLoading={loadingAcc} selectedId={selectedId}
             onSelect={i => select(i.id)} onNew={() => { setSelectedId(null); setMode('create') }}
-            newLabel="New accession"
+            newLabel="New"
+            heading="Accessions"
           />
         )}
 
         {/* Detail / form */}
+        {section !== 'overview' && (
         <div className={styles.detailPane}>
           {mode === 'create' && section === 'agreements' && (
             <SAForm onSave={d => createSAMutation.mutate(d)}
@@ -1091,6 +1371,7 @@ export default function AcquisitionsPage() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   )

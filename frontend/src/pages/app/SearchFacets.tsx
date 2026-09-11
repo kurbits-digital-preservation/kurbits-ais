@@ -37,6 +37,7 @@ const RECORD_TYPES = [
   { value: 'nodes,agents', label: 'All' },
   { value: 'nodes',        label: 'Resources' },
   { value: 'agents',       label: 'Agents' },
+  { value: 'files',        label: 'Files' },
 ]
 
 export default function SearchFacets({ facets, params, setParam, clearParam }: {

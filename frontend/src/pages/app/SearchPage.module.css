@@ -538,3 +538,22 @@
   border-color: var(--color-accent-border) !important;
   font-weight: 600;
 }
+
+/* ─── "Files also match" hint link ───────────────────────────────── */
+.filesHint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-accent);
+  background: var(--color-accent-bg);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+}
+.filesHint:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}

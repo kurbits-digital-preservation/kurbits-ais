@@ -10,6 +10,8 @@ import { searchApi, hierarchyApi, savedSearchesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import styles from './SearchPage.module.css'
 import SearchFacets from './SearchFacets'
+import FileFilters from './FileFilters'
+import FileResults from './FileResults'
 // ─── Constants ────────────────────────────────────────────────────────
 
 const AGENT_ICONS: Record<string, typeof User> = {
@@ -359,6 +361,9 @@ export default function SearchPage() {
             setParam={setParam}
             clearParam={clearParam}
           />
+          {searchParams.get('types') === 'files' && (
+            <FileFilters params={searchParams} setParam={setParam} clearParam={clearParam} />
+          )}
           <SavedSearchesPanel onLoad={handleLoadSaved} />
 
         </aside>
@@ -378,9 +383,20 @@ export default function SearchPage() {
                   {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
                   {data.node_total > 0 && <span className={styles.typeStat}>{data.node_total} resource{data.node_total !== 1 ? 's' : ''}</span>}
                   {data.agent_total > 0 && <span className={styles.typeStat}>{data.agent_total} agent{data.agent_total !== 1 ? 's' : ''}</span>}
+                  {data.file_total > 0 && <span className={styles.typeStat}>{data.file_total} with matching file{data.file_total !== 1 ? 's' : ''}</span>}
                 </div>
               ) : null}
             </div>
+          )}
+
+          {/* Files-also-match hint (textual modes only) */}
+          {searchParams.get('types') !== 'files' && (data?.file_match_hint ?? 0) > 0 && (
+            <button
+              className={styles.filesHint}
+              onClick={() => setParam('types', 'files')}
+            >
+              {data.file_match_hint} record{data.file_match_hint !== 1 ? 's have' : ' has'} a matching file — view in Files
+            </button>
           )}
 
           {!q && (
@@ -393,21 +409,29 @@ export default function SearchPage() {
 
           {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>Type at least 2 characters…</p></div>}
 
-          {q.length >= 2 && !isFetching && results.length === 0 && (
+          {q.length >= 2 && !isFetching && results.length === 0 && (data?.files?.length ?? 0) === 0 && (
             <div className={styles.emptyState}>
               <p>No results for <strong>"{q}"</strong></p>
               <p className={styles.emptyHint}>Try different keywords or adjust your filters.</p>
             </div>
           )}
 
-          {results.length > 0 && (
-            <div className={styles.resultList}>
-              {results.map((item: any) =>
-                item.type === 'node'
-                  ? <NodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                  : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-              )}
-            </div>
+          {searchParams.get('types') === 'files' ? (
+            (data?.files?.length ?? 0) > 0 && (
+              <div className={styles.resultList}>
+                <FileResults groups={data.files} />
+              </div>
+            )
+          ) : (
+            results.length > 0 && (
+              <div className={styles.resultList}>
+                {results.map((item: any) =>
+                  item.type === 'node'
+                    ? <NodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                    : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                )}
+              </div>
+            )
           )}
 
           {pages > 1 && (

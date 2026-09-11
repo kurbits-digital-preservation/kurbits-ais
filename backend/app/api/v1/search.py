@@ -37,7 +37,10 @@ def global_search():
     filters = {}
     int_keys = ('hierarchy_type_id', 'classification_id')
     for key in ('status', 'level', 'hierarchy_type_id', 'classification_id',
-                'date_from', 'date_to', 'agent_type'):
+                'date_from', 'date_to', 'agent_type',
+                # file-search filters
+                'file_mime', 'file_pronom', 'file_min_size', 'file_max_size',
+                'file_has_checksum', 'file_min_width', 'file_min_height'):
         val = request.args.get(key, '').strip()
         if val:
             filters[key] = int(val) if key in int_keys else val
