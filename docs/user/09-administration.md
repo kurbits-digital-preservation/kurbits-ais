@@ -64,3 +64,37 @@ Templates can be imported from standard definitions. Your administrator can also
 Click **Import standard templates** to load built-in templates including Dublin Core, Dublin Core Terms, and Photographic records.
 
 ![09_fields.png](assets/09_fields.png)
+
+---
+
+## Identifier schemes tab
+
+Defines the external and persistent identifier types your resources can carry — ARK, Handle, DOI, ISBN, and so on. See [Resources → Identifiers tab](02-resources.md#the-identifiers-tab) for how they are used.
+
+Each scheme has:
+
+| Setting | Purpose |
+|---|---|
+| Name | The scheme label (e.g. ARK, DOI) |
+| Resolver URL template | Turns a stored value into a clickable link. `{value}` is replaced with the identifier — e.g. `https://n2t.net/{value}` |
+| Generator service URL | Optional. An external minting service Kurbits calls to create a new identifier. When set, a **Generate** button appears on records |
+
+For a generator, you can also set request headers (for an authorisation token), a request body template, and where in the response the new identifier is found. Deactivate a scheme rather than deleting it if records already use it.
+
+---
+
+## Records values tab
+
+Manages the dropdown values used when documenting records in a [process description](11-process-descriptions.md) — **disposal actions**, **security classifications**, and **medium / format**. Add or remove values in each list; sensible defaults are provided to start with.
+
+---
+
+## Label designer tab
+
+A drag-and-drop editor for designing box and shelf labels. See [Labels](12-labels.md) for the full guide. In short: you place fields, text, barcodes, QR codes, and logos on a label, save the design as a reusable template, and choose that template when printing labels from a resource.
+
+---
+
+## Transcription tab
+
+Connects Kurbits to a Whisper transcription service for automatic speech-to-text on audio and video files. Enter the service URL, an API key, and a default model. Once configured, audio and video attachments can be transcribed from the resource's Files tab.

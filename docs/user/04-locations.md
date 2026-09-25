@@ -40,9 +40,23 @@ Each row shows the resource's reference code and title. From here you can:
 
 - **↗** — Open the resource directly
 - **Move** — Move the object to a different location (opens a location search)
-- **Check out** — Remove the object from this location and place it in the virtual *Checked out* location
+- **Check out** — Remove the object from this location and place it in the virtual *Checked out* location, choosing a reason (see below)
 
 > The *Checked out* location is a system-managed virtual location. Objects checked out appear there until they are checked back in to a real location. You cannot check out an object that is already checked out.
+
+## Moving all contents at once
+
+When a location stores several objects and you need to relocate the whole shelf or box at once, open the location and click **Move contents**. Choose a target location and confirm — every object stored there is moved in one operation, and each move is recorded in the history. The target's free capacity is checked before the move so you don't overfill it.
+
+## Quick move (barcode)
+
+The **Quick move** button (above the location tree) is built for working at the shelf with a barcode scanner. Scan or type the target location's code once, then scan item reference codes one after another. Each scan moves that item immediately and shows a result — moved, not found, already here, or at capacity. Items that were checked out are checked back in automatically.
+
+## Checkout categories
+
+The virtual *Checked out* location groups checked-out objects by **reason** — Reading room, Conservation, Exhibition, On loan, In transit, Digitisation, and any others you define. Select the *Checked out* location in the tree to see its **Categories** tab, where you can add, rename, or remove categories. A category can't be deleted while objects are still checked out under it.
+
+Each category behaves like a normal location: you can browse what's currently out for that reason and see its movement history — handy when different people are responsible for different kinds of checkout.
 
 ## The History tab
 

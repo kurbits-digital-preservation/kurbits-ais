@@ -45,6 +45,18 @@ The Details tab shows the core descriptive fields for the selected resource.
 
 Additional fields may appear depending on the metadata template assigned to the level — for example a photograph record will show fields for format, technique, and dimensions.
 
+## The Identifiers tab
+
+The Identifiers tab holds external and persistent identifiers for the resource — ARK, Handle, DOI, ISBN, or any scheme your institution has configured.
+
+![Identifiers tab](assets/02_identifiers.png)
+
+- Click **Add identifier**, choose a scheme, and enter the value. If the scheme has a resolver configured, the stored value becomes a clickable link.
+- A scheme can be connected to an external minting service. When it is, a **Generate** button appears — click it and Kurbits requests a new identifier from that service and stores it automatically. This is how you mint a new ARK or PID without leaving the record.
+- One identifier per scheme can be marked **primary**.
+
+Identifier schemes (and their resolver/generator settings) are set up under [Administration → Identifier schemes](09-administration.md#identifier-schemes-tab).
+
 ## The Relations tab
 
 The Relations tab manages links between this resource and **agents** (creators, contributors, subjects) and links to other resources.
@@ -55,14 +67,17 @@ To link an agent, use the search box to find them by name and select the relatio
 
 ## The Locations tab
 
-The Locations tab shows where this object is physically located, and allows you to check it in, move it, or check it out.
+The Locations tab shows where this object is physically located, and allows you to check it in, move it, check it out, or return it.
 
 ![Locations tab](assets/02_location_tab.png)
 
-- **Current location** is shown at the top with its full path (e.g. *Building A / Store 2 / Cabinet 4*).
+- **Current location** is shown at the top with its full path (e.g. *Building A / Store 2 / Cabinet 4*). Click the location name to jump straight to it in the Locations section.
 - The **Check in / Move** button opens a location search to place or relocate the object. An object can only be in one location at a time — checking in automatically removes it from its previous location.
-- The **✕** button checks the object out, moving it to the virtual *Checked out* location.
+- The **Check out** button opens a short panel where you choose a **reason** (e.g. Reading room, Conservation, Exhibition, On loan, In transit) and confirm. The object moves to the virtual *Checked out* location under that category.
+- When an object is checked out, a **Return** button appears. It checks the object back in to exactly the location it was checked out from — the one-click way to put something back on its shelf.
 - **Movement history** (expandable at the bottom) shows the complete location history with dates and users.
+
+Checkout categories are managed like any other location — see [Locations → Checkout categories](04-locations.md#checkout-categories).
 
 ## The Classifications tab
 
