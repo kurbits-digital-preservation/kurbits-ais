@@ -97,8 +97,17 @@ class Node(db.Model):
         sa.ForeignKey('nodes.id', ondelete='CASCADE', name='fk_node_parent'),
         nullable=True
     )
+
+    # Denormalized root-of-tree id, maintained by refresh_ref_code(). Lets
+    # "resources in the same tree" queries use a plain indexed equality
+    # filter instead of a per-row parent-chain walk. NULL only transiently
+    # before the first refresh_ref_code() call on a brand-new root node.
+    top_node_id: so.Mapped[Optional[int]] = so.mapped_column(
+        sa.ForeignKey('nodes.id', ondelete='SET NULL', name='fk_node_top_node'),
+        nullable=True, index=True
+    )
     parent: so.Mapped[Optional['Node']] = so.relationship(
-        'Node', remote_side='Node.id',
+        'Node', remote_side='Node.id', foreign_keys='Node.parent_id',
         backref=so.backref('children', lazy='dynamic', cascade='all, delete-orphan', passive_deletes=True)
     )
 
@@ -185,12 +194,30 @@ class Node(db.Model):
         return f'{institution.ref_prefix}/{self.local_ref}'
 
     def refresh_ref_code(self) -> None:
-        """Recompute ref_code for this node and its entire subtree.
+        """Recompute ref_code AND top_node_id for this node and its entire
+        subtree.
 
         Iterative breadth-first, one query per tree level instead of one per
-        node, and each descendant is written exactly once.
+        node, and each descendant is written exactly once. top_node_id is
+        maintained here (not a separate pass) so every code path that already
+        calls refresh_ref_code() after a create/move/reparent gets the
+        denormalized root pointer for free, with no risk of a route
+        forgetting to update it separately.
         """
         self.ref_code = self.compute_ref_code()
+        # This node's own root: itself if it has no parent, else its parent's
+        # top_node_id. Fall back to walking the actual parent chain (not just
+        # one level) for legacy rows that predate this column — get_top_node()
+        # is the authoritative, always-correct source of truth; top_node_id
+        # is a cache of its result kept fresh here.
+        if self.parent_id is None:
+            self.top_node_id = self.id
+        elif self.parent and self.parent.top_node_id:
+            self.top_node_id = self.parent.top_node_id
+        else:
+            self.top_node_id = self.get_top_node().id
+        root_id = self.top_node_id
+
         current: Dict[int, str] = {self.id: self.ref_code}
         while current:
             rows = db.session.execute(
@@ -199,6 +226,7 @@ class Node(db.Model):
             nxt: Dict[int, str] = {}
             for child in rows:
                 child.ref_code = f'{current[child.parent_id]}/{child.local_ref}'
+                child.top_node_id = root_id
                 nxt[child.id] = child.ref_code
             current = nxt
 

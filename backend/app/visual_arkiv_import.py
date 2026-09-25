@@ -229,8 +229,135 @@ def _get_system_user_id(institution_id: int, db) -> int | None:
     ).scalar()
 
 
+import re as _re
+
+
+def _parse_senastenot(value):
+    """'2013-10-16/Axel' -> (date, editor). Only splits into structured parts
+    when the leading segment genuinely looks like a date; an unexpected
+    format is kept as raw text rather than mis-parsed into the wrong field."""
+    if not value or not value.strip():
+        return None, None
+    value = value.strip()
+    if '/' in value:
+        date_part, editor_part = value.split('/', 1)
+        date_part = date_part.strip()
+        editor_part = editor_part.strip() or None
+        if _re.match(r'^\d{4}-\d{2}-\d{2}$', date_part):
+            return date_part, editor_part
+        return None, value
+    if _re.match(r'^\d{4}-\d{2}-\d{2}$', value):
+        return value, None
+    return None, value
+
+
+def _log_import_event(node_id: int, description: str, db, system_user_id,
+                      change_type: str = 'import', after_data: dict | None = None):
+    """Record a NodeChange entry so the History tab shows where this record
+    came from. This is an append-only audit log by design — re-importing the
+    same export logs a fresh entry each run rather than collapsing/upserting,
+    since each import run is a real, distinct event worth keeping a trace of.
+    Skips (rather than crashes the import) if no user can be attributed,
+    since created_by_id is required on NodeChange.
+    """
+    if system_user_id is None:
+        return
+    from app.models.node import NodeChange
+    db.session.add(NodeChange(
+        node_id=node_id,
+        change_type=change_type,
+        description=description,
+        before_data={},
+        after_data=after_data or {},
+        created_by_id=system_user_id,
+    ))
+
+
+def _get_or_create_va_scheme(institution_id: int, db):
+    """The 'Visual Arkiv ID' identifier scheme, shared by agents and
+    resources (nodes) — one scheme, used from both flexible-identifier
+    tables, get-or-create so re-running the import doesn't create dupes.
+    """
+    from app.models.node import IdentifierScheme
+    import sqlalchemy as sa
+    scheme = db.session.execute(
+        sa.select(IdentifierScheme).where(
+            IdentifierScheme.institution_id == institution_id,
+            IdentifierScheme.name == 'Visual Arkiv ID',
+        )
+    ).scalars().first()
+    if not scheme:
+        scheme = IdentifierScheme(
+            institution_id=institution_id,
+            name='Visual Arkiv ID',
+            description='Original record ID (_ID_Org) from a Visual Arkiv 7 export.',
+        )
+        db.session.add(scheme)
+        db.session.flush()
+    return scheme
+
+
+def _find_by_va_identifier(model_cls, related_attr: str, scheme, value: str, db):
+    """Look up the node/agent already carrying this Visual Arkiv ID, if any —
+    used to recognise a record across repeated imports of the same export."""
+    import sqlalchemy as sa
+    ident = db.session.execute(
+        sa.select(model_cls).where(
+            model_cls.scheme_id == scheme.id,
+            model_cls.value == value,
+        )
+    ).scalars().first()
+    return getattr(ident, related_attr) if ident else None
+
+
+def _upsert_va_identifier(model_cls, fk_field: str, entity_id: int, scheme,
+                          value: str, db, log, entity_label: str, created_by_id=None):
+    """Get-or-create a NodeIdentifier/AgentIdentifier row for (entity, scheme),
+    so re-importing the same export updates the existing identifier rather
+    than duplicating it. Identifier values are unique per scheme GLOBALLY
+    (see uq_identifier_value_per_scheme) — if the source export somehow has
+    the same _ID_Org attached to two different records, the second is
+    skipped with a warning instead of crashing the whole import.
+    """
+    import sqlalchemy as sa
+
+    existing_for_entity = db.session.execute(
+        sa.select(model_cls).where(
+            getattr(model_cls, fk_field) == entity_id,
+            model_cls.scheme_id == scheme.id,
+        )
+    ).scalars().first()
+
+    clash = db.session.execute(
+        sa.select(model_cls).where(
+            model_cls.scheme_id == scheme.id,
+            model_cls.value == value,
+        )
+    ).scalars().first()
+
+    if existing_for_entity:
+        if existing_for_entity.value == value:
+            return  # nothing to do
+        if clash and getattr(clash, fk_field) != entity_id:
+            log(f'    WARNING: Visual Arkiv ID {value} is already used by another '
+                f'{entity_label} — not reassigning')
+            return
+        existing_for_entity.value = value
+        return
+
+    if clash:
+        log(f'    WARNING: Visual Arkiv ID {value} is already used by another '
+            f'{entity_label} — skipping')
+        return
+
+    kwargs = {fk_field: entity_id, 'scheme_id': scheme.id, 'value': value}
+    if created_by_id is not None:
+        kwargs['created_by_id'] = created_by_id
+    db.session.add(model_cls(**kwargs))
+
+
 def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
-    from app.models.agent import Agent, AgentType, AgentNote
+    from app.models.agent import Agent, AgentType, AgentNote, AgentIdentifier
     import sqlalchemy as sa
     system_user_id = _get_system_user_id(institution_id, db)
 
@@ -240,6 +367,7 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
     date_from      = _txt(el, 'Arkivb_Verksamf') or None
     date_to        = _txt(el, 'Arkivb_Verksamt') or None
     description    = _txt(el, 'Arkivb_Sammanfattning') or None
+    arkivb_id_org  = _txt(el, 'Arkivb_ID_Org') or None
 
     existing = db.session.execute(
         sa.select(Agent).where(
@@ -274,6 +402,13 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
         created = True
         log(f'  Created agent: {name}')
 
+    if arkivb_id_org:
+        va_scheme = _get_or_create_va_scheme(institution_id, db)
+        _upsert_va_identifier(
+            AgentIdentifier, 'agent_id', agent.id, va_scheme, arkivb_id_org,
+            db, log, 'agent', created_by_id=system_user_id,
+        )
+
     historik = _txt(el, './/Historik_Historik')
     if historik:
         existing_note = db.session.execute(
@@ -298,17 +433,19 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
 # ── Fonds import ──────────────────────────────────────────────────────
 
 def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_user_id=None) -> object:
-    from app.models.node import Node, NodeNote
+    from app.models.node import Node, NodeNote, NodeIdentifier
     import sqlalchemy as sa
 
-    name      = _txt(el, 'Arkiv_Namn') or _txt(el, 'Arkiv_NamnUtskr') or 'Untitled'
-    nr        = _txt(el, 'Arkiv_Nr', '1')
-    date_from = _txt(el, 'Arkiv_Tidarkivf') or None
-    date_to   = _txt(el, 'Arkiv_Tidarkivt') or None
-    notes_txt = _txt(el, 'Arkiv_Anteckningar') or None
-    placering = _txt(el, 'Arkiv_Placering') or None
-    sekretess = _txt(el, 'Arkiv_Sekretess', '0')
-    extent    = _hyllmeter(_txt(el, 'Arkiv_HyllmeterMetric'))
+    name         = _txt(el, 'Arkiv_Namn') or _txt(el, 'Arkiv_NamnUtskr') or 'Untitled'
+    nr           = _txt(el, 'Arkiv_Nr', '1')
+    date_from    = _txt(el, 'Arkiv_Tidarkivf') or None
+    date_to      = _txt(el, 'Arkiv_Tidarkivt') or None
+    notes_txt    = _txt(el, 'Arkiv_Anteckningar') or None
+    placering    = _txt(el, 'Arkiv_Placering') or None
+    sekretess    = _txt(el, 'Arkiv_Sekretess', '0')
+    extent       = _hyllmeter(_txt(el, 'Arkiv_HyllmeterMetric'))
+    arkiv_id_org = _txt(el, 'Arkiv_ID_Org') or None
+    senastenot   = _txt(el, 'Arkiv_Senastenot') or None
 
     description_parts = []
     if extent:
@@ -318,33 +455,97 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
     if sekretess == '1':
         sek_text = _txt(el, 'Arkiv_SekretessText') or 'Secrecy restrictions apply'
         description_parts.append(f'Access restrictions: {sek_text}')
+    description = '\n'.join(description_parts) if description_parts else None
 
-    local_ref = _make_unique_ref(nr, institution_id, None, db, Node)
+    # A fonds is matched across repeated imports of the same export by its
+    # Visual Arkiv ID (Arkiv_ID_Org), rather than always creating a new node.
+    # Without this, re-running the import on the same file created a second
+    # copy of the fonds every time (local_ref just got a "-2", "-3"...
+    # suffix to avoid collision, it never recognised the record).
+    va_scheme = None
+    existing_node = None
+    if arkiv_id_org:
+        va_scheme = _get_or_create_va_scheme(institution_id, db)
+        candidate = _find_by_va_identifier(NodeIdentifier, 'node', va_scheme, arkiv_id_org, db)
+        if candidate and candidate.institution_id == institution_id:
+            existing_node = candidate
 
-    node = Node(
-        institution_id=institution_id,
-        parent_id=None,
-        local_ref=local_ref,
-        title=name,
-        level_of_description='Fonds',
-        hierarchy_type_id=ht.id,
-        date_start=_year_to_date(date_from),
-        date_end=_year_to_date(date_to, end=True),
-        description='\n'.join(description_parts) if description_parts else None,
+    if existing_node:
+        node = existing_node
+        node.title = name
+        node.date_start = _year_to_date(date_from)
+        node.date_end = _year_to_date(date_to, end=True)
+        node.description = description
+        log(f'    Fonds exists (Visual Arkiv ID {arkiv_id_org}) — updated: {node.ref_code} -- {name}')
+    else:
+        local_ref = _make_unique_ref(nr, institution_id, None, db, Node)
+        node = Node(
+            institution_id=institution_id,
+            parent_id=None,
+            local_ref=local_ref,
+            title=name,
+            level_of_description='Fonds',
+            hierarchy_type_id=ht.id,
+            date_start=_year_to_date(date_from),
+            date_end=_year_to_date(date_to, end=True),
+            description=description,
+        )
+        from app.models import Institution as _Inst
+        _inst = db.session.get(_Inst, institution_id)
+        node.ref_code = f'{_inst.ref_prefix}/{local_ref}'
+        db.session.add(node)
+        db.session.flush()
+        log(f'    Fonds: {node.ref_code} -- {name}')
+
+    if arkiv_id_org:
+        _upsert_va_identifier(
+            NodeIdentifier, 'node_id', node.id, va_scheme, arkiv_id_org,
+            db, log, 'resource', created_by_id=system_user_id,
+        )
+
+    if senastenot:
+        va_date, va_editor = _parse_senastenot(senastenot)
+        if va_date and va_editor:
+            desc = f'Last edited in Visual Arkiv on {va_date} by {va_editor}.'
+        elif va_date:
+            desc = f'Last edited in Visual Arkiv on {va_date}.'
+        elif va_editor:
+            desc = f'Last edited in Visual Arkiv: {va_editor}.'
+        else:
+            desc = None
+        if desc:
+            _log_import_event(node.id, desc, db, system_user_id,
+                             change_type='external_edit',
+                             after_data={'senastenot': senastenot, 'date': va_date, 'editor': va_editor})
+
+    _log_import_event(
+        node.id,
+        'Updated from a Visual Arkiv 7 import.' if existing_node else 'Created from a Visual Arkiv 7 import.',
+        db, system_user_id,
+        after_data={'arkiv_id_org': arkiv_id_org} if arkiv_id_org else None,
     )
-    from app.models import Institution as _Inst
-    _inst = db.session.get(_Inst, institution_id)
-    node.ref_code = f'{_inst.ref_prefix}/{local_ref}'
-    db.session.add(node)
-    db.session.flush()
 
-    if notes_txt:
-        db.session.add(NodeNote(node_id=node.id, note_type='general', content=notes_txt, created_by_id=system_user_id))
-    historik = _txt(el, 'Arkiv_Historik')
-    if historik:
-        db.session.add(NodeNote(node_id=node.id, note_type='administrative_history', content=historik, created_by_id=system_user_id))
+    # Notes are upserted by type rather than appended, so re-importing the
+    # same export doesn't pile up duplicate "general"/"administrative_history"
+    # notes on a fonds that's matched via existing_node above.
+    def _upsert_note(note_type, content):
+        if not content:
+            return
+        existing = db.session.execute(
+            sa.select(NodeNote).where(
+                NodeNote.node_id == node.id,
+                NodeNote.note_type == note_type,
+            )
+        ).scalars().first()
+        if existing:
+            existing.content = content
+        else:
+            db.session.add(NodeNote(node_id=node.id, note_type=note_type,
+                                    content=content, created_by_id=system_user_id))
 
-    log(f'    Fonds: {node.ref_code} -- {name}')
+    _upsert_note('general', notes_txt)
+    _upsert_note('administrative_history', _txt(el, 'Arkiv_Historik'))
+
     return node
 
 
@@ -391,6 +592,8 @@ def _build_serie_node(el, parent_node, level_name, local_ref, institution_id, ht
 
     if notes_txt:
         db.session.add(NodeNote(node_id=node.id, note_type='general', content=notes_txt, created_by_id=system_user_id))
+
+    _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
     log(f'      {level_name}: {node.ref_code} -- {title}')
     return node
@@ -450,6 +653,8 @@ def _import_series_parsed(arkiv_el, fonds_node, institution_id, ht, levels, db, 
         db.session.add(stub)
         db.session.flush()
         serie_nodes[parent_code] = stub
+        _log_import_event(stub.id, 'Created from a Visual Arkiv 7 import (inferred parent).',
+                          db, system_user_id)
         log(f'      {parent_level} (stub): {stub.ref_code} -- {parent_code}')
         return stub
 
@@ -506,9 +711,9 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
     omf_mgd   = _txt(el, 'Volym_OmfMgd', '0')
     forvtyp   = _txt(el, 'Volyml_ForvaringsenhetTyp') or None
 
+    # Dates are already captured structurally as date_start/date_end below —
+    # repeating them in the title is redundant.
     title = f'Vol. {volnr}'
-    if tid:
-        title += f' ({tid})'
 
     description_parts = []
     if placering:
@@ -544,6 +749,7 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
     node.ref_code = f'{serie_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
+    _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
     if anm:
         db.session.add(NodeNote(node_id=node.id, note_type='general', content=anm, created_by_id=system_user_id))
@@ -754,6 +960,7 @@ def _build_handlingsslag_node(hs_el, parent_node, institution_id, ht, strukt_map
     node.ref_code = f'{parent_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
+    _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
     if anm:
         db.session.add(NodeNote(node_id=node.id, note_type='general', content=anm, created_by_id=system_user_id))
@@ -843,7 +1050,6 @@ def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
     date_to    = _txt(el, 'ForvenhRel_TidTom') or None
     anm        = _txt(el, 'ForvenhRel_Anm') or None
     anmerkn    = _txt(el, 'ForvenhRel_Anmerkningar') or None
-    etrad1     = _txt(el, 'ForvenhRel_Etrad1') or None
     placering  = _txt(el, 'ForvenhRel_Placering') or None
     sekretess  = _txt(el, 'ForvenhRel_Sekretess', '0')
     gallr_ar   = _txt(el, 'ForvenhRel_GallrasAr') or None
@@ -852,14 +1058,17 @@ def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
     omf_mgd    = _txt(el, 'ForvenhRel_OmfMgd', '0')
     forvtyp    = _txt(el, 'ForvenhRel_ForvaringsenhetTyp') or None
 
-    if etrad1:
-        title = etrad1
-        if tid:
-            title += f' ({tid})'
-    else:
-        title = f'Vol. {beteckning}'
-        if tid:
-            title += f' ({tid})'
+    # Etrad1/Etrad2 are VA7's PRINTED LABEL LINE fields — free text meant for
+    # a physical box/spine label, not a reliable source for the record title.
+    # They've been seen holding boilerplate that belongs in the remarks field
+    # instead (e.g. "Anmärkningar - Förvaringsenhet 1"), silently corrupting
+    # titles. Deliberately not used here — the systematic "Vol. <beteckning>"
+    # designation is always used instead. This only affects the process-based
+    # (verksamhetsbaserad / HandlingsSlag) import path; AA-schema volumes are
+    # built by _import_volym, a separate function that never touches Etrad.
+    # Dates are already captured structurally as date_start/date_end below —
+    # repeating them in the title is redundant.
+    title = f'Vol. {beteckning}'
 
     description_parts = []
     if anm:
@@ -898,6 +1107,7 @@ def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
     node.ref_code = f'{serie_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
+    _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
     if anmerkn:
         db.session.add(NodeNote(node_id=node.id, note_type='general', content=anmerkn, created_by_id=system_user_id))

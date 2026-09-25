@@ -5,7 +5,7 @@ import {
   Plus, Users, User, Building2, UsersRound, Bot,
   Pencil, Trash2, Link, FileText, StickyNote,
   X, Save, ExternalLink, Globe, Upload, Check, AlertCircle,
-  MapPin, Tag as Tag2, Search, Download
+  MapPin, Tag as Tag2, Search, Download, Fingerprint, Paperclip
 } from 'lucide-react'
 import { agentsApi, agentsImportApi, nodesApi} from '@/api'
 import PlacesPanel from '@/components/geo/PlacesPanel'
@@ -19,6 +19,8 @@ import styles from './AgentsPage.module.css'
 import AuthorityLookup from '@/components/ui/AuthorityLookup'
 import type { AuthorityResult } from '@/components/ui/AuthorityLookup'
 import BookmarkButton from '@/components/layout/BookmarkButton'
+import AgentIdentifiersTab from '@/components/agent/AgentIdentifiersTab'
+import AgentAttachmentsTab from '@/components/agent/AgentAttachmentsTab'
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -491,8 +493,6 @@ function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
 
 // ─── Notes tab ────────────────────────────────────────────────────────
 
-// ─── Notes tab ────────────────────────────────────────────────────────
-
 function NotesTab({ agent }: { agent: AgentDetail }) {
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
@@ -630,12 +630,14 @@ function AgentDetailPanel({
   const Icon = AGENT_TYPE_ICONS[agent.agent_type]
 
   const tabs = [
-    { key: 'details',   icon: <FileText size={13} />,   label: 'Details' },
-    { key: 'relations', icon: <Link size={13} />,        label: `Relations${agent.relations.length ? ` (${agent.relations.length})` : ''}` },
-    { key: 'resources', icon: <Globe size={13} />,       label: `Resources${agent.node_count ? ` (${agent.node_count})` : ''}` },
-    { key: 'places',    icon: <MapPin size={13} />,      label: 'Places' },
-    { key: 'tags',      icon: <Tag2 size={13} />,        label: 'Tags' },
-    { key: 'notes',     icon: <StickyNote size={13} />,  label: `Notes${agent.notes.length ? ` (${agent.notes.length})` : ''}` },
+    { key: 'details',     icon: <FileText size={13} />,    label: 'Details' },
+    { key: 'relations',   icon: <Link size={13} />,         label: `Relations${agent.relations.length ? ` (${agent.relations.length})` : ''}` },
+    { key: 'identifiers', icon: <Fingerprint size={13} />,  label: `Identifiers${(agent as any).identifiers?.length ? ` (${(agent as any).identifiers.length})` : ''}` },
+    { key: 'resources',   icon: <Globe size={13} />,        label: `Resources${agent.node_count ? ` (${agent.node_count})` : ''}` },
+    { key: 'places',      icon: <MapPin size={13} />,       label: 'Places' },
+    { key: 'tags',        icon: <Tag2 size={13} />,         label: 'Tags' },
+    { key: 'notes',       icon: <StickyNote size={13} />,   label: `Notes${agent.notes.length ? ` (${agent.notes.length})` : ''}` },
+    { key: 'files',       icon: <Paperclip size={13} />,    label: `Files${(agent as any).attachments?.length ? ` (${(agent as any).attachments.length})` : ''}` },
   ]
 
   return (
@@ -688,12 +690,14 @@ function AgentDetailPanel({
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       <div className={styles.detailBody}>
-        {tab === 'details'   && <DetailsTab agent={agent} />}
-        {tab === 'relations' && <RelationsTab agent={agent} />}
-        {tab === 'resources' && <LinkedResourcesTab agent={agent} />}
-        {tab === 'places'    && <PlacesPanel entityType="agent" entityId={agent.id} />}
-        {tab === 'tags'      && <TagsPanel entityType="agent" entityId={agent.id} />}
-        {tab === 'notes'     && <NotesTab agent={agent} />}
+        {tab === 'details'     && <DetailsTab agent={agent} />}
+        {tab === 'relations'   && <RelationsTab agent={agent} />}
+        {tab === 'identifiers' && <AgentIdentifiersTab agentId={agent.id} />}
+        {tab === 'resources'   && <LinkedResourcesTab agent={agent} />}
+        {tab === 'places'      && <PlacesPanel entityType="agent" entityId={agent.id} />}
+        {tab === 'tags'        && <TagsPanel entityType="agent" entityId={agent.id} />}
+        {tab === 'notes'       && <NotesTab agent={agent} />}
+        {tab === 'files'       && <AgentAttachmentsTab agentId={agent.id} />}
       </div>
     </div>
   )

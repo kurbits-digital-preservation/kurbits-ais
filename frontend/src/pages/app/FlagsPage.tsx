@@ -5,7 +5,10 @@ import { Flag, Filter, User, ChevronRight } from 'lucide-react'
 import { flagsApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import { FLAG_TYPES, SEVERITIES, STATUSES } from '@/components/node/FlagsTab'
+import { useTranslation } from 'react-i18next'
 import styles from './FlagsPage.module.css'
+
+const STATUS_KEY_MAP: Record<string, string> = { open: 'open', in_progress: 'inProgress', resolved: 'resolved' }
 
 function getFlagType(value: string) {
   return FLAG_TYPES.find(t => t.value === value) ?? { label: value, color: '#9ca3af' }
@@ -17,6 +20,7 @@ function getSeverity(value: string) {
 function FlagRow({ flag, onStatusChange }: {
   flag: any; onStatusChange: (flagId: number, nodeId: number, status: string) => void
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const ft = getFlagType(flag.flag_type)
   const sv = getSeverity(flag.severity)
@@ -26,9 +30,9 @@ function FlagRow({ flag, onStatusChange }: {
       <div className={styles.flagMain}>
         <div className={styles.flagBadges}>
           <span className={styles.flagType} style={{ '--flag-color': ft.color } as any}>
-            <Flag size={11} /> {ft.label}
+            <Flag size={11} /> {t(`flags.types.${flag.flag_type}`, { defaultValue: ft.label })}
           </span>
-          <span className={styles.flagSeverity} style={{ color: sv.color }}>{sv.label}</span>
+          <span className={styles.flagSeverity} style={{ color: sv.color }}>{t(`flags.severityLevels.${flag.severity}`, { defaultValue: sv.label })}</span>
         </div>
         <div className={styles.flagTitle}>{flag.title}</div>
         {flag.body && <div className={styles.flagBody}>{flag.body}</div>}
@@ -57,7 +61,7 @@ function FlagRow({ flag, onStatusChange }: {
           value={flag.status}
           onChange={e => onStatusChange(flag.id, flag.node_id, e.target.value)}
         >
-          {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          {STATUSES.map(s => <option key={s.value} value={s.value}>{t(`flags.${STATUS_KEY_MAP[s.value]}`)}</option>)}
         </select>
       </div>
     </div>
@@ -65,6 +69,7 @@ function FlagRow({ flag, onStatusChange }: {
 }
 
 export default function FlagsPage() {
+  const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
 
@@ -110,8 +115,8 @@ export default function FlagsPage() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}><Flag size={20} /> Flags</h1>
-          <p className={styles.desc}>Review and manage flagged records across the institution.</p>
+          <h1 className={styles.title}><Flag size={20} /> {t('flags.title')}</h1>
+          <p className={styles.desc}>{t('flags.page.desc')}</p>
         </div>
       </div>
 
@@ -121,22 +126,22 @@ export default function FlagsPage() {
 
         <select value={status} onChange={e => setParam('status', e.target.value)}
           className={styles.filterSelect}>
-          <option value="">All statuses</option>
-          <option value="open">Open</option>
-          <option value="in_progress">In progress</option>
-          <option value="resolved">Resolved</option>
+          <option value="">{t('flags.page.allStatuses')}</option>
+          <option value="open">{t('flags.open')}</option>
+          <option value="in_progress">{t('flags.inProgress')}</option>
+          <option value="resolved">{t('flags.resolved')}</option>
         </select>
 
         <select value={flagType} onChange={e => setParam('flag_type', e.target.value)}
           className={styles.filterSelect}>
-          <option value="">All types</option>
-          {FLAG_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          <option value="">{t('flags.page.allTypes')}</option>
+          {FLAG_TYPES.map(ft => <option key={ft.value} value={ft.value}>{t(`flags.types.${ft.value}`)}</option>)}
         </select>
 
         <select value={severity} onChange={e => setParam('severity', e.target.value)}
           className={styles.filterSelect}>
-          <option value="">All severities</option>
-          {SEVERITIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          <option value="">{t('flags.page.allSeverities')}</option>
+          {SEVERITIES.map(s => <option key={s.value} value={s.value}>{t(`flags.severityLevels.${s.value}`)}</option>)}
         </select>
 
         <label className={styles.assignedMe}>
@@ -147,7 +152,7 @@ export default function FlagsPage() {
               else next.delete('assigned_to_me')
               next.set('page', '1'); setSearchParams(next)
             }} />
-          Assigned to me
+          {t('flags.assignedToMe')}
         </label>
         <label className={styles.assignedMe}>
           <input type="checkbox" checked={unassigned}
@@ -157,11 +162,11 @@ export default function FlagsPage() {
               else next.delete('unassigned')
               next.set('page', '1'); setSearchParams(next)
             }} />
-          Unassigned
+          {t('flags.unassigned')}
         </label>
 
         <span className={styles.totalCount}>
-          {isLoading ? <Spinner size={13} /> : `${total} flag${total !== 1 ? 's' : ''}`}
+          {isLoading ? <Spinner size={13} /> : t('flags.page.flagCount', { count: total })}
         </span>
       </div>
 
@@ -171,7 +176,7 @@ export default function FlagsPage() {
       ) : flags.length === 0 ? (
         <div className={styles.empty}>
           <Flag size={36} style={{ opacity: 0.15, marginBottom: 'var(--space-3)' }} />
-          <p>No flags matching the current filters.</p>
+          <p>{t('flags.page.noMatch')}</p>
         </div>
       ) : (
         <div className={styles.list}>
@@ -191,10 +196,10 @@ export default function FlagsPage() {
       {pages > 1 && (
         <div className={styles.pagination}>
           <button className="btn btn-ghost btn-sm" disabled={page <= 1}
-            onClick={() => setParam('page', String(page - 1))}>← Prev</button>
-          <span className={styles.pageInfo}>Page {page} of {pages}</span>
+            onClick={() => setParam('page', String(page - 1))}>{t('flags.page.prev')}</button>
+          <span className={styles.pageInfo}>{t('flags.page.pageOf', { page, pages })}</span>
           <button className="btn btn-ghost btn-sm" disabled={page >= pages}
-            onClick={() => setParam('page', String(page + 1))}>Next →</button>
+            onClick={() => setParam('page', String(page + 1))}>{t('flags.page.next')}</button>
         </div>
       )}
     </div>

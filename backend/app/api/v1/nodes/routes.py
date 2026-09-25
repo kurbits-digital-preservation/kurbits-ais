@@ -891,19 +891,41 @@ def upload_attachment(node_id):
     db.session.add(attachment)
     db.session.flush()
 
-    # Extract technical metadata (non-fatal)
-    try:
-        from app.tech_metadata import extract_all
-        thumb_dir = os.path.join(upload_dir, 'thumbnails')
-        tech = extract_all(file_path, mime_type, thumb_dir, stored_filename)
-        for field, value in tech.items():
-            if hasattr(attachment, field):
-                setattr(attachment, field, value)
-    except Exception as e:
-        current_app.logger.warning(f'Tech metadata extraction failed for {original_filename}: {e}')
-
     db.session.commit()
-    return success(serialize_attachment(attachment), 201)
+
+    # Technical metadata is extracted in the background. Doing it inline made
+    # the upload request as slow as the heaviest file in the batch — on a large
+    # TIFF, checksums + image probing + thumbnailing could exceed the gunicorn
+    # worker timeout and kill an upload whose bytes had already arrived safely.
+    # The request now only saves the file and writes the row; extraction
+    # follows and the client can poll the returned task_id.
+    task_id = None
+    try:
+        from app.models.background_task import BackgroundTask
+        from app.tasks.runner import run_in_background
+        from app.tasks.tech_metadata_task import run_tech_metadata
+
+        task = BackgroundTask(
+            institution_id=institution_id,
+            created_by_id=current_user.id,
+            task_type='tech_metadata',
+            entity_type='node_attachment',
+            entity_id=attachment.id,
+        )
+        db.session.add(task)
+        db.session.commit()
+        task_id = task.id
+        run_in_background(current_app._get_current_object(), task.id, run_tech_metadata)
+    except Exception as e:
+        # Never fail an upload because metadata couldn't be queued — the file
+        # is already stored and can be re-extracted from the Files tab.
+        current_app.logger.warning(
+            f'Could not queue metadata extraction for {original_filename}: {e}'
+        )
+
+    payload = serialize_attachment(attachment)
+    payload['tech_metadata_task_id'] = task_id
+    return success(payload, 201)
 
 
 # GET /api/v1/nodes/<id>/attachments/<attachment_id>/download
@@ -1518,6 +1540,38 @@ def move_node_location(node_id):
     })
 
 
+def _clean_metadata_spec(raw) -> dict:
+    """Accept only a flat dict of JSON-safe values for metadata_spec.
+
+    The rapid-entry UI already constrains keys to the level's template, but a
+    batch endpoint must not trust that: nested objects, huge blobs or non-dict
+    payloads are rejected here rather than written into the record.
+
+    NOTE: this does not yet verify that each key exists in the level's metadata
+    template — that needs the hierarchy template lookup. Worth adding so a
+    client-side mapping bug can't introduce keys the node form will never show.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or len(key) > 100:
+            continue
+        if value is None or value == '':
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            if isinstance(value, str) and len(value) > 10000:
+                value = value[:10000]
+            out[key] = value
+        elif isinstance(value, list):
+            # multiselect — list of scalars only
+            items = [v for v in value if isinstance(v, (str, int, float, bool))]
+            if items:
+                out[key] = items[:100]
+        # anything else (nested dicts, objects) is dropped deliberately
+    return out
+
+
 # POST /api/v1/nodes/batch
 @bp.route('/nodes/batch', methods=['POST'])
 @login_required
@@ -1529,7 +1583,7 @@ def batch_create_nodes():
     parent_id       = data.get('parent_id')
     hierarchy_type_id = data.get('hierarchy_type_id')
     level_of_description = data.get('level_of_description')
-    entries         = data.get('entries', [])   # [{title, local_ref, date_start, date_end, description}]
+    entries         = data.get('entries', [])   # [{title, local_ref, date_start, date_end, description, metadata_spec}]
 
     if not parent_id:
         return error('parent_id is required — rapid entry only creates children under an existing node', 400)
@@ -1585,7 +1639,7 @@ def batch_create_nodes():
             status=NodeStatus.DRAFT,
             created_by_id=current_user.id,
             updated_by_id=current_user.id,
-            metadata_spec={},
+            metadata_spec=_clean_metadata_spec(entry.get('metadata_spec')),
         )
 
         # Parse dates
@@ -1606,6 +1660,18 @@ def batch_create_nodes():
         db.session.add(node)
         db.session.flush()
 
+        # This endpoint builds ref_code directly rather than going through
+        # refresh_ref_code(), so top_node_id has to be set explicitly or these
+        # nodes stay invisible to tree-scoped search.
+        if parent is None:
+            node.top_node_id = node.id
+        elif parent.top_node_id:
+            node.top_node_id = parent.top_node_id
+        else:
+            # Parent predates the backfill — walk to the real root rather than
+            # assuming the immediate parent is it.
+            node.top_node_id = parent.get_top_node().id
+
         node.record_change(
             change_type='create',
             description='Created via rapid entry',
@@ -1614,7 +1680,7 @@ def batch_create_nodes():
             after_data=node.to_dict(),
         )
 
-        created.append({'id': node.id, 'ref_code': node.ref_code, 'title': node.title})
+        created.append({'row': i + 1, 'id': node.id, 'ref_code': node.ref_code, 'title': node.title})
 
     if errors and not created:
         db.session.rollback()

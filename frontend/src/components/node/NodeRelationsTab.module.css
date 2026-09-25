@@ -448,3 +448,105 @@
   gap: var(--space-2);
   justify-content: flex-end;
 }
+
+/* ─── Tree-scoped resource picker ─────────────────────────────────── */
+.pickerWithScope {
+  margin-bottom: var(--space-1);
+}
+
+.scopeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--color-accent-bg);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  font-size: var(--text-xs);
+}
+
+.scopeLabel {
+  color: var(--color-accent);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scopeActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.scopeAction {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scopeAction:hover { color: var(--color-accent); text-decoration: underline; }
+
+/* Picker directly below the scope bar loses its own top rounding so the
+   two read as one continuous card. */
+.pickerWithScope .picker {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  margin-bottom: 0;
+}
+
+/* ─── Tree-scoped resource picker ─────────────────────────────────── */
+.pickerWithScope {
+  margin-bottom: var(--space-1);
+}
+
+.scopeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--color-accent-bg);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  font-size: var(--text-xs);
+}
+
+.scopeLabel {
+  color: var(--color-accent);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scopeActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.scopeAction {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scopeAction:hover { color: var(--color-accent); text-decoration: underline; }
+
+/* Picker directly below the scope bar loses its own top rounding so the
+   two read as one continuous card. */
+.pickerWithScope .picker {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  margin-bottom: 0;
+}

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { nodeRelationsApi, agentsApi, locationsApi, classificationsApi, nodesApi } from '@/api'
 import { Spinner, TypePill } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import styles from './NodeRelationsTab.module.css'
 
 // ─── Shared search-and-pick popover ──────────────────────────────────
@@ -25,17 +26,21 @@ interface PickerProps {
   extraValue?: string
   onExtraChange?: (v: string) => void
   extraOptions?: string[]
+  extraOptionLabel?: (value: string) => string
   extraLabel?: string
   isPicking?: boolean
   extraAction?: React.ReactNode  // e.g. back button
+  confirmLabel?: string  // overrides the confirm button text, default 'Add'
 }
 
 function Picker({
   onClose, onPick, title,
   searchResults, isLoading, search, onSearch,
   renderItem, extra, extraValue, onExtraChange,
-  extraOptions, extraLabel, isPicking, extraAction,
+  extraOptions, extraOptionLabel, extraLabel, isPicking, extraAction,
+  confirmLabel,
 }: PickerProps) {
+  const { t } = useTranslation()
   const [selectedId, setSelectedId] = useState<number | null>(null)
 
   return (
@@ -52,8 +57,8 @@ function Picker({
         <div className={styles.pickerExtra}>
           <label>{extraLabel}</label>
           <select value={extraValue} onChange={e => onExtraChange?.(e.target.value)}>
-            <option value="">Select…</option>
-            {extraOptions.map(o => <option key={o} value={o}>{o}</option>)}
+            <option value="">{t('relations.picker.selectPlaceholder')}</option>
+            {extraOptions.map(o => <option key={o} value={o}>{extraOptionLabel ? extraOptionLabel(o) : o}</option>)}
           </select>
         </div>
       )}
@@ -64,7 +69,7 @@ function Picker({
           autoFocus
           value={search}
           onChange={e => onSearch(e.target.value)}
-          placeholder="Search…"
+          placeholder={t('relations.picker.searchPlaceholder')}
           className={styles.pickerSearchInput}
         />
       </div>
@@ -72,10 +77,10 @@ function Picker({
       <div className={styles.pickerResults}>
         {isLoading && <div className={styles.pickerLoading}><Spinner size={16} /></div>}
         {!isLoading && searchResults.length === 0 && search.length > 0 && (
-          <p className={styles.pickerEmpty}>No results</p>
+          <p className={styles.pickerEmpty}>{t('relations.picker.noResults')}</p>
         )}
         {!isLoading && search.length === 0 && searchResults.length === 0 && (
-          <p className={styles.pickerEmpty}>Type to search</p>
+          <p className={styles.pickerEmpty}>{t('relations.picker.typeToSearch')}</p>
         )}
         {searchResults.map(item => (
           <button
@@ -89,13 +94,13 @@ function Picker({
       </div>
 
       <div className={styles.pickerFooter}>
-        <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('common.cancel')}</button>
         <button
           className="btn btn-primary btn-sm"
           disabled={!selectedId || isPicking || (extraOptions ? !extraValue : false)}
           onClick={() => selectedId && onPick(selectedId, extraValue)}
         >
-          {isPicking ? <Spinner size={13} /> : 'Add'}
+          {isPicking ? <Spinner size={13} /> : (confirmLabel ?? t('common.add'))}
         </button>
       </div>
     </div>
@@ -114,6 +119,7 @@ const AGENT_ICONS: Record<string, typeof User> = {
 // ─── Section components ───────────────────────────────────────────────
 
 function AgentsSection({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
@@ -159,22 +165,22 @@ function AgentsSection({ nodeId }: { nodeId: number }) {
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}><User size={13} /> Agents</span>
+        <span className={styles.sectionLabel}><User size={13} /> {t('relations.agents.title')}</span>
         <button className="btn btn-ghost btn-sm" onClick={() => setAdding(v => !v)}>
-          <Plus size={13} /> Add
+          <Plus size={13} /> {t('common.add')}
         </button>
       </div>
 
       {adding && (
         <Picker
-          title="Link an agent"
+          title={t('relations.agents.linkAgent')}
           onClose={() => { setAdding(false); setSearch(''); setRelationType('') }}
           onPick={(id, type) => addMutation.mutate({ agentId: id, type: type! })}
           search={search}
           onSearch={setSearch}
           searchResults={searchResults ?? []}
           isLoading={searching}
-          extraLabel="Relation type"
+          extraLabel={t('relations.agents.relationType')}
           extraOptions={relationTypeOptions}
           extraValue={relationType}
           onExtraChange={setRelationType}
@@ -193,7 +199,7 @@ function AgentsSection({ nodeId }: { nodeId: number }) {
       )}
 
       {linked?.length === 0 && !adding && (
-        <p className={styles.empty}>No agents linked yet.</p>
+        <p className={styles.empty}>{t('relations.agents.noneYet')}</p>
       )}
 
       {linked?.map((agent: any) => {
@@ -203,7 +209,7 @@ function AgentsSection({ nodeId }: { nodeId: number }) {
             <button
               className={styles.linkedItemBtn}
               onClick={() => navigate('/app/agents', { state: { selectAgentId: agent.id } })}
-              title="Open in Agents"
+              title={t('relations.agents.openInAgents')}
             >
               <div className={styles.linkedItemIcon}>
                 <Icon size={14} />
@@ -227,6 +233,7 @@ function AgentsSection({ nodeId }: { nodeId: number }) {
 }
 
 function LocationsSection({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [checkingIn, setCheckingIn] = useState(false)
@@ -287,7 +294,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
       queryClient.invalidateQueries({ queryKey: ['location-overview'] })
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.message ?? 'Return failed')
+      alert(err?.response?.data?.message ?? t('relations.locations.returnFailed'))
     },
   })
 
@@ -300,16 +307,16 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}><MapPin size={13} /> Storage location</span>
+        <span className={styles.sectionLabel}><MapPin size={13} /> {t('relations.locations.title')}</span>
         {!checkingIn && !checkingOut && (
           <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
             {current && !isCheckedOut && (
               <button className="btn btn-ghost btn-sm" onClick={() => setCheckingOut(true)}>
-                <ArrowUpFromLine size={13} /> Check out
+                <ArrowUpFromLine size={13} /> {t('relations.locations.checkOut')}
               </button>
             )}
             <button className="btn btn-ghost btn-sm" onClick={() => setCheckingIn(true)}>
-              <Plus size={13} /> {current ? 'Move' : 'Check in'}
+              <Plus size={13} /> {current ? t('relations.locations.move') : t('relations.locations.checkIn')}
             </button>
           </div>
         )}
@@ -317,7 +324,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
 
       {/* Current location */}
       {!current && !checkingIn && (
-        <p className={styles.emptyState}>Not checked in to any location.</p>
+        <p className={styles.emptyState}>{t('relations.locations.notCheckedIn')}</p>
       )}
       {current && (
         <div className={`${styles.locationItem} ${isCheckedOut ? styles.locationItemCheckedOut : ''}`}>
@@ -333,21 +340,21 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
               <button
                 className={styles.locationItemLink}
                 onClick={() => navigate('/app/locations', { state: { selectLocationId: current.id } })}
-                title="Open this location"
+                title={t('relations.locations.openThisLocation')}
               >
                 {(current as any).full_path ?? current.name}
               </button>
             )}
             {isCheckedOut && (
-              <span className={styles.checkedOutBadge}>Checked out</span>
+              <span className={styles.checkedOutBadge}>{t('relations.locations.checkedOutBadge')}</span>
             )}
           </div>
           {isCheckedOut && (
             <button className="btn btn-secondary btn-sm"
-              title="Check back in to where it was checked out from"
+              title={t('relations.locations.returnHint')}
               disabled={returnMutation.isPending}
               onClick={() => returnMutation.mutate()}>
-              {returnMutation.isPending ? <Spinner size={13} /> : <><ArrowDownToLine size={13} /> Return</>}
+              {returnMutation.isPending ? <Spinner size={13} /> : <><ArrowDownToLine size={13} /> {t('relations.locations.returnButton')}</>}
             </button>
           )}
         </div>
@@ -357,7 +364,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
       {checkingOut && current && !isCheckedOut && (
         <div className={styles.movePanel}>
           <div className={styles.movePanelHeader}>
-            <span><ArrowUpFromLine size={12} /> Check out — reason</span>
+            <span><ArrowUpFromLine size={12} /> {t('relations.locations.checkOutReasonHeader')}</span>
             <button className="btn btn-ghost btn-sm btn-icon"
               onClick={() => { setCheckingOut(false); setCheckoutCategoryId('') }}>
               <X size={12} />
@@ -369,7 +376,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
               onChange={e => setCheckoutCategoryId(e.target.value)}
               className={styles.checkoutSelect}
             >
-              <option value="">Uncategorised</option>
+              <option value="">{t('relations.locations.uncategorised')}</option>
               {(checkoutCats as any)?.categories?.map((c: any) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -377,12 +384,12 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
             <div className={styles.checkoutPanelActions}>
               <button className="btn btn-ghost btn-sm"
                 onClick={() => { setCheckingOut(false); setCheckoutCategoryId('') }}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button className="btn btn-primary btn-sm"
                 disabled={checkOutMutation.isPending}
                 onClick={() => checkOutMutation.mutate(current.id)}>
-                {checkOutMutation.isPending ? <Spinner size={13} /> : <><ArrowUpFromLine size={13} /> Check out</>}
+                {checkOutMutation.isPending ? <Spinner size={13} /> : <><ArrowUpFromLine size={13} /> {t('relations.locations.checkOut')}</>}
               </button>
             </div>
           </div>
@@ -393,7 +400,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
       {checkingIn && (
         <div className={styles.movePanel}>
           <div className={styles.movePanelHeader}>
-            <span>{current ? 'Move to new location' : 'Check in to location'}</span>
+            <span>{current ? t('relations.locations.moveToNewLocation') : t('relations.locations.checkInToLocation')}</span>
             <button className="btn btn-ghost btn-sm btn-icon"
               onClick={() => { setCheckingIn(false); setSearch(''); setSelectedLoc(null) }}>
               <X size={12} />
@@ -401,7 +408,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
           </div>
           <div style={{ padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             <input value={search} onChange={e => { setSearch(e.target.value); setSelectedLoc(null) }}
-              placeholder="Search storable locations…" autoFocus />
+              placeholder={t('relations.locations.searchStorablePlaceholder')} autoFocus />
             {selectedLoc && (
               <div style={{ padding: 'var(--space-2) var(--space-3)', background: 'var(--color-accent-bg)',
                 border: '1px solid var(--color-accent-border)', borderRadius: 'var(--radius-md)',
@@ -428,17 +435,17 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
               </div>
             )}
             <input value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Notes (optional)" />
+              placeholder={t('relations.locations.notesPlaceholder')} />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
               <button className="btn btn-ghost btn-sm"
                 onClick={() => { setCheckingIn(false); setSearch(''); setSelectedLoc(null) }}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button className="btn btn-primary btn-sm"
                 disabled={!selectedLoc || checkInMutation.isPending}
                 onClick={() => checkInMutation.mutate()}>
                 {checkInMutation.isPending ? <Spinner size={13} /> : null}
-                {current ? 'Move' : 'Check in'}
+                {current ? t('relations.locations.move') : t('relations.locations.checkIn')}
               </button>
             </div>
           </div>
@@ -449,6 +456,7 @@ function LocationsSection({ nodeId }: { nodeId: number }) {
 }
 
 function ClassificationsSection({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
@@ -496,16 +504,16 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}><Tag size={13} /> Classifications</span>
+        <span className={styles.sectionLabel}><Tag size={13} /> {t('relations.classifications.title')}</span>
         <button className="btn btn-ghost btn-sm" onClick={() => setAdding(v => !v)}>
-          <Plus size={13} /> Add
+          <Plus size={13} /> {t('common.add')}
         </button>
       </div>
 
       {adding && (
         <div className={styles.classPickerPanel}>
           <div className={styles.classPickerHeader}>
-            <span className={styles.pickerTitle}>Assign a classification</span>
+            <span className={styles.pickerTitle}>{t('relations.classifications.assignClassification')}</span>
             <button className="btn btn-ghost btn-sm btn-icon"
               onClick={() => { setAdding(false); setSearch(''); setSelectedScheme(null) }}>
               <X size={13} />
@@ -515,11 +523,11 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
           {/* Step 1: Pick scheme */}
           {!selectedScheme ? (
             <div>
-              <p className={styles.classPickerHint}>Select a classification scheme:</p>
+              <p className={styles.classPickerHint}>{t('relations.classifications.selectSchemeHint')}</p>
               {!schemes ? (
                 <div className={styles.pickerLoading}><Spinner size={16} /></div>
               ) : schemes.length === 0 ? (
-                <p className={styles.pickerEmpty}>No classification schemes found. Create a root-level classification first.</p>
+                <p className={styles.pickerEmpty}>{t('relations.classifications.noSchemesFound')}</p>
               ) : schemes.map((s: any) => (
                 <button key={s.id} className={styles.schemeRow} onClick={() => setSelectedScheme(s)}>
                   <div className={styles.schemeName}>{s.name}</div>
@@ -535,7 +543,7 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
                 ← {selectedScheme.name}
               </button>
               <Picker
-                title={`Search in ${selectedScheme.name}`}
+                title={t('relations.classifications.searchInScheme', { scheme: selectedScheme.name })}
                 onClose={() => { setAdding(false); setSearch(''); setSelectedScheme(null) }}
                 onPick={(id) => addMutation.mutate(id)}
                 search={search}
@@ -556,7 +564,7 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
       )}
 
       {linked?.length === 0 && !adding && (
-        <p className={styles.empty}>No classifications assigned.</p>
+        <p className={styles.empty}>{t('relations.classifications.noneAssigned')}</p>
       )}
 
       {linked?.map((c: any) => (
@@ -564,7 +572,7 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
           <button
             className={styles.linkedItemBtn}
             onClick={() => navigate('/app/classifications', { state: { selectClassificationId: c.id } })}
-            title="Open in Classifications"
+            title={t('relations.classifications.openInClassifications')}
           >
             <div className={styles.linkedItemIcon}>
               <Tag size={14} />
@@ -587,10 +595,33 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
 }
 
 function NodeLinksSection({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [search, setSearch] = useState('')
   const [relationType, setRelationType] = useState('')
+
+  // ── Tree scoping ──────────────────────────────────────────────────
+  // Default: search only within the current node's own tree (its root).
+  // 'all' clears scoping entirely. 'other' lets the user pick a different
+  // root to search under — for the rarer cross-tree link.
+  type ScopeMode = 'own' | 'all' | 'other'
+  const [scopeMode, setScopeMode] = useState<ScopeMode>('own')
+  const [otherRoot, setOtherRoot] = useState<{ id: number; title: string } | null>(null)
+  const [pickingRoot, setPickingRoot] = useState(false)
+  const [rootSearch, setRootSearch] = useState('')
+
+  // Reuses the ['node', nodeId] cache the page already populates — no extra
+  // request in practice, React Query dedupes by key.
+  const { data: currentNode } = useQuery({
+    queryKey: ['node', nodeId],
+    queryFn: () => nodesApi.get(nodeId).then((r: any) => r.data.data),
+  })
+  const ownRoot = currentNode?.breadcrumb?.[0]
+    ? { id: currentNode.breadcrumb[0].id, title: currentNode.breadcrumb[0].title }
+    : null
+
+  const activeRoot = scopeMode === 'own' ? ownRoot : scopeMode === 'other' ? otherRoot : null
 
   const { data: relations, isLoading } = useQuery({
     queryKey: ['node-relations', nodeId],
@@ -598,9 +629,19 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
   })
 
   const { data: searchResults, isLoading: searching } = useQuery({
-    queryKey: ['nodes-search-link', search],
-    queryFn: () => nodesApi.list({ q: search, per_page: 8 }).then(r => r.data.data as any[]),
+    queryKey: ['nodes-search-link', search, activeRoot?.id],
+    queryFn: () => nodesApi.list({
+      q: search, per_page: 8,
+      ...(activeRoot ? { root_id: activeRoot.id } : {}),
+    } as any).then(r => r.data.data as any[]),
     enabled: search.length > 1,
+  })
+
+  const { data: rootResults, isLoading: searchingRoots } = useQuery({
+    queryKey: ['nodes-search-roots', rootSearch],
+    queryFn: () => nodesApi.list({ q: rootSearch, per_page: 8, roots_only: 'true' } as any)
+      .then(r => r.data.data as any[]),
+    enabled: pickingRoot && rootSearch.length > 1,
   })
 
   const addMutation = useMutation({
@@ -622,30 +663,90 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
   if (isLoading) return <div className={styles.sectionLoading}><Spinner size={16} /></div>
 
   const RELATION_TYPES = ['related to', 'precedes', 'follows', 'is part of', 'has part', 'see also']
+  const RELATION_TYPE_KEY_MAP: Record<string, string> = {
+    'related to': 'relatedTo', 'precedes': 'precedes', 'follows': 'follows',
+    'is part of': 'isPartOf', 'has part': 'hasPart', 'see also': 'seeAlso',
+  }
+
+  const scopeLabel =
+    scopeMode === 'own' ? (ownRoot ? t('relations.related.inThisTreeNamed', { title: ownRoot.title }) : t('relations.related.inThisTree'))
+    : scopeMode === 'other' ? (otherRoot ? t('relations.related.inTree', { title: otherRoot.title }) : t('relations.related.pickATree'))
+    : t('relations.related.allResources')
 
   return (
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionLabel}><Link size={13} /> Related resources</span>
+        <span className={styles.sectionLabel}><Link size={13} /> {t('relations.related.title')}</span>
         <button className="btn btn-ghost btn-sm" onClick={() => setAdding(v => !v)}>
-          <Plus size={13} /> Add
+          <Plus size={13} /> {t('common.add')}
         </button>
       </div>
 
-      {adding && (
+      {adding && !pickingRoot && (
+        <div className={styles.pickerWithScope}>
+          <div className={styles.scopeBar}>
+            <span className={styles.scopeLabel} title={activeRoot ? undefined : t('relations.related.searchingAllTrees')}>
+              {scopeLabel}
+            </span>
+            <div className={styles.scopeActions}>
+              {scopeMode !== 'own' && ownRoot && (
+                <button className={styles.scopeAction} onClick={() => { setScopeMode('own'); setSearch('') }}>
+                  {t('relations.related.thisTreeButton')}
+                </button>
+              )}
+              {scopeMode !== 'all' && (
+                <button className={styles.scopeAction} onClick={() => { setScopeMode('all'); setSearch('') }}>
+                  {t('relations.related.searchAllButton')}
+                </button>
+              )}
+              <button className={styles.scopeAction} onClick={() => { setPickingRoot(true); setRootSearch('') }}>
+                {t('relations.related.chooseTree')}
+              </button>
+            </div>
+          </div>
+          <Picker
+            title={t('relations.related.linkResource')}
+            onClose={() => { setAdding(false); setSearch(''); setRelationType(''); setScopeMode('own'); setOtherRoot(null) }}
+            onPick={(id, type) => addMutation.mutate({ targetId: id, type: type! })}
+            search={search}
+            onSearch={setSearch}
+            searchResults={(searchResults ?? []).filter((n: any) => n.id !== nodeId)}
+            isLoading={searching}
+            extraLabel={t('relations.related.relationship')}
+            extraOptions={RELATION_TYPES}
+            extraOptionLabel={(v) => t(`relations.related.types.${RELATION_TYPE_KEY_MAP[v]}`)}
+            extraValue={relationType}
+            onExtraChange={setRelationType}
+            isPicking={addMutation.isPending}
+            renderItem={(node) => (
+              <div className={styles.nodePickItem}>
+                <span className={styles.nodePickTitle}>{node.title}</span>
+                <span className={styles.nodePickRef}>{node.ref_code}</span>
+              </div>
+            )}
+          />
+        </div>
+      )}
+
+      {adding && pickingRoot && (
         <Picker
-          title="Link a related resource"
-          onClose={() => { setAdding(false); setSearch(''); setRelationType('') }}
-          onPick={(id, type) => addMutation.mutate({ targetId: id, type: type! })}
-          search={search}
-          onSearch={setSearch}
-          searchResults={(searchResults ?? []).filter((n: any) => n.id !== nodeId)}
-          isLoading={searching}
-          extraLabel="Relationship"
-          extraOptions={RELATION_TYPES}
-          extraValue={relationType}
-          onExtraChange={setRelationType}
-          isPicking={addMutation.isPending}
+          title={t('relations.related.searchWithinTree')}
+          confirmLabel={t('relations.related.useThisTree')}
+          onClose={() => setPickingRoot(false)}
+          onPick={(id) => {
+            const picked = (rootResults ?? []).find((r: any) => r.id === id)
+            if (picked) {
+              setOtherRoot({ id: picked.id, title: picked.title })
+              setScopeMode('other')
+            }
+            setPickingRoot(false)
+            setRootSearch('')
+            setSearch('')
+          }}
+          search={rootSearch}
+          onSearch={setRootSearch}
+          searchResults={rootResults ?? []}
+          isLoading={searchingRoots}
           renderItem={(node) => (
             <div className={styles.nodePickItem}>
               <span className={styles.nodePickTitle}>{node.title}</span>
@@ -656,7 +757,7 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
       )}
 
       {relations?.length === 0 && !adding && (
-        <p className={styles.empty}>No related resources.</p>
+        <p className={styles.empty}>{t('relations.related.noneYet')}</p>
       )}
 
       {relations?.map((rel: any) => (
@@ -667,7 +768,7 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
           <div className={styles.linkedItemBody}>
             <span className={styles.linkedItemName}>{rel.title}</span>
             <span className={styles.linkedItemMeta}>
-              {rel.relation_type} · {rel.ref_code}
+              {RELATION_TYPE_KEY_MAP[rel.relation_type] ? t(`relations.related.types.${RELATION_TYPE_KEY_MAP[rel.relation_type]}`) : rel.relation_type} · {rel.ref_code}
             </span>
           </div>
           <button
@@ -681,7 +782,6 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
     </div>
   )
 }
-
 // ─── Main export ─────────────────────────────────────────────────────
 
 export default function NodeRelationsTab({ nodeId }: { nodeId: number }) {
@@ -696,6 +796,7 @@ export default function NodeRelationsTab({ nodeId }: { nodeId: number }) {
 // ─── Standalone tab exports ───────────────────────────────────────────
 
 export function NodeLocationsTab({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [showHistory, setShowHistory] = useState(false)
 
@@ -721,7 +822,7 @@ export function NodeLocationsTab({ nodeId }: { nodeId: number }) {
           borderBottom: '1px solid var(--color-border)', fontSize: 'var(--text-sm)' }}>
           <MapPin size={13} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
           <span style={{ fontWeight: 500, color: 'var(--color-ink)' }}>
-            Currently at:
+            {t('relations.locations.currentlyAt')}
           </span>
           <CurrentLocationName locationId={currentLocationId} />
         </div>
@@ -736,14 +837,14 @@ export function NodeLocationsTab({ nodeId }: { nodeId: number }) {
           fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)',
           fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}
           onClick={() => setShowHistory(v => !v)}>
-          {showHistory ? '▾' : '▸'} Movement history
+          {showHistory ? '▾' : '▸'} {t('relations.locations.movementHistory')}
         </button>
         {showHistory && (
           <div style={{ marginTop: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 2 }}>
             {histLoading && <Spinner size={14} />}
             {!histLoading && (history as any[]).length === 0 && (
               <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-faint)', fontStyle: 'italic' }}>
-                No movements recorded yet.
+                {t('relations.locations.noMovementsYet')}
               </p>
             )}
             {(history as any[]).map((m: any) => (
@@ -753,11 +854,11 @@ export function NodeLocationsTab({ nodeId }: { nodeId: number }) {
                 <MapPin size={12} style={{ color: 'var(--color-ink-faint)', marginTop: 2, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 500, color: 'var(--color-ink)' }}>
-                    {m.location_name ?? 'Unknown location'}
+                    {m.location_name ?? t('relations.locations.unknownLocation')}
                   </div>
                   {m.from_location_name && (
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
-                      from {m.from_location_name}
+                      {t('relations.locations.fromLocation', { location: m.from_location_name })}
                     </div>
                   )}
                   {m.condition_note && (
@@ -782,6 +883,7 @@ export function NodeLocationsTab({ nodeId }: { nodeId: number }) {
 }
 
 function CurrentLocationName({ locationId }: { locationId: number }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { data } = useQuery({
     queryKey: ['location', locationId],
@@ -799,7 +901,7 @@ function CurrentLocationName({ locationId }: { locationId: number }) {
   return (
     <button
       onClick={() => navigate('/app/locations', { state: { selectLocationId: locationId } })}
-      title="Open this location"
+      title={t('relations.locations.openThisLocation')}
       style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
         font: 'inherit', color: 'var(--color-accent)', textDecoration: 'underline',
         textDecorationColor: 'color-mix(in srgb, var(--color-accent) 35%, transparent)',

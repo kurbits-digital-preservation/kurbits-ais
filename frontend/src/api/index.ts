@@ -174,7 +174,27 @@ export const agentsApi = {
 
   getRelationTypes: () => api.get('/agents/relation-types'),
   getNodeRelationTypes: () => api.get('/agents/node-relation-types'),
+    // Identifiers
+  getIdentifiers: (agentId: number) => api.get(`/agents/${agentId}/identifiers`),
+  addIdentifier: (agentId: number, data: any) => api.post(`/agents/${agentId}/identifiers`, data),
+  updateIdentifier: (agentId: number, id: number, data: any) =>
+    api.patch(`/agents/${agentId}/identifiers/${id}`, data),
+  deleteIdentifier: (agentId: number, id: number) =>
+    api.delete(`/agents/${agentId}/identifiers/${id}`),
+
+  // Attachments
+  getAttachments: (agentId: number) => api.get(`/agents/${agentId}/attachments`),
+  uploadAttachment: (agentId: number, formData: FormData) =>
+    api.post(`/agents/${agentId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  deleteAttachment: (agentId: number, attachmentId: number) =>
+    api.delete(`/agents/${agentId}/attachments/${attachmentId}`),
+  getAttachmentDownloadUrl: (agentId: number, attachmentId: number) =>
+    `/api/v1/agents/${agentId}/attachments/${attachmentId}/download`,
 }
+
+
 
 // ─── Locations ───────────────────────────────────────────────────────
 export const locationsApi = {
@@ -719,13 +739,13 @@ export const representationsApi = {
   delete: (nodeId: number, repId: number) =>
     api.delete(`/nodes/${nodeId}/representations/${repId}`),
 
-  // Upload a file into a representation
-  uploadFile: (nodeId: number, repId: number, formData: FormData) =>
-    api.post(`/nodes/${nodeId}/attachments`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      params: { representation_id: repId },
-    }),
-
+uploadFile: (nodeId: number, repId: number, formData: FormData, config?: any) => {
+  formData.append('representation_id', String(repId))
+  return api.post(`/nodes/${nodeId}/attachments`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    ...config,
+  })
+},
   getDownloadUrl: (nodeId: number, fileId: number) =>
     `/api/v1/nodes/${nodeId}/attachments/${fileId}/download`,
   getThumbnailUrl: (nodeId: number, fileId: number) =>

@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Tag, X, Plus } from 'lucide-react'
 import { tagsApi, vocabApi } from '@/api'
 import { Spinner } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import styles from './TagsPanel.module.css'
 
-const NO_CATEGORY = { value: '', label: 'No category' }
+const NO_CATEGORY_VALUE = ''
 
 const CATEGORY_COLORS: Record<string, string> = {
   topic:      'var(--color-accent)',
@@ -26,6 +27,7 @@ interface TagsPanelProps {
 }
 
 export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [input, setInput] = useState('')
   const [category, setCategory] = useState('')
@@ -39,7 +41,7 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
     queryFn: () => vocabApi.listTagCategories(entityType).then(r => r.data.data),
   })
 
-  const categoryOptions = [NO_CATEGORY, ...tagCategories.map((c: any) => ({ value: c.name, label: c.label }))]
+  const categoryOptions = [{ value: NO_CATEGORY_VALUE, label: t('tags.noCategory') }, ...tagCategories.map((c: any) => ({ value: c.name, label: c.label }))]
 
   const queryKey = [entityType === 'node' ? 'node-tags' : 'agent-tags', entityId]
 
@@ -104,7 +106,7 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
     <div className={styles.panel}>
       <div className={styles.panelHeader}>
         <span className={styles.panelTitle}>
-          <Tag size={14} /> Tags
+          <Tag size={14} /> {t('resources.tabs.tags')}
         </span>
       </div>
 
@@ -123,7 +125,7 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
                 {tag.name}
                 <button className={styles.tagRemove}
                   onClick={() => removeMutation.mutate(tag.id)}
-                  title="Remove tag">
+                  title={t('tags.removeTag')}>
                   <X size={10} />
                 </button>
               </span>
@@ -133,7 +135,7 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
       ))}
 
       {(!tags || tags.length === 0) && (
-        <p className={styles.empty}>No tags yet.</p>
+        <p className={styles.empty}>{t('tags.noneYet')}</p>
       )}
 
       {/* Add tag input */}
@@ -148,7 +150,7 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
               onKeyDown={handleKeyDown}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-              placeholder="Add a tag…"
+              placeholder={t('tags.addPlaceholder')}
             />
             {showSuggestions && suggestions.length > 0 && (
               <div className={styles.suggestions}>
@@ -164,7 +166,7 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
                 {input.trim() && !suggestions.find((s: any) => s.name.toLowerCase() === input.trim().toLowerCase()) && (
                   <button className={`${styles.suggestion} ${styles.suggestionNew}`}
                     onMouseDown={() => handleAdd(input)}>
-                    <Plus size={11} /> Create "{input.trim()}"
+                    <Plus size={11} /> {t('tags.createNew', { name: input.trim() })}
                   </button>
                 )}
               </div>
@@ -184,7 +186,7 @@ export default function TagsPanel({ entityType, entityId }: TagsPanelProps) {
             {addMutation.isPending ? <Spinner size={13} /> : <Plus size={13} />}
           </button>
         </div>
-        <span className={styles.hint}>Press Enter to add · Existing tags are suggested as you type</span>
+        <span className={styles.hint}>{t('tags.hint')}</span>
       </div>
     </div>
   )

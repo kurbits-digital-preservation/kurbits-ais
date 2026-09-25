@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Flag, Plus, X, Check, Pencil, ChevronDown, User } from 'lucide-react'
 import { flagsApi, institutionApi } from '@/api'
 import { Spinner } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import styles from './FlagsTab.module.css'
 
 export const FLAG_TYPES = [
@@ -34,6 +35,11 @@ function getSeverity(value: string) {
   return SEVERITIES.find(s => s.value === value) ?? { label: value, color: '#9ca3af' }
 }
 
+// Note: FLAG_TYPES / SEVERITIES / STATUSES are also imported directly by
+// FlagsPage.tsx, so their `.label` values stay as-is here; translated
+// display text is looked up separately via these key maps.
+const STATUS_KEY_MAP: Record<string, string> = { open: 'open', in_progress: 'inProgress', resolved: 'resolved' }
+
 // ─── Flag form ────────────────────────────────────────────────────────
 
 function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
@@ -41,6 +47,7 @@ function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
   onSave: (data: Record<string, unknown>) => void
   onCancel: () => void; isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState({
     flag_type:      initial?.flag_type      ?? 'metadata',
     severity:       initial?.severity       ?? 'medium',
@@ -69,33 +76,33 @@ function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
     <div className={styles.form}>
       <div className={styles.formRow}>
         <div className="form-group" style={{ flex: 1 }}>
-          <label>Type *</label>
+          <label>{t('flags.form.type')}</label>
           <select value={form.flag_type} onChange={set('flag_type')}>
-            {FLAG_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+            {FLAG_TYPES.map(ft => <option key={ft.value} value={ft.value}>{t(`flags.types.${ft.value}`)}</option>)}
           </select>
         </div>
         <div className="form-group" style={{ width: 130 }}>
-          <label>Severity</label>
+          <label>{t('flags.severity')}</label>
           <select value={form.severity} onChange={set('severity')}>
-            {SEVERITIES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {SEVERITIES.map(s => <option key={s.value} value={s.value}>{t(`flags.severityLevels.${s.value}`)}</option>)}
           </select>
         </div>
         {initial && (
           <div className="form-group" style={{ width: 140 }}>
-            <label>Status</label>
+            <label>{t('flags.status')}</label>
             <select value={form.status} onChange={set('status')}>
-              {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              {STATUSES.map(s => <option key={s.value} value={s.value}>{t(`flags.${STATUS_KEY_MAP[s.value]}`)}</option>)}
             </select>
           </div>
         )}
       </div>
       <div className="form-group">
-        <label>Title *</label>
+        <label>{t('flags.form.title')}</label>
         <input value={form.title} onChange={set('title')}
-          placeholder="Brief description of the issue" autoFocus={!initial} />
+          placeholder={t('flags.form.titlePlaceholder')} autoFocus={!initial} />
       </div>
       <div className="form-group" style={{ position: 'relative' }}>
-        <label>Assign to</label>
+        <label>{t('flags.form.assignTo')}</label>
         <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
           <input
             value={assigneeSearch}
@@ -106,13 +113,13 @@ function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
             }}
             onFocus={() => setAssigneeOpen(true)}
             onBlur={() => setTimeout(() => setAssigneeOpen(false), 150)}
-            placeholder="Type to search members…"
+            placeholder={t('flags.form.searchMembersPlaceholder')}
             style={{ flex: 1 }}
           />
           {form.assigned_to_id && (
             <button type="button" className="btn btn-ghost btn-sm btn-icon"
               onClick={() => { setAssigneeSearch(''); setForm(p => ({ ...p, assigned_to_id: null })) }}
-              title="Clear assignee">
+              title={t('flags.form.clearAssignee')}>
               <X size={12} />
             </button>
           )}
@@ -129,7 +136,7 @@ function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
                 textAlign: 'left', fontFamily: 'var(--font-sans)', fontSize: 'var(--text-sm)',
                 color: 'var(--color-ink-faint)', fontStyle: 'italic' }}
               onMouseDown={() => { setAssigneeSearch(''); setForm(p => ({ ...p, assigned_to_id: null })) }}>
-              Unassigned
+              {t('flags.unassigned')}
             </button>
             {filteredMembers.map((m: any) => (
               <button type="button" key={m.id}
@@ -159,17 +166,17 @@ function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
         )}
         {form.assigned_to_id && (
           <span className="form-hint" style={{ color: 'var(--color-accent)' }}>
-            <User size={11} style={{ display: 'inline', verticalAlign: 'middle' }} /> Assigned to {assigneeSearch}
+            <User size={11} style={{ display: 'inline', verticalAlign: 'middle' }} /> {t('flags.form.assignedTo', { name: assigneeSearch })}
           </span>
         )}
       </div>
       <div className="form-group">
-        <label>Notes</label>
+        <label>{t('flags.form.notes')}</label>
         <textarea value={form.body} onChange={set('body')} rows={3}
-          placeholder="Detailed notes, steps to fix, condition description…" />
+          placeholder={t('flags.form.notesPlaceholder')} />
       </div>
       <div className={styles.formActions}>
-        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>{t('common.cancel')}</button>
         <button className="btn btn-primary btn-sm"
           disabled={!form.title.trim() || isSaving}
           onClick={() => onSave({
@@ -177,7 +184,7 @@ function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
             assigned_to_id: form.assigned_to_id ? parseInt(String(form.assigned_to_id)) : null,
           })}>
           {isSaving ? <Spinner size={13} /> : <Check size={13} />}
-          {initial ? 'Save changes' : 'Create flag'}
+          {initial ? t('resources.form.saveChanges') : t('flags.form.createFlag')}
         </button>
       </div>
     </div>
@@ -189,6 +196,7 @@ function FlagForm({ nodeId, initial, onSave, onCancel, isSaving }: {
 function FlagCard({ flag, nodeId, onChanged }: {
   flag: any; nodeId: number; onChanged: () => void
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const queryClient = useQueryClient()
 
@@ -223,22 +231,22 @@ function FlagCard({ flag, nodeId, onChanged }: {
       <div className={styles.flagHeader}>
         <div className={styles.flagBadges}>
           <span className={styles.flagType} style={{ '--flag-color': ft.color } as any}>
-            <Flag size={11} /> {ft.label}
+            <Flag size={11} /> {t(`flags.types.${flag.flag_type}`, { defaultValue: ft.label })}
           </span>
           <span className={styles.flagSeverity} style={{ color: sv.color }}>
-            {sv.label}
+            {t(`flags.severityLevels.${flag.severity}`, { defaultValue: sv.label })}
           </span>
           <StatusDropdown flag={flag} onUpdate={s => quickStatus(s)} />
         </div>
         <div className={styles.flagActions}>
           {!isResolved && (
-            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setEditing(true)} title="Edit">
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setEditing(true)} title={t('common.edit')}>
               <Pencil size={12} />
             </button>
           )}
           <button className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => { if (confirm('Delete this flag?')) deleteMutation.mutate() }}
-            title="Delete">
+            onClick={() => { if (confirm(t('flags.card.deleteConfirm'))) deleteMutation.mutate() }}
+            title={t('common.delete')}>
             <X size={12} />
           </button>
         </div>
@@ -251,7 +259,7 @@ function FlagCard({ flag, nodeId, onChanged }: {
         )}
         <span>{flag.created_by} · {new Date(flag.created_at).toLocaleDateString('sv-SE')}</span>
         {flag.resolved_at && (
-          <span>· Resolved {new Date(flag.resolved_at).toLocaleDateString('sv-SE')} by {flag.resolved_by}</span>
+          <span>· {t('flags.card.resolvedBy', { date: new Date(flag.resolved_at).toLocaleDateString('sv-SE'), name: flag.resolved_by })}</span>
         )}
       </div>
     </div>
@@ -259,6 +267,7 @@ function FlagCard({ flag, nodeId, onChanged }: {
 }
 
 function StatusDropdown({ flag, onUpdate }: { flag: any; onUpdate: (s: string) => void }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const current = STATUSES.find(s => s.value === flag.status)
 
@@ -267,7 +276,7 @@ function StatusDropdown({ flag, onUpdate }: { flag: any; onUpdate: (s: string) =
       <button className={styles.statusBtn}
         data-status={flag.status}
         onClick={() => setOpen(v => !v)}>
-        {current?.label} <ChevronDown size={10} />
+        {current ? t(`flags.${STATUS_KEY_MAP[current.value]}`) : ''} <ChevronDown size={10} />
       </button>
       {open && (
         <>
@@ -277,7 +286,7 @@ function StatusDropdown({ flag, onUpdate }: { flag: any; onUpdate: (s: string) =
               <button key={s.value} className={styles.statusOption}
                 data-active={s.value === flag.status}
                 onClick={() => { onUpdate(s.value); setOpen(false) }}>
-                {s.label}
+                {t(`flags.${STATUS_KEY_MAP[s.value]}`)}
               </button>
             ))}
           </div>
@@ -290,6 +299,7 @@ function StatusDropdown({ flag, onUpdate }: { flag: any; onUpdate: (s: string) =
 // ─── Main component ───────────────────────────────────────────────────
 
 export default function FlagsTab({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [showResolved, setShowResolved] = useState(false)
@@ -324,12 +334,12 @@ export default function FlagsTab({ nodeId }: { nodeId: number }) {
       <div className={styles.panelHeader}>
         <div className={styles.panelTitle}>
           <Flag size={14} />
-          Flags
+          {t('flags.title')}
           {open.length > 0 && <span className={styles.openCount}>{open.length}</span>}
         </div>
         {!adding && (
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(true)}>
-            <Plus size={13} /> Add flag
+            <Plus size={13} /> {t('flags.panel.addFlag')}
           </button>
         )}
       </div>
@@ -342,7 +352,7 @@ export default function FlagsTab({ nodeId }: { nodeId: number }) {
       )}
 
       {open.length === 0 && !adding && (
-        <p className={styles.empty}>No open flags.</p>
+        <p className={styles.empty}>{t('flags.noFlags')}</p>
       )}
 
       {open.map((flag: any) => (
@@ -351,7 +361,7 @@ export default function FlagsTab({ nodeId }: { nodeId: number }) {
 
       {resolved.length > 0 && (
         <button className={styles.showResolved} onClick={() => setShowResolved(v => !v)}>
-          {showResolved ? '▾' : '▸'} {resolved.length} resolved flag{resolved.length !== 1 ? 's' : ''}
+          {showResolved ? '▾' : '▸'} {t('flags.panel.resolvedCount', { count: resolved.length })}
         </button>
       )}
 

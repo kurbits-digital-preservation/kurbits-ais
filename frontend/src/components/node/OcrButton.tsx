@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { nodesApi, whisperApi } from '@/api'
 import { useTaskPoller } from '@/hooks/useTaskPoller'
+import { useTranslation } from 'react-i18next'
 import styles from './OcrButton.module.css'
 
 // ─── MIME type detection ──────────────────────────────────────────────
@@ -54,12 +55,7 @@ const FALLBACK_MODELS = [
   'KBLab/kb-whisper-large',
 ]
 
-const METHOD_LABELS: Record<string, string> = {
-  native_pdf: 'Text extracted',
-  ocr_pdf:    'OCR (PDF)',
-  ocr_image:  'OCR',
-  whisper:    'Transcribed',
-}
+// Method labels are translated at the point of use via ocr.methodLabels.<method>
 
 // ─── Portal dropdown ──────────────────────────────────────────────────
 
@@ -141,6 +137,7 @@ interface Props {
 export default function OcrButton({
   nodeId, attachmentId, mimeType, filename, hasText, extractionMethod,
 }: Props) {
+  const { t } = useTranslation()
   const queryClient  = useQueryClient()
   const triggerRef   = useRef<HTMLButtonElement | null>(null)
   const [taskId, setTaskId]         = useState<string | null>(null)
@@ -195,18 +192,18 @@ export default function OcrButton({
       {isOcr && isPdf && (
         <button className={styles.menuItem}
           onClick={() => { ocrMutation.mutate(false); setShowMenu(false) }}>
-          <FileText size={12} /> Smart extract (native to OCR)
+          <FileText size={12} /> {t('ocr.smartExtract')}
         </button>
       )}
       {isOcr && (
         <button className={styles.menuItem}
           onClick={() => { ocrMutation.mutate(true); setShowMenu(false) }}>
-          <ScanText size={12} /> Force OCR
+          <ScanText size={12} /> {t('ocr.forceOcr')}
         </button>
       )}
       {isWhisper && (
         <>
-          <div className={styles.menuSectionLabel}>Transcribe (Whisper)</div>
+          <div className={styles.menuSectionLabel}>{t('ocr.transcribeWhisper')}</div>
           {availableModels.map(m => (
             <button
               key={m}
@@ -215,7 +212,7 @@ export default function OcrButton({
             >
               <Mic size={12} />
               <span className={styles.modelName}>{m}</span>
-              {m === defaultModel && <span className={styles.menuItemHint}>default</span>}
+              {m === defaultModel && <span className={styles.menuItemHint}>{t('ocr.default')}</span>}
             </button>
           ))}
         </>
@@ -226,10 +223,10 @@ export default function OcrButton({
   const whisperMenuContent = (
     <>
       <div className={styles.menuSectionLabel}>
-        Whisper model
+        {t('ocr.whisperModel')}
         {whisperModelsData && (
           <span style={{ fontWeight: 400, marginLeft: 4 }}>
-            ({availableModels.length} available)
+            {t('ocr.availableCount', { count: availableModels.length })}
           </span>
         )}
       </div>
@@ -241,7 +238,7 @@ export default function OcrButton({
         >
           <Mic size={12} />
           <span className={styles.modelName}>{m}</span>
-          {m === defaultModel && <span className={styles.menuItemHint}>default</span>}
+          {m === defaultModel && <span className={styles.menuItemHint}>{t('ocr.default')}</span>}
         </button>
       ))}
     </>
@@ -249,7 +246,7 @@ export default function OcrButton({
 
   // ── Running ───────────────────────────────────────────────────────
   if (isRunning) {
-    const label = task?.task_type === 'whisper' ? 'Transcribing...' : 'Extracting...'
+    const label = task?.task_type === 'whisper' ? t('ocr.transcribing') : t('ocr.extracting')
     return (
       <span className={styles.running}>
         <Loader size={12} className={styles.spin} />
@@ -265,7 +262,7 @@ export default function OcrButton({
         <div className={styles.hasTextGroup}>
           <span className={styles.methodBadge}>
             <CheckCircle size={11} />
-            {METHOD_LABELS[method ?? ''] ?? 'Text extracted'}
+            {method ? t(`ocr.methodLabels.${method}`, { defaultValue: t('ocr.methodLabels.native_pdf') }) : t('ocr.methodLabels.native_pdf')}
           </span>
           <div style={{ position: 'relative' }}>
             <button
@@ -273,7 +270,7 @@ export default function OcrButton({
               className="btn btn-ghost btn-sm"
               onClick={() => setShowMenu(v => !v)}
             >
-              Re-run <ChevronDown size={11} />
+              {t('ocr.rerun')} <ChevronDown size={11} />
             </button>
             <PortalDropdown
               triggerRef={triggerRef}
@@ -285,12 +282,12 @@ export default function OcrButton({
           </div>
         </div>
         {isDone && (
-          <span title={`${task?.result?.chars_extracted ?? 0} chars via ${task?.result?.method}`}>
+          <span title={t('ocr.charsViaMethod', { count: task?.result?.chars_extracted ?? 0, method: task?.result?.method })}>
             <CheckCircle size={13} style={{ color: 'var(--color-success)' }} />
           </span>
         )}
         {isError && (
-          <span title={task?.error_message ?? 'Failed'}>
+          <span title={task?.error_message ?? t('ocr.failed')}>
             <AlertCircle size={13} style={{ color: 'var(--color-error)' }} />
           </span>
         )}
@@ -308,9 +305,9 @@ export default function OcrButton({
             className="btn btn-ghost btn-sm"
             onClick={() => setShowMenu(v => !v)}
             disabled={isPending}
-            title="Transcribe with Whisper"
+            title={t('ocr.transcribeWithWhisper')}
           >
-            <Mic size={12} /> Transcribe <ChevronDown size={11} />
+            <Mic size={12} /> {t('ocr.transcribe')} <ChevronDown size={11} />
           </button>
           <PortalDropdown
             triggerRef={triggerRef}
@@ -321,7 +318,7 @@ export default function OcrButton({
           </PortalDropdown>
         </div>
         {isError && (
-          <span title={task?.error_message ?? 'Transcription failed'}>
+          <span title={task?.error_message ?? t('ocr.transcriptionFailed')}>
             <AlertCircle size={13} style={{ color: 'var(--color-error)' }} />
           </span>
         )}
@@ -336,19 +333,19 @@ export default function OcrButton({
         className="btn btn-ghost btn-sm"
         onClick={() => ocrMutation.mutate(false)}
         disabled={isPending}
-        title={isPdf ? 'Extract text (native or OCR)' : 'Extract text with OCR'}
+        title={isPdf ? t('ocr.extractNativeOrOcr') : t('ocr.extractWithOcr')}
       >
         {isPdf
-          ? <><FileText size={12} /> Extract text</>
+          ? <><FileText size={12} /> {t('ocr.extractText')}</>
           : <><ScanText size={12} /> OCR</>}
       </button>
       {isDone && (
-        <span title={`${task?.result?.chars_extracted ?? 0} chars`}>
+        <span title={t('ocr.chars', { count: task?.result?.chars_extracted ?? 0 })}>
           <CheckCircle size={13} style={{ color: 'var(--color-success)' }} />
         </span>
       )}
       {isError && (
-        <span title={task?.error_message ?? 'Extraction failed'}>
+        <span title={task?.error_message ?? t('ocr.extractionFailed')}>
           <AlertCircle size={13} style={{ color: 'var(--color-error)' }} />
         </span>
       )}

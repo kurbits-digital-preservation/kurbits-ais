@@ -32,6 +32,7 @@ agent_to_agent_association = sa.Table(
 )
 
 
+
 class AgentRelationType(db.Model):
     """Configurable agent-to-agent relation types per institution."""
     __tablename__ = 'agent_relation_types'
@@ -146,6 +147,14 @@ class Agent(db.Model):
     notes: so.Mapped[List['AgentNote']] = so.relationship(
         'AgentNote', back_populates='agent', cascade='all, delete-orphan'
     )
+    identifiers: so.Mapped[List['AgentIdentifier']] = so.relationship(
+        'AgentIdentifier', back_populates='agent', cascade='all, delete-orphan',
+        order_by='AgentIdentifier.created_at'
+    )
+    attachments: so.Mapped[List['AgentAttachment']] = so.relationship(
+        'AgentAttachment', back_populates='agent', cascade='all, delete-orphan',
+        order_by='AgentAttachment.uploaded_at.desc()'
+    )
 
     def __repr__(self):
         return f'<Agent {self.name} ({self.agent_type.value})>'
@@ -250,3 +259,97 @@ class AgentNote(db.Model):
 
     def __repr__(self):
         return f'<AgentNote {self.note_type} on agent {self.agent_id}>'
+
+
+class AgentIdentifier(db.Model):
+    """A single external/persistent identifier attached to an agent.
+
+    Reuses IdentifierScheme (app/models/node.py) — the same scheme list
+    (ARK, ORCID, VIAF, ISNI, Wikidata…) is shared with resources. Values are
+    globally unique per scheme, matching NodeIdentifier's rule: no two
+    records — node or agent — share the same ORCID.
+    """
+    __tablename__ = 'agent_identifiers'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    agent_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('agents.id', ondelete='CASCADE'))
+    scheme_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('identifier_schemes.id', ondelete='RESTRICT'))
+    value: so.Mapped[str] = so.mapped_column(sa.String(500))
+    is_primary: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=False)
+    note: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+
+    created_at: so.Mapped[datetime] = so.mapped_column(
+        default=lambda: datetime.now(timezone.utc))
+    created_by_id: so.Mapped[Optional[int]] = so.mapped_column(
+        sa.ForeignKey('users.id', name='fk_agent_identifier_created_by'), nullable=True)
+
+    agent: so.Mapped['Agent'] = so.relationship('Agent', back_populates='identifiers')
+    scheme: so.Mapped['IdentifierScheme'] = so.relationship('IdentifierScheme')
+    created_by: so.Mapped[Optional['User']] = so.relationship('User', foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        # Global uniqueness of a value within a scheme, same rule as node identifiers.
+        # NOTE: this is a SEPARATE constraint from uq_identifier_value_per_scheme on
+        # node_identifiers — the two tables don't share a uniqueness check against
+        # each other. See the routes.py note on cross-checking at creation time.
+        sa.UniqueConstraint('scheme_id', 'value', name='uq_agent_identifier_value_per_scheme'),
+        sa.Index('ix_agent_identifiers_agent', 'agent_id'),
+    )
+
+    def __repr__(self):
+        return f'<AgentIdentifier {self.value}>'
+
+    def to_dict(self) -> dict:
+        url = None
+        if self.scheme and self.scheme.url_template:
+            url = self.scheme.url_template.replace('{value}', self.value)
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'scheme_id': self.scheme_id,
+            'scheme_name': self.scheme.name if self.scheme else None,
+            'value': self.value,
+            'is_primary': self.is_primary,
+            'note': self.note,
+            'resolve_url': url,
+            'created_at': self.created_at.isoformat(),
+            'created_by': self.created_by.username if self.created_by else None,
+        }
+
+
+class AgentAttachment(db.Model):
+    """A file attached to an agent record (portrait, scanned correspondence,
+    authority documentation…). Simple storage only — no technical-metadata
+    extraction pipeline, unlike NodeAttachment.
+    """
+    __tablename__ = 'agent_attachments'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    agent_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey('agents.id', ondelete='CASCADE'))
+    filename: so.Mapped[str] = so.mapped_column(sa.String(255))
+    original_filename: so.Mapped[str] = so.mapped_column(sa.String(255))
+    file_size: so.Mapped[int] = so.mapped_column(sa.Integer)
+    mime_type: so.Mapped[str] = so.mapped_column(sa.String(100))
+    description: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+    uploaded_at: so.Mapped[datetime] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
+    uploaded_by_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey('users.id'))
+
+    agent: so.Mapped['Agent'] = so.relationship('Agent', back_populates='attachments')
+    uploaded_by: so.Mapped['User'] = so.relationship('User')
+
+    def __repr__(self):
+        return f'<AgentAttachment {self.original_filename}>'
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'original_filename': self.original_filename,
+            'file_size': self.file_size,
+            'mime_type': self.mime_type,
+            'description': self.description,
+            'uploaded_at': self.uploaded_at.isoformat(),
+            'uploaded_by': self.uploaded_by.username if self.uploaded_by else None,
+        }

@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui'
 import type { NodeDetail, MetadataField } from '@/types'
 import styles from './NodeForm.module.css'
 import { MetadataFieldInput } from './MetadataFieldRenderer'
+import { useTranslation } from 'react-i18next'
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -83,10 +84,11 @@ function MetadataFields({
   values: Record<string, unknown>
   onChange: (key: string, value: unknown) => void
 }) {
+  const { t } = useTranslation()
   if (!fields.length) return null
   return (
     <div className={styles.section}>
-      <h3 className={styles.sectionTitle}>Level-specific fields</h3>
+      <h3 className={styles.sectionTitle}>{t('resources.form.levelSpecificFields')}</h3>
       <div className={styles.fieldGrid}>
         {fields.map(field => (
           <MetadataFieldInput
@@ -111,6 +113,7 @@ interface NodeFormProps {
 }
 
 export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeFormProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const isEditing = !!node
 
@@ -240,16 +243,16 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
           {parentNode && (
             <div className={styles.parentNote}>
               <ChevronRight size={13} />
-              <span>Child of <strong>{parentNode.ref_code}</strong> — {parentNode.title}</span>
+              <span>{t('resources.form.childOfPrefix')} <strong>{parentNode.ref_code}</strong> — {parentNode.title}</span>
             </div>
           )}
           <h2 className={styles.formTitle}>
-            {isEditing ? `Editing: ${node.title}` : 'New resource'}
+            {isEditing ? t('resources.form.editingTitle', { title: node.title }) : t('resources.form.newResource')}
           </h2>
         </div>
         <div className={styles.formHeaderActions}>
           <button className="btn btn-ghost" onClick={onCancel} disabled={isPending}>
-            <X size={14} /> Cancel
+            <X size={14} /> {t('common.cancel')}
           </button>
           <button
             className="btn btn-primary"
@@ -257,14 +260,14 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
             disabled={!form.title || !form.local_ref || !form.level_of_description || !form.hierarchy_type_id || isPending}
           >
             {isPending ? <Spinner size={14} /> : <Save size={14} />}
-            {isPending ? 'Saving…' : isEditing ? 'Save changes' : 'Create resource'}
+            {isPending ? t('resources.form.saving') : isEditing ? t('resources.form.saveChanges') : t('resources.form.createResource')}
           </button>
         </div>
       </div>
 
       {error && (
         <div className={styles.errorBanner}>
-          {(error as any).response?.data?.message ?? 'Something went wrong. Please try again.'}
+          {(error as any).response?.data?.message ?? t('resources.form.genericError')}
         </div>
       )}
 
@@ -272,59 +275,59 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
 
         {/* Identity */}
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>Identity</h3>
+          <h3 className={styles.sectionTitle}>{t('resources.form.sections.identity')}</h3>
           <div className={styles.fieldGrid}>
 
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label>Title *</label>
-              <input value={form.title} onChange={set('title')} placeholder="Descriptive title" required />
+              <label>{t('resources.form.fields.title')}</label>
+              <input value={form.title} onChange={set('title')} placeholder={t('resources.form.fields.titlePlaceholder')} required />
             </div>
 
             <div className="form-group">
-              <label>Reference code *</label>
+              <label>{t('resources.form.fields.refCode')}</label>
               <input
                 value={form.local_ref}
                 onChange={set('local_ref')}
-                placeholder="e.g. A1, F2023-001"
+                placeholder={t('resources.form.fields.refCodePlaceholder')}
                 required
               />
               <span className="form-hint">
                 {form.parent_id
-                  ? 'Will be appended to parent ref code'
-                  : 'Root-level code — combined with institution prefix'}
+                  ? t('resources.form.fields.refCodeHintChild')
+                  : t('resources.form.fields.refCodeHintRoot')}
               </span>
             </div>
 
             <div className="form-group">
-              <label>Hierarchy type *</label>
+              <label>{t('resources.form.fields.hierarchyType')}</label>
               <select
                 value={form.hierarchy_type_id}
                 onChange={set('hierarchy_type_id')}
                 disabled={isEditing}
               >
-                <option value="">Select hierarchy…</option>
+                <option value="">{t('resources.form.fields.selectHierarchy')}</option>
                 {/* Fallback option while loading when editing */}
                 {isEditing && form.hierarchy_type_id && !hierarchyTypes?.find((ht: any) => String(ht.id) === String(form.hierarchy_type_id)) && (
-                  <option value={form.hierarchy_type_id}>{node?.hierarchy_type_name ?? 'Loading…'}</option>
+                  <option value={form.hierarchy_type_id}>{node?.hierarchy_type_name ?? t('common.loading')}</option>
                 )}
                 {hierarchyTypes?.map((ht: any) => (
                   <option key={ht.id} value={ht.id}>{ht.name}</option>
                 ))}
               </select>
               {isEditing && (
-                <span className="form-hint">Hierarchy type cannot be changed after creation</span>
+                <span className="form-hint">{t('resources.form.fields.hierarchyLockedHint')}</span>
               )}
             </div>
 
             <div className="form-group">
-              <label>Level of description *</label>
+              <label>{t('resources.form.fields.level')}</label>
               <select
                 value={form.level_of_description}
                 onChange={set('level_of_description')}
                 disabled={!form.hierarchy_type_id}
               >
                 <option value="">
-                  {form.hierarchy_type_id ? 'Select level…' : 'Select hierarchy first'}
+                  {form.hierarchy_type_id ? t('resources.form.fields.selectLevel') : t('resources.form.fields.selectHierarchyFirst')}
                 </option>
                 {/* If editing and validLevels not yet loaded, show current value so select isn't blank */}
                 {isEditing && form.level_of_description && !validLevels?.find((l: any) => l.name === form.level_of_description) && (
@@ -341,35 +344,35 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
 
         {/* Dates & Extent */}
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>Dates & Extent</h3>
+          <h3 className={styles.sectionTitle}>{t('resources.form.sections.datesExtent')}</h3>
           <div className={styles.fieldGrid}>
 
             <div className="form-group">
-              <label>Date start</label>
+              <label>{t('resources.form.fields.dateStart')}</label>
               <input type="date" value={form.date_start} onChange={set('date_start')} />
             </div>
 
             <div className="form-group">
-              <label>Date end</label>
+              <label>{t('resources.form.fields.dateEnd')}</label>
               <input type="date" value={form.date_end} onChange={set('date_end')} />
             </div>
 
             <div className="form-group">
-              <label>Date certainty</label>
+              <label>{t('resources.form.fields.dateCertainty')}</label>
               <select value={form.date_certainty} onChange={set('date_certainty')}>
-                <option value="">Not specified</option>
-                <option value="exact">Exact</option>
-                <option value="approximate">Approximate</option>
-                <option value="inferred">Inferred</option>
+                <option value="">{t('resources.form.fields.certaintyNotSpecified')}</option>
+                <option value="exact">{t('resources.form.fields.certaintyExact')}</option>
+                <option value="approximate">{t('resources.form.fields.certaintyApproximate')}</option>
+                <option value="inferred">{t('resources.form.fields.certaintyInferred')}</option>
               </select>
             </div>
 
             <div className="form-group">
-              <label>Extent</label>
+              <label>{t('resources.form.fields.extent')}</label>
               <input
                 value={form.extent}
                 onChange={set('extent')}
-                placeholder="e.g. 3 boxes, 45 folders, 1.2 linear metres"
+                placeholder={t('resources.form.fields.extentPlaceholder')}
               />
             </div>
 
@@ -378,36 +381,36 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
 
         {/* Description */}
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>Description</h3>
+          <h3 className={styles.sectionTitle}>{t('resources.form.sections.description')}</h3>
           <div className={styles.fieldGridSingle}>
 
             <div className="form-group">
-              <label>Description</label>
+              <label>{t('resources.form.fields.description')}</label>
               <textarea
                 value={form.description}
                 onChange={set('description')}
                 rows={4}
-                placeholder="Brief description of the material…"
+                placeholder={t('resources.form.fields.descriptionPlaceholder')}
               />
             </div>
 
             <div className="form-group">
-              <label>Scope and content</label>
+              <label>{t('resources.form.fields.scopeAndContent')}</label>
               <textarea
                 value={form.scope_and_content}
                 onChange={set('scope_and_content')}
                 rows={4}
-                placeholder="Detailed account of the scope and content…"
+                placeholder={t('resources.form.fields.scopeAndContentPlaceholder')}
               />
             </div>
 
             <div className="form-group">
-              <label>Arrangement</label>
+              <label>{t('resources.form.fields.arrangement')}</label>
               <textarea
                 value={form.arrangement}
                 onChange={set('arrangement')}
                 rows={2}
-                placeholder="Information about internal arrangement or order…"
+                placeholder={t('resources.form.fields.arrangementPlaceholder')}
               />
             </div>
 
@@ -416,45 +419,45 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
 
         {/* Access & Use */}
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>Access & Use</h3>
+          <h3 className={styles.sectionTitle}>{t('resources.form.sections.accessUse')}</h3>
           <div className={styles.fieldGridSingle}>
 
             <div className="form-group">
-              <label>Access conditions</label>
+              <label>{t('resources.form.fields.accessConditions')}</label>
               <textarea
                 value={form.access_conditions}
                 onChange={set('access_conditions')}
                 rows={2}
-                placeholder="Restrictions or conditions governing access…"
+                placeholder={t('resources.form.fields.accessConditionsPlaceholder')}
               />
             </div>
 
             <div className="form-group">
-              <label>Reproduction conditions</label>
+              <label>{t('resources.form.fields.reproductionConditions')}</label>
               <textarea
                 value={form.reproduction_conditions}
                 onChange={set('reproduction_conditions')}
                 rows={2}
-                placeholder="Conditions governing reproduction…"
+                placeholder={t('resources.form.fields.reproductionConditionsPlaceholder')}
               />
             </div>
 
             <div className={styles.fieldGrid}>
               <div className="form-group">
-                <label>Language</label>
+                <label>{t('resources.form.fields.language')}</label>
                 <input
                   value={form.language}
                   onChange={set('language')}
-                  placeholder="e.g. Swedish, English"
+                  placeholder={t('resources.form.fields.languagePlaceholder')}
                 />
               </div>
 
               <div className="form-group">
-                <label>Finding aids</label>
+                <label>{t('resources.form.fields.findingAids')}</label>
                 <input
                   value={form.finding_aids}
                   onChange={set('finding_aids')}
-                  placeholder="Reference to any finding aids…"
+                  placeholder={t('resources.form.fields.findingAidsPlaceholder')}
                 />
               </div>
             </div>

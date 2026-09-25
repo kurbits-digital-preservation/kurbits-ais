@@ -1,13 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Fingerprint, Plus, Trash2, Star, ExternalLink, Zap, X } from 'lucide-react'
-import { nodesApi, identifierSchemesApi } from '@/api'
+import { Fingerprint, Plus, Trash2, Star, ExternalLink } from 'lucide-react'
+import { agentsApi, identifierSchemesApi } from '@/api'
 import { Spinner } from '@/components/ui'
-import { useTranslation } from 'react-i18next'
-import styles from './NodeIdentifiersTab.module.css'
+import styles from './AgentIdentifiersTab.module.css'
 
-export default function NodeIdentifiersTab({ nodeId }: { nodeId: number }) {
-  const { t } = useTranslation()
+export default function AgentIdentifiersTab({ agentId }: { agentId: number }) {
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [schemeId, setSchemeId] = useState('')
@@ -16,43 +14,39 @@ export default function NodeIdentifiersTab({ nodeId }: { nodeId: number }) {
   const [errorMsg, setErrorMsg] = useState('')
 
   const { data: identifiers, isLoading } = useQuery({
-    queryKey: ['node-identifiers', nodeId],
-    queryFn: () => nodesApi.getIdentifiers(nodeId).then(r => r.data.data),
+    queryKey: ['agent-identifiers', agentId],
+    queryFn: () => agentsApi.getIdentifiers(agentId).then(r => r.data.data),
   })
 
+  // Same scheme list as resources — ARK/DOI/ORCID/VIAF/etc. are one shared
+  // vocabulary across entity types.
   const { data: schemes } = useQuery({
     queryKey: ['identifier-schemes'],
     queryFn: () => identifierSchemesApi.list().then(r => r.data.data),
   })
 
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['node-identifiers', nodeId] })
-    queryClient.invalidateQueries({ queryKey: ['node', nodeId] })
+    queryClient.invalidateQueries({ queryKey: ['agent-identifiers', agentId] })
+    queryClient.invalidateQueries({ queryKey: ['agent', agentId] })
   }
 
   const addMutation = useMutation({
-    mutationFn: () => nodesApi.addIdentifier(nodeId, {
+    mutationFn: () => agentsApi.addIdentifier(agentId, {
       scheme_id: parseInt(schemeId),
       value: value.trim(),
       note: note.trim() || undefined,
     }),
     onSuccess: () => { invalidate(); resetForm() },
-    onError: (err: any) => setErrorMsg(err?.response?.data?.message ?? t('identifiers.couldNotAdd')),
-  })
-
-  const generateMutation = useMutation({
-    mutationFn: () => nodesApi.generateIdentifier(nodeId, parseInt(schemeId)),
-    onSuccess: () => { invalidate(); resetForm() },
-    onError: (err: any) => setErrorMsg(err?.response?.data?.message ?? t('identifiers.generationFailed')),
+    onError: (err: any) => setErrorMsg(err?.response?.data?.message ?? 'Could not add identifier'),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => nodesApi.deleteIdentifier(nodeId, id),
+    mutationFn: (id: number) => agentsApi.deleteIdentifier(agentId, id),
     onSuccess: invalidate,
   })
 
   const primaryMutation = useMutation({
-    mutationFn: (id: number) => nodesApi.updateIdentifier(nodeId, id, { is_primary: true }),
+    mutationFn: (id: number) => agentsApi.updateIdentifier(agentId, id, { is_primary: true }),
     onSuccess: invalidate,
   })
 
@@ -67,10 +61,10 @@ export default function NodeIdentifiersTab({ nodeId }: { nodeId: number }) {
   return (
     <div className={styles.tab}>
       <div className={styles.header}>
-        <span className={styles.title}><Fingerprint size={14} /> {t('resources.tabs.identifiers')}</span>
+        <span className={styles.title}><Fingerprint size={14} /> Identifiers</span>
         {!adding && (
           <button className="btn btn-secondary btn-sm" onClick={() => setAdding(true)}>
-            <Plus size={13} /> {t('identifiers.addIdentifier')}
+            <Plus size={13} /> Add identifier
           </button>
         )}
       </div>
@@ -78,65 +72,51 @@ export default function NodeIdentifiersTab({ nodeId }: { nodeId: number }) {
       {adding && (
         <div className={styles.addForm}>
           <div className="form-group">
-            <label>{t('identifiers.scheme')}</label>
+            <label>Scheme</label>
             <select value={schemeId} onChange={e => { setSchemeId(e.target.value); setErrorMsg('') }} autoFocus>
-              <option value="">{t('identifiers.selectScheme')}</option>
+              <option value="">Select scheme…</option>
               {(schemes ?? []).map((s: any) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
             {(schemes ?? []).length === 0 && (
               <span className="form-hint">
-                {t('identifiers.noSchemesConfigured')}
+                No schemes configured yet — add them under Administration → Identifier schemes.
               </span>
             )}
           </div>
 
           <div className="form-group">
-            <label>{t('identifiers.value')}</label>
-            <div className={styles.valueRow}>
-              <input
-                value={value}
-                onChange={e => { setValue(e.target.value); setErrorMsg('') }}
-                placeholder={selectedScheme ? t('identifiers.enterValuePlaceholder', { scheme: selectedScheme.name }) : t('identifiers.valuePlaceholder')}
-                style={{ flex: 1 }}
-              />
-              {selectedScheme?.has_generator && (
-                <button
-                  className="btn btn-secondary btn-sm"
-                  disabled={generateMutation.isPending}
-                  onClick={() => generateMutation.mutate()}
-                  title={t('identifiers.generateTitle', { scheme: selectedScheme.name })}
-                >
-                  {generateMutation.isPending ? <Spinner size={13} /> : <Zap size={13} />}
-                  {t('identifiers.generate')}
-                </button>
-              )}
-            </div>
+            <label>Value</label>
+            <input
+              value={value}
+              onChange={e => { setValue(e.target.value); setErrorMsg('') }}
+              placeholder={selectedScheme ? `Enter ${selectedScheme.name} value` : 'Identifier value'}
+            />
           </div>
 
           <div className="form-group">
-            <label>{t('identifiers.note')}</label>
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder={t('identifiers.notePlaceholder')} />
+            <label>Note</label>
+            <input value={note} onChange={e => setNote(e.target.value)} placeholder="Optional" />
           </div>
 
           {errorMsg && <div className={styles.errorBanner}>{errorMsg}</div>}
 
           <div className={styles.formActions}>
-            <button className="btn btn-ghost btn-sm" onClick={resetForm}>{t('common.cancel')}</button>
+            <button className="btn btn-ghost btn-sm" onClick={resetForm}>Cancel</button>
             <button
               className="btn btn-primary btn-sm"
               disabled={!schemeId || !value.trim() || addMutation.isPending}
               onClick={() => addMutation.mutate()}
             >
-              {addMutation.isPending ? <Spinner size={13} /> : <Plus size={13} />} {t('common.add')}
+              {addMutation.isPending ? <Spinner size={13} /> : <Plus size={13} />} Add
             </button>
           </div>
         </div>
       )}
 
       {(!identifiers || identifiers.length === 0) && !adding && (
-        <p className={styles.empty}>{t('identifiers.noneYet')}</p>
+        <p className={styles.empty}>No identifiers yet.</p>
       )}
 
       <div className={styles.list}>
@@ -146,7 +126,7 @@ export default function NodeIdentifiersTab({ nodeId }: { nodeId: number }) {
               <div className={styles.itemTop}>
                 <span className={styles.schemeName}>{ident.scheme_name}</span>
                 {ident.is_primary && (
-                  <span className={styles.primaryBadge}><Star size={9} /> {t('identifiers.primary')}</span>
+                  <span className={styles.primaryBadge}><Star size={9} /> Primary</span>
                 )}
               </div>
               <div className={styles.itemValue}>
@@ -164,13 +144,13 @@ export default function NodeIdentifiersTab({ nodeId }: { nodeId: number }) {
               {!ident.is_primary && (
                 <button className="btn btn-ghost btn-sm btn-icon"
                   onClick={() => primaryMutation.mutate(ident.id)}
-                  title={t('identifiers.makePrimary')}>
+                  title="Make primary for this scheme">
                   <Star size={13} />
                 </button>
               )}
               <button className="btn btn-ghost btn-sm btn-icon"
-                onClick={() => { if (confirm(t('identifiers.deleteConfirm'))) deleteMutation.mutate(ident.id) }}
-                title={t('common.delete')}>
+                onClick={() => { if (confirm('Delete this identifier?')) deleteMutation.mutate(ident.id) }}
+                title="Delete">
                 <Trash2 size={13} />
               </button>
             </div>

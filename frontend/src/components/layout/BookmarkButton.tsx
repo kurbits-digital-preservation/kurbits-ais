@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Star } from 'lucide-react'
 import { historyApi } from '@/api'
+import { useTranslation } from 'react-i18next'
 import styles from './BookmarkButton.module.css'
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function BookmarkButton({ entityType, entityId, title, subtitle }: Props) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   // Track as recent when this mounts (i.e. when the user opens the record)
@@ -41,7 +43,7 @@ export default function BookmarkButton({ entityType, entityId, title, subtitle }
     <button
       className={`${styles.btn} ${bookmarked ? styles.active : ''}`}
       onClick={() => toggleMutation.mutate()}
-      title={bookmarked ? 'Remove bookmark' : 'Bookmark'}
+      title={bookmarked ? t('bookmark.remove') : t('bookmark.add')}
       disabled={toggleMutation.isPending}
     >
       <Star size={14} fill={bookmarked ? 'currentColor' : 'none'} />

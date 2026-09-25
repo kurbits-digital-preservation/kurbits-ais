@@ -2,15 +2,16 @@ import { useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Printer, ChevronDown, Loader2 } from 'lucide-react'
 import { nodesApi, labelTemplatesApi } from '@/api'
+import { useTranslation } from 'react-i18next'
 
-const FORMATS = [
-  { value: 'standard_90x45',       label: 'Standard arkivetikett (12/ark, 90×45 mm)' },
-  { value: 'avery_l7163',          label: 'Avery L7163 (14/ark, 99×38 mm)' },
-  { value: 'avery_l7160',          label: 'Avery L7160 (21/ark, 64×38 mm)' },
-  { value: 'box_portrait_70x100',  label: 'Arkivbox (6/ark, 70×100 mm)' },
-  { value: 'spine_portrait_40x150',label: 'Ryggetikett (4/ark, 40×150 mm)' },
-  { value: 'single',               label: 'Enskild etikett (A4 helsida)' },
-  { value: 'single_portrait',      label: 'Enskild stående (A4)' },
+const FORMAT_KEYS = [
+  'standard_90x45',
+  'avery_l7163',
+  'avery_l7160',
+  'box_portrait_70x100',
+  'spine_portrait_40x150',
+  'single',
+  'single_portrait',
 ]
 
 interface Props {
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function PrintLabelsButton({ nodeIds, label }: Props) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [format, setFormat] = useState('standard_90x45')
   const [templateId, setTemplateId] = useState<number | null>(null)
@@ -56,7 +58,7 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
       setTimeout(() => URL.revokeObjectURL(url), 2000)
       setOpen(false)
     } catch (e: any) {
-      setError('Failed to generate labels')
+      setError(t('printLabels.failedToGenerate'))
     } finally {
       setLoading(false)
     }
@@ -72,12 +74,12 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
           style={{ borderRadius: 'var(--radius-md) 0 0 var(--radius-md)', borderRight: 'none' }}
           disabled={disabled}
           onClick={handlePrint}
-          title={`Print label${nodeIds.length !== 1 ? 's' : ''} for ${nodeIds.length} item${nodeIds.length !== 1 ? 's' : ''}`}
+          title={t('printLabels.printLabelsTitle', { count: nodeIds.length })}
         >
           {loading
             ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} />
             : <Printer size={13} />}
-          {label ?? 'Print label'}
+          {label ?? t('printLabels.printLabel')}
           {nodeIds.length > 1 && ` (${nodeIds.length})`}
         </button>
         <button
@@ -85,7 +87,7 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
           style={{ borderRadius: '0 var(--radius-md) var(--radius-md) 0', padding: '0 6px' }}
           disabled={disabled}
           onClick={() => setOpen(v => !v)}
-          title="Label options"
+          title={t('printLabels.labelOptions')}
         >
           <ChevronDown size={12} />
         </button>
@@ -104,11 +106,11 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
         }}>
           {templates && templates.length > 0 && (
             <div className="form-group" style={{ margin: 0 }}>
-              <label>Design template</label>
+              <label>{t('printLabels.designTemplate')}</label>
               <select value={templateId ?? ''} onChange={e => setTemplateId(e.target.value ? parseInt(e.target.value) : null)}>
-                <option value="">Built-in layout</option>
-                {templates.map((t: any) => (
-                  <option key={t.id} value={t.id}>{t.name}{t.is_default ? ' (default)' : ''}</option>
+                <option value="">{t('printLabels.builtInLayout')}</option>
+                {templates.map((tmpl: any) => (
+                  <option key={tmpl.id} value={tmpl.id}>{tmpl.name}{tmpl.is_default ? ` (${t('printLabels.default')})` : ''}</option>
                 ))}
               </select>
             </div>
@@ -116,17 +118,17 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
 
           {!templateId && (
             <div className="form-group" style={{ margin: 0 }}>
-              <label>Label format</label>
+              <label>{t('printLabels.labelFormat')}</label>
               <select value={format} onChange={e => setFormat(e.target.value)}>
-                {FORMATS.map(f => (
-                  <option key={f.value} value={f.value}>{f.label}</option>
+                {FORMAT_KEYS.map(key => (
+                  <option key={key} value={key}>{t(`printLabels.formats.${key}`)}</option>
                 ))}
               </select>
             </div>
           )}
 
           <div className="form-group" style={{ margin: 0 }}>
-            <label>Copies per label</label>
+            <label>{t('printLabels.copiesPerLabel')}</label>
             <input
               type="number" min={1} max={10} value={copies}
               onChange={e => setCopies(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
@@ -140,7 +142,7 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
               checked={includeDescendants}
               onChange={e => setIncludeDescendants(e.target.checked)}
             />
-            Include all descendants
+            {t('printLabels.includeDescendants')}
           </label>
 
           {error && (
@@ -148,16 +150,16 @@ export default function PrintLabelsButton({ nodeIds, label }: Props) {
           )}
 
           <div style={{ display: 'flex', gap: 'var(--space-2)', justifyContent: 'flex-end' }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>{t('common.cancel')}</button>
             <button className="btn btn-primary btn-sm" disabled={disabled} onClick={handlePrint}>
-              <Printer size={13} /> Generate PDF
+              <Printer size={13} /> {t('printLabels.generatePdf')}
             </button>
           </div>
 
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)', margin: 0 }}>
-            {nodeIds.length} node{nodeIds.length !== 1 ? 's' : ''} selected
-            {includeDescendants ? ' + descendants' : ''}.
-            PDF opens for printing or download.
+            {t('printLabels.nodesSelected', { count: nodeIds.length })}
+            {includeDescendants ? t('printLabels.plusDescendants') : ''}.{' '}
+            {t('printLabels.pdfOpensNote')}
           </p>
         </div>
       )}

@@ -29,6 +29,7 @@ import NodeIdentifiersTab from '@/components/node/NodeIdentifiersTab'
 import { Layers, Copy, Fingerprint } from 'lucide-react'
 import BookmarkButton from '@/components/layout/BookmarkButton'
 import OcrButton from '@/components/node/OcrButton'
+import { useTranslation } from 'react-i18next'
 
 // ─── Status badge ─────────────────────────────────────────────────────
 
@@ -43,11 +44,12 @@ const STATUS_TRANSITIONS: Record<NodeStatus, NodeStatus[]> = {
 }
 
 function StatusBadge({ status }: { status: NodeStatus }) {
+  const { t } = useTranslation()
   const Icon = STATUS_ICONS[status]
   return (
     <span className={`badge badge-${status}`}>
       <Icon size={10} />
-      {status}
+      {t(`resources.status.${status}`)}
     </span>
   )
 }
@@ -56,6 +58,7 @@ function StatusBadge({ status }: { status: NodeStatus }) {
 // ─── Export menu (multi-format) ───────────────────────────────────────
 
 function ExportMenu({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [loadingAid, setLoadingAid] = useState(false)
   const { data: formats } = useQuery({
@@ -81,7 +84,7 @@ function ExportMenu({ nodeId }: { nodeId: number }) {
   return (
     <div style={{ position: 'relative' }}>
       <button className="btn btn-ghost btn-sm" onClick={() => setOpen(v => !v)}>
-        <Download size={14} /> Export
+        <Download size={14} /> {t('resources.modals.export.button')}
       </button>
       {open && (
         <>
@@ -89,13 +92,13 @@ function ExportMenu({ nodeId }: { nodeId: number }) {
           <div className={styles.eadMenu} style={{ minWidth: 260 }}>
             {/* Finding aid */}
             <div className={styles.eadMenuSection}>
-              <div className={styles.eadMenuSectionTitle}>Reports</div>
+              <div className={styles.eadMenuSectionTitle}>{t('resources.modals.export.reports')}</div>
               <button className={styles.eadMenuItem} onClick={handleFindingAid} disabled={loadingAid}
                 style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', textAlign: 'left' }}>
                 <FileText size={12} />
                 <div>
-                  <span className={styles.eadMenuItemTitle}>Finding aid (PDF)</span>
-                  <span className={styles.eadMenuItemDesc}>Full finding aid with table of contents</span>
+                  <span className={styles.eadMenuItemTitle}>{t('resources.modals.export.findingAidTitle')}</span>
+                  <span className={styles.eadMenuItemDesc}>{t('resources.modals.export.findingAidDesc')}</span>
                 </div>
               </button>
             </div>
@@ -108,8 +111,8 @@ function ExportMenu({ nodeId }: { nodeId: number }) {
                    onClick={() => setOpen(false)}>
                   <Download size={12} />
                   <div>
-                    <span className={styles.eadMenuItemTitle}>Full export</span>
-                    <span className={styles.eadMenuItemDesc}>Node and all descendants</span>
+                    <span className={styles.eadMenuItemTitle}>{t('resources.modals.export.fullExport')}</span>
+                    <span className={styles.eadMenuItemDesc}>{t('resources.modals.export.fullExportDesc')}</span>
                   </div>
                 </a>
                 <a className={styles.eadMenuItem}
@@ -117,8 +120,8 @@ function ExportMenu({ nodeId }: { nodeId: number }) {
                    onClick={() => setOpen(false)}>
                   <FileText size={12} />
                   <div>
-                    <span className={styles.eadMenuItemTitle}>Single record</span>
-                    <span className={styles.eadMenuItemDesc}>This node only</span>
+                    <span className={styles.eadMenuItemTitle}>{t('resources.modals.export.singleRecord')}</span>
+                    <span className={styles.eadMenuItemDesc}>{t('resources.modals.export.singleRecordDesc')}</span>
                   </div>
                 </a>
               </div>
@@ -136,6 +139,7 @@ function ImportModal({ onClose, onImported }: {
   onClose: () => void
   onImported: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [mode, setMode] = useState<'ead' | 'oai'>('ead')
   const [result, setResult] = useState<any>(null)
@@ -177,7 +181,7 @@ function ImportModal({ onClose, onImported }: {
       // Auto-select first available format
       if (fmts.length > 0) setOaiPrefix(fmts[0].prefix)
     } catch (e: any) {
-      setImportError(e.response?.data?.message ?? 'Could not connect to OAI-PMH endpoint')
+      setImportError(e.response?.data?.message ?? t('resources.modals.import.couldNotConnect'))
     } finally {
       setIdentifying(false)
     }
@@ -197,7 +201,7 @@ function ImportModal({ onClose, onImported }: {
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
       onImported()
     },
-    onError: (err: any) => setImportError(err.response?.data?.message ?? 'EAD import failed'),
+    onError: (err: any) => setImportError(err.response?.data?.message ?? t('resources.modals.import.eadImportFailed')),
   })
 
   const oaiMutation = useMutation({
@@ -214,7 +218,7 @@ function ImportModal({ onClose, onImported }: {
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
       onImported()
     },
-    onError: (err: any) => setImportError(err.response?.data?.message ?? 'OAI harvest failed'),
+    onError: (err: any) => setImportError(err.response?.data?.message ?? t('resources.modals.import.oaiHarvestFailed')),
   })
 
   const isPending = eadMutation.isPending || oaiMutation.isPending
@@ -227,7 +231,7 @@ function ImportModal({ onClose, onImported }: {
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <h3 className={styles.modalTitle}><Upload size={16} /> Import records</h3>
+          <h3 className={styles.modalTitle}><Upload size={16} /> {t('resources.modals.import.title')}</h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><X size={14} /></button>
         </div>
 
@@ -235,11 +239,11 @@ function ImportModal({ onClose, onImported }: {
           <div className={styles.modalBody}>
             <div className={styles.importSuccess}>
               <div className={styles.importSuccessTitle}>
-                Import complete — {result.total_created} record{result.total_created !== 1 ? 's' : ''} created
+                {t('resources.modals.import.successTitle', { count: result.total_created })}
               </div>
               {result.warnings?.length > 0 && (
                 <div className={styles.importWarnings}>
-                  <div className={styles.importWarningsTitle}><AlertCircle size={13} /> Warnings</div>
+                  <div className={styles.importWarningsTitle}><AlertCircle size={13} /> {t('resources.modals.import.warnings')}</div>
                   {result.warnings.map((w: string, i: number) => (
                     <p key={i} className={styles.importWarning}>{w}</p>
                   ))}
@@ -252,9 +256,9 @@ function ImportModal({ onClose, onImported }: {
             {/* Mode tabs */}
             <div className={styles.modeTabs}>
               <button className={`${styles.modeTab} ${mode === 'ead' ? styles.modeTabActive : ''}`}
-                onClick={() => setMode('ead')}>EAD 2002 file</button>
+                onClick={() => setMode('ead')}>{t('resources.modals.import.modeEad')}</button>
               <button className={`${styles.modeTab} ${mode === 'oai' ? styles.modeTabActive : ''}`}
-                onClick={() => setMode('oai')}>OAI-PMH harvest</button>
+                onClick={() => setMode('oai')}>{t('resources.modals.import.modeOai')}</button>
             </div>
 
             {importError && (
@@ -264,7 +268,7 @@ function ImportModal({ onClose, onImported }: {
             {mode === 'ead' ? (
               <>
                 <div className="form-group">
-                  <label>EAD 2002 XML file *</label>
+                  <label>{t('resources.modals.import.eadFileLabel')}</label>
                   <input type="file" accept=".xml"
                     onChange={e => setFile(e.target.files?.[0] ?? null)} />
                 </div>
@@ -273,31 +277,35 @@ function ImportModal({ onClose, onImported }: {
               <>
                 <div className={styles.oaiRow}>
                   <div className="form-group" style={{ flex: 1 }}>
-                    <label>OAI-PMH base URL *</label>
+                    <label>{t('resources.modals.import.oaiUrlLabel')}</label>
                     <input value={oaiUrl} onChange={e => setOaiUrl(e.target.value)}
                       placeholder="https://oai-pmh.riksarkivet.se/OAI"
                       onKeyDown={e => e.key === 'Enter' && handleIdentify()} />
                   </div>
                   <button className="btn btn-secondary btn-sm" style={{ marginTop: 21 }}
                     onClick={handleIdentify} disabled={!oaiUrl || identifying}>
-                    {identifying ? '…' : 'Verify'}
+                    {identifying ? '…' : t('resources.modals.import.verify')}
                   </button>
                 </div>
                 {oaiInfo && (
                   <div className={styles.oaiInfo}>
                     <span className={styles.oaiInfoName}>{oaiInfo.repository_name}</span>
-                    <span className={styles.oaiInfoMeta}>Protocol {oaiInfo.protocol_version} · {oaiInfo.earliest_datestamp}</span>
+                    <span className={styles.oaiInfoMeta}>
+                      {t('resources.modals.import.protocol', { version: oaiInfo.protocol_version, date: oaiInfo.earliest_datestamp })}
+                    </span>
                   </div>
                 )}
                 <div className="form-group">
-                  <label>OAI identifier *</label>
+                  <label>{t('resources.modals.import.oaiIdentifierLabel')}</label>
                   <input value={oaiIdentifier} onChange={e => setOaiIdentifier(e.target.value)}
                     placeholder="oai:example.org:record123"
                     style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }} />
-                  <span className="form-hint">The identifier value from the repository — e.g. <code>SE/ULA/10012/A I</code> (paste as-is, spaces are fine)</span>
+                  <span className="form-hint">
+                    {t('resources.modals.import.oaiIdentifierHintPrefix')} <code>SE/ULA/10012/A I</code> {t('resources.modals.import.oaiIdentifierHintSuffix')}
+                  </span>
                 </div>
                 <div className="form-group">
-                  <label>Metadata format</label>
+                  <label>{t('resources.modals.import.metadataFormat')}</label>
                   <select value={oaiPrefix} onChange={e => setOaiPrefix(e.target.value)}>
                     {oaiFormats.length === 0
                       ? <option value={oaiPrefix}>{oaiPrefix}</option>
@@ -307,7 +315,7 @@ function ImportModal({ onClose, onImported }: {
                     }
                   </select>
                   {oaiFormats.length === 0 && (
-                    <span className="form-hint">Click Verify to load available formats from the repository</span>
+                    <span className="form-hint">{t('resources.modals.import.metadataFormatHint')}</span>
                   )}
                 </div>
               </>
@@ -315,33 +323,33 @@ function ImportModal({ onClose, onImported }: {
 
             {/* Shared fields */}
             <div className="form-group">
-              <label>Hierarchy type *</label>
+              <label>{t('resources.modals.import.hierarchyTypeLabel')}</label>
               <select value={hierarchyTypeId} onChange={e => setHierarchyTypeId(e.target.value)}>
-                <option value="">Select hierarchy…</option>
+                <option value="">{t('resources.modals.import.selectHierarchy')}</option>
                 {hierarchyTypes?.map((ht: any) => (
                   <option key={ht.id} value={ht.id}>{ht.name}</option>
                 ))}
               </select>
-              <span className="form-hint">Level names will be matched to this hierarchy</span>
+              <span className="form-hint">{t('resources.modals.import.hierarchyHint')}</span>
             </div>
             <div className="form-group">
-              <label>Import under node (optional)</label>
+              <label>{t('resources.modals.import.parentNodeLabel')}</label>
               <input type="number" value={parentNodeId}
                 onChange={e => setParentNodeId(e.target.value)}
-                placeholder="Parent node ID — leave empty for root" />
+                placeholder={t('resources.modals.import.parentNodePlaceholder')} />
             </div>
           </div>
         )}
 
         <div className={styles.modalFooter}>
           <button className="btn btn-ghost" onClick={onClose}>
-            {result ? 'Close' : 'Cancel'}
+            {result ? t('common.close') : t('common.cancel')}
           </button>
           {!result && (
             <button className="btn btn-primary"
               disabled={!canSubmit || isPending}
               onClick={() => mode === 'ead' ? eadMutation.mutate() : oaiMutation.mutate()}>
-              {isPending ? 'Importing…' : <><Upload size={14} /> Import</>}
+              {isPending ? t('resources.modals.import.importing') : <><Upload size={14} /> {t('resources.modals.import.importButton')}</>}
             </button>
           )}
         </div>
@@ -358,6 +366,7 @@ function MoveDialog({ node, onMoved, onClose }: {
   onMoved: () => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [targetId, setTargetId] = useState<number | null>(null)
@@ -379,7 +388,7 @@ function MoveDialog({ node, onMoved, onClose }: {
       onMoved()
       onClose()
     },
-    onError: (err: any) => setMoveError(err.response?.data?.message ?? 'Move failed'),
+    onError: (err: any) => setMoveError(err.response?.data?.message ?? t('resources.modals.move.moveFailed')),
   })
 
   return (
@@ -387,7 +396,7 @@ function MoveDialog({ node, onMoved, onClose }: {
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>
-            <MoveRight size={15} /> Move
+            <MoveRight size={15} /> {t('resources.modals.move.title')}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
             <X size={14} />
@@ -395,13 +404,13 @@ function MoveDialog({ node, onMoved, onClose }: {
         </div>
         <div className={styles.modalBody}>
           <div className={styles.moveCurrentPath}>
-            <span className={styles.moveLabel}>Moving:</span>
+            <span className={styles.moveLabel}>{t('resources.modals.move.moving')}</span>
             <strong>{node.title}</strong>
             <span className="ref-code">{node.ref_code}</span>
           </div>
           <div className={styles.moveCurrentPath}>
-            <span className={styles.moveLabel}>Current parent:</span>
-            <span>{node.breadcrumb.length > 1 ? node.breadcrumb[node.breadcrumb.length - 2]?.title : 'Root'}</span>
+            <span className={styles.moveLabel}>{t('resources.modals.move.currentParent')}</span>
+            <span>{node.breadcrumb.length > 1 ? node.breadcrumb[node.breadcrumb.length - 2]?.title : t('resources.modals.move.root')}</span>
           </div>
 
           {moveError && (
@@ -409,11 +418,11 @@ function MoveDialog({ node, onMoved, onClose }: {
           )}
 
           <div className="form-group">
-            <label>New parent node</label>
+            <label>{t('resources.modals.move.newParentLabel')}</label>
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setTargetId(null); setToRoot(false); setMoveError('') }}
-              placeholder="Search for new parent…"
+              placeholder={t('resources.modals.move.searchPlaceholder')}
               autoFocus
               disabled={toRoot}
             />
@@ -421,7 +430,7 @@ function MoveDialog({ node, onMoved, onClose }: {
 
           {search.length > 1 && !toRoot && (
             <div className={styles.moveResults}>
-              {isLoading && <div className={styles.moveResultHint}>Searching…</div>}
+              {isLoading && <div className={styles.moveResultHint}>{t('resources.modals.move.searching')}</div>}
               {searchResults?.filter((n: any) => n.id !== node.id).map((n: any) => (
                 <button
                   key={n.id}
@@ -433,7 +442,7 @@ function MoveDialog({ node, onMoved, onClose }: {
                 </button>
               ))}
               {!isLoading && searchResults?.filter((n: any) => n.id !== node.id).length === 0 && (
-                <p className={styles.moveResultHint}>No results</p>
+                <p className={styles.moveResultHint}>{t('resources.modals.move.noResults')}</p>
               )}
             </div>
           )}
@@ -441,17 +450,17 @@ function MoveDialog({ node, onMoved, onClose }: {
           <label className={styles.moveRootLabel}>
             <input type="checkbox" checked={toRoot}
               onChange={e => { setToRoot(e.target.checked); setSearch(''); setTargetId(null) }} />
-            Move to root (no parent)
+            {t('resources.modals.move.moveToRoot')}
           </label>
         </div>
         <div className={styles.modalFooter}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="btn btn-primary"
             disabled={moveMutation.isPending || (!toRoot && !targetId)}
             onClick={() => moveMutation.mutate()}
           >
-            {moveMutation.isPending ? 'Moving…' : 'Move'}
+            {moveMutation.isPending ? t('resources.modals.move.movingEllipsis') : t('resources.modals.move.moveButton')}
           </button>
         </div>
       </div>
@@ -462,6 +471,7 @@ function MoveDialog({ node, onMoved, onClose }: {
 // ─── Detail panel ─────────────────────────────────────────────────────
 
 function CopyLinkButton({ nodeId, refCode }: { nodeId: number; refCode: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   return (
     <button
@@ -473,7 +483,7 @@ function CopyLinkButton({ nodeId, refCode }: { nodeId: number; refCode: string }
           setTimeout(() => setCopied(false), 2000)
         })
       }}
-      title={copied ? `Copied link for ${refCode}` : `Copy direct link (${refCode})`}
+      title={copied ? t('resources.copiedLinkFor', { ref: refCode }) : t('resources.copyDirectLink', { ref: refCode })}
     >
       {copied ? <Check size={14} /> : <Link2 size={14} />}
     </button>
@@ -484,6 +494,7 @@ function CopyLinkButton({ nodeId, refCode }: { nodeId: number; refCode: string }
 // ─── NodeAccessionsTab ────────────────────────────────────────────────
 
 function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -538,10 +549,10 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
     <div style={{ padding: 'var(--space-4)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-ink-muted)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-          <Archive size={14} /> Accessions
+          <Archive size={14} /> {t('resources.tabs.accessions')}
         </span>
         <button className="btn btn-ghost btn-sm" onClick={() => setLinking(v => !v)}>
-          <Plus size={13} /> Link accession
+          <Plus size={13} /> {t('resources.accessions.linkAccession')}
         </button>
       </div>
 
@@ -550,12 +561,12 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
         <div style={{ border: '1px solid var(--color-accent-border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden', background: 'var(--color-accent-bg)' }}>
           <div style={{ padding: 'var(--space-3)' }}>
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search accessions…" autoFocus />
+              placeholder={t('resources.accessions.searchPlaceholder')} autoFocus />
           </div>
           <div style={{ maxHeight: 260, overflowY: 'auto' }}>
             {filtered.length === 0 && (
               <p style={{ padding: 'var(--space-4)', fontSize: 'var(--text-sm)', color: 'var(--color-ink-faint)', fontStyle: 'italic', textAlign: 'center' }}>
-                {allAccessions.length === 0 ? 'No accessions yet. Create one in Acquisitions.' : 'No matching accessions.'}
+                {allAccessions.length === 0 ? t('resources.accessions.noneYet') : t('resources.accessions.noMatching')}
               </p>
             )}
             {filtered.map((acc: any) => (
@@ -580,7 +591,7 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
             ))}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'var(--space-2) var(--space-3)', borderTop: '1px solid var(--color-border)' }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setLinking(false)}>Cancel</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setLinking(false)}>{t('common.cancel')}</button>
           </div>
         </div>
       )}
@@ -589,7 +600,7 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
       {isLoading && <Spinner size={16} />}
       {!isLoading && (linkedAccessions as any[]).length === 0 && !linking && (
         <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-faint)', fontStyle: 'italic' }}>
-          Not linked to any accession.
+          {t('resources.accessions.notLinked')}
         </p>
       )}
       {(linkedAccessions as any[]).map((acc: any) => (
@@ -602,7 +613,7 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
               border: 'none', cursor: 'pointer', textAlign: 'left', flex: 1, minWidth: 0, padding: 0,
               fontFamily: 'var(--font-sans)' }}
             onClick={() => navigate(`/app/acquisitions?section=accessions&id=${acc.id}`)}
-            title="View accession"
+            title={t('resources.accessions.viewAccession')}
           >
             <code style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', flexShrink: 0 }}>
               {acc.accession_number}
@@ -614,7 +625,7 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', flexShrink: 0 }}>↗</span>
           </button>
           <button className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => unlinkMutation.mutate(acc.id)} title="Unlink">
+            onClick={() => unlinkMutation.mutate(acc.id)} title={t('resources.accessions.unlink')}>
             <X size={12} />
           </button>
         </div>
@@ -631,31 +642,32 @@ function BulkDeleteDialog({ count, onConfirm, onClose, isPending }: {
   onClose: () => void
   isPending: boolean
 }) {
+  const { t } = useTranslation()
   const [force, setForce] = useState(false)
   return (
     <div className={styles.modalOverlay} onClick={onClose}>
       <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
         <div className={styles.modalHeader}>
-          <h3 className={styles.modalTitle}><Trash2 size={15} /> Delete {count} node{count !== 1 ? 's' : ''}</h3>
+          <h3 className={styles.modalTitle}><Trash2 size={15} /> {t('resources.modals.bulkDelete.title', { count })}</h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><X size={14} /></button>
         </div>
         <div className={styles.modalBody}>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)' }}>
-            This will permanently delete the selected {count} node{count !== 1 ? 's' : ''}. This cannot be undone.
+            {t('resources.modals.bulkDelete.warning', { count })}
           </p>
           <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginTop: 'var(--space-4)', fontSize: 'var(--text-sm)', cursor: 'pointer', userSelect: 'none' }}>
             <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} />
-            <span>Also delete all descendants recursively</span>
+            <span>{t('resources.modals.bulkDelete.recursiveLabel')}</span>
           </label>
           {force && (
             <p style={{ marginTop: 'var(--space-2)', fontSize: 'var(--text-xs)', color: 'var(--color-error)', display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
               <AlertCircle size={12} />
-              All child nodes at every level will be permanently removed.
+              {t('resources.modals.bulkDelete.recursiveWarning')}
             </p>
           )}
         </div>
         <div className={styles.modalFooter}>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="btn btn-sm"
             style={{ background: 'var(--color-error)', color: '#fff' }}
@@ -663,7 +675,7 @@ function BulkDeleteDialog({ count, onConfirm, onClose, isPending }: {
             disabled={isPending}
           >
             {isPending ? <Spinner size={13} /> : <Trash2 size={13} />}
-            Delete
+            {t('common.delete')}
           </button>
         </div>
       </div>
@@ -682,6 +694,7 @@ function NodeDetailPanel({
   onEdit: (node: NodeDetail) => void
   onSelectChild: (node: NodeStub) => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState<'details' | 'relations' | 'locations' | 'classifications' | 'places' | 'tags' | 'flags' | 'accessions' | 'notes' | 'attachments' | 'history' | 'representations' | 'identifiers'>('details')
   const [showMove, setShowMove] = useState(false)
@@ -706,7 +719,7 @@ function NodeDetailPanel({
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
       queryClient.invalidateQueries({ queryKey: ['node-children'] })
     },
-    onError: (err: any) => alert(err?.response?.data?.message ?? 'Delete failed'),
+    onError: (err: any) => alert(err?.response?.data?.message ?? t('resources.deleteFailed')),
   })
 
   const handleDelete = async () => {
@@ -720,17 +733,19 @@ function NodeDetailPanel({
     }
     if (descendants > 0) {
       const ok = confirm(
-        `"${data.title}" has ${descendants} descendant record${descendants !== 1 ? 's' : ''}.\n\n` +
-        `Deleting it will permanently delete this node AND all ${descendants} of them ` +
-        `(${descendants + 1} records in total). This cannot be undone.\n\nAre you absolutely sure?`
+        t('resources.deleteConfirmWithDescendants', {
+          count: descendants,
+          total: descendants + 1,
+          title: data.title,
+        })
       )
       if (ok) deleteMutation.mutate(true)
     } else {
-      if (confirm(`Delete "${data.title}"? This cannot be undone.`)) deleteMutation.mutate(false)
+      if (confirm(t('resources.deleteConfirmSimple', { title: data.title }))) deleteMutation.mutate(false)
     }
   }
 
-  if (isLoading) return <div className={styles.detailLoading}>Loading…</div>
+  if (isLoading) return <div className={styles.detailLoading}>{t('common.loading')}</div>
   if (!data) return null
 
   const transitions = STATUS_TRANSITIONS[data.status]
@@ -760,16 +775,16 @@ function NodeDetailPanel({
             <CopyLinkButton nodeId={nodeId} refCode={data?.ref_code ?? ''} />
             <ExportMenu nodeId={nodeId} />
             <PrintLabelsButton nodeIds={[nodeId]} />
-            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowMove(true)} title="Move to different parent">
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowMove(true)} title={t('resources.moveToParent')}>
               <MoveRight size={14} />
             </button>
-            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(data)} title="Edit">
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(data)} title={t('common.edit')}>
               <Edit2 size={14} />
             </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
               onClick={handleDelete}
-              title="Delete"
+              title={t('common.delete')}
             >
               <Trash2 size={14} />
             </button>
@@ -812,7 +827,7 @@ function NodeDetailPanel({
                 onClick={() => statusMutation.mutate(s)}
                 disabled={statusMutation.isPending}
               >
-                Set {s}
+                {t('resources.setStatus', { status: t(`resources.status.${s}`) })}
               </button>
             ))}
           </div>
@@ -822,23 +837,23 @@ function NodeDetailPanel({
       {/* Tabs */}
 <div className={styles.tabs}>
   {[
-    { key: 'details',         icon: <FileText size={13} />,   label: 'Details' },
-    { key: 'relations',       icon: <Link size={13} />,       label: 'Relations' },
-    { key: 'identifiers',     icon: <Fingerprint size={13} />, label: `Identifiers${data.identifiers?.length ? ` (${data.identifiers.length})` : ''}` },
-    { key: 'locations',       icon: <MapPin size={13} />,     label: 'Locations' },
-    { key: 'classifications', icon: <Tag size={13} />,        label: 'Classifications' },
-    { key: 'places',          icon: <MapPin size={13} />,     label: 'Places' },
-    { key: 'flags',           icon: <Flag size={13} />,       label: `Flags${data?.open_flag_count ? ` (${data.open_flag_count})` : ''}` },
-    { key: 'accessions',      icon: <Archive size={13} />,    label: 'Accessions' },
-    { key: 'tags',            icon: <Tag size={13} />,        label: 'Tags' },
-    { key: 'notes',           icon: <StickyNote size={13} />, label: `Notes${data.notes.length ? ` (${data.notes.length})` : ''}` },
-    { key: 'attachments',     icon: <Paperclip size={13} />,  label: `Files${data.attachments.length ? ` (${data.attachments.length})` : ''}` },
+    { key: 'details',         icon: <FileText size={13} />,   label: t('resources.tabs.details') },
+    { key: 'relations',       icon: <Link size={13} />,       label: t('resources.tabs.relations') },
+    { key: 'identifiers',     icon: <Fingerprint size={13} />, label: `${t('resources.tabs.identifiers')}${data.identifiers?.length ? ` (${data.identifiers.length})` : ''}` },
+    { key: 'locations',       icon: <MapPin size={13} />,     label: t('resources.tabs.locations') },
+    { key: 'classifications', icon: <Tag size={13} />,        label: t('resources.tabs.classifications') },
+    { key: 'places',          icon: <MapPin size={13} />,     label: t('resources.tabs.places') },
+    { key: 'flags',           icon: <Flag size={13} />,       label: `${t('flags.title')}${data?.open_flag_count ? ` (${data.open_flag_count})` : ''}` },
+    { key: 'accessions',      icon: <Archive size={13} />,    label: t('resources.tabs.accessions') },
+    { key: 'tags',            icon: <Tag size={13} />,        label: t('resources.tabs.tags') },
+    { key: 'notes',           icon: <StickyNote size={13} />, label: `${t('resources.tabs.notes')}${data.notes.length ? ` (${data.notes.length})` : ''}` },
+    { key: 'attachments',     icon: <Paperclip size={13} />,  label: `${t('resources.tabs.files')}${data.attachments.length ? ` (${data.attachments.length})` : ''}` },
     ...(data.is_object ? [{
       key: 'representations',
       icon: <Layers size={13} />,
-      label: `Objects${data.representations?.length ? ` (${data.representations.length})` : ''}`,
+      label: `${t('resources.tabs.objects')}${data.representations?.length ? ` (${data.representations.length})` : ''}`,
     }] : []),
-    { key: 'history',         icon: <History size={13} />,   label: 'History' },
+    { key: 'history',         icon: <History size={13} />,   label: t('resources.tabs.history') },
   ].map(({ key, icon, label }) => (
     <button
       key={key}
@@ -879,6 +894,7 @@ function NodeDetailPanel({
 // ─── Children / Content panel ─────────────────────────────────────────
 
 function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: NodeStub) => void }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
@@ -886,6 +902,13 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
 
   useEffect(() => { setPage(1) }, [search])
 
+  const { data: countData } = useQuery({
+    queryKey: ['node-children-count', nodeId],
+    queryFn: () => nodesApi.list({ parent_id: nodeId, page: 1, per_page: 1 }).then(r => r.data),
+  })
+  const total: number = (countData as any)?.meta?.total ?? 0
+
+  // The full, searchable, paginated list — only fetched once expanded.
   const { data, isLoading } = useQuery({
     queryKey: ['node-children-list', nodeId, search, page],
     queryFn: () => nodesApi.list({ parent_id: nodeId, q: search || undefined, page, per_page: PER_PAGE }).then(r => r.data),
@@ -893,14 +916,13 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
   })
 
   const children: NodeStub[] = (data as any)?.data ?? []
-  const total: number = (data as any)?.meta?.total ?? 0
   const pages: number = (data as any)?.meta?.pages ?? 1
 
   return (
     <div className={styles.childrenPanel}>
       <button className={styles.childrenToggle} onClick={() => setOpen(v => !v)}>
         <ChevronRight size={14} className={`${styles.childrenChevron} ${open ? styles.childrenChevronOpen : ''}`} />
-        <span>Content</span>
+        <span>{t('resources.children.content')}</span>
         {total > 0 && <span className={styles.childrenCount}>{total}</span>}
       </button>
 
@@ -911,7 +933,7 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
               <Search size={12} className={styles.childrenSearchIcon} />
               <input
                 className={styles.childrenSearchInput}
-                placeholder="Filter…"
+                placeholder={t('resources.children.filterPlaceholder')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
               />
@@ -927,7 +949,7 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
 
           {!isLoading && children.length === 0 && (
             <p className={styles.childrenEmpty}>
-              {search ? `No results for "${search}"` : 'No immediate children.'}
+              {search ? t('resources.children.noResultsFor', { search }) : t('resources.children.noChildren')}
             </p>
           )}
 
@@ -942,7 +964,7 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
                   )}
                   {child.status !== 'published' && (
                     <span className={`badge badge-${child.status}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
-                      {child.status}
+                      {t(`resources.status.${child.status}`)}
                     </span>
                   )}
                 </div>
@@ -967,21 +989,22 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
 // ─── Details tab ──────────────────────────────────────────────────────
 
 function DetailsTab({ node, onSelectChild }: { node: NodeDetail; onSelectChild: (node: NodeStub) => void }) {
+  const { t } = useTranslation()
   const fields = [
-    { label: 'Description',             value: node.description },
-    { label: 'Scope & Content',         value: node.scope_and_content },
-    { label: 'Arrangement',             value: node.arrangement },
-    { label: 'Access Conditions',       value: node.access_conditions },
-    { label: 'Reproduction Conditions', value: node.reproduction_conditions },
-    { label: 'Language',                value: node.language },
-    { label: 'Finding Aids',            value: node.finding_aids },
+    { label: t('resources.form.fields.description'),             value: node.description },
+    { label: t('resources.form.fields.scopeAndContent'),         value: node.scope_and_content },
+    { label: t('resources.form.fields.arrangement'),             value: node.arrangement },
+    { label: t('resources.form.fields.accessConditions'),       value: node.access_conditions },
+    { label: t('resources.form.fields.reproductionConditions'), value: node.reproduction_conditions },
+    { label: t('resources.form.fields.language'),                value: node.language },
+    { label: t('resources.form.fields.findingAids'),            value: node.finding_aids },
   ].filter(f => f.value)
 
   return (
     <div className={styles.detailFields}>
       {fields.length === 0 && (
         <p className="text-faint" style={{ fontSize: 'var(--text-sm)', padding: 'var(--space-4) 0' }}>
-          No description fields filled in yet.
+          {t('resources.details.noFieldsYet')}
         </p>
       )}
       {fields.map(({ label, value }) => (
@@ -993,7 +1016,7 @@ function DetailsTab({ node, onSelectChild }: { node: NodeDetail; onSelectChild: 
       {node.metadata_fields.length > 0 && Object.keys(node.metadata_spec ?? {}).length > 0 && (
         <>
           <hr style={{ margin: 'var(--space-4) 0', borderColor: 'var(--color-border)' }} />
-          <div className={styles.metaSectionTitle}>Custom fields</div>
+          <div className={styles.metaSectionTitle}>{t('resources.details.customFields')}</div>
           {node.metadata_fields
             .filter((f: any) => node.metadata_spec[f.name] !== undefined && node.metadata_spec[f.name] !== '')
             .map((f: any) => (
@@ -1007,8 +1030,8 @@ function DetailsTab({ node, onSelectChild }: { node: NodeDetail; onSelectChild: 
         </>
       )}
       <div className={styles.fieldFooter}>
-        <span>Created by {node.created_by || '—'}</span>
-        <span>Updated {new Date(node.updated_at).toLocaleDateString()}</span>
+        <span>{t('resources.details.createdBy', { name: node.created_by || '—' })}</span>
+        <span>{t('resources.details.updated', { date: new Date(node.updated_at).toLocaleDateString() })}</span>
       </div>
       <ChildrenTab nodeId={node.id} onSelect={onSelectChild} />
     </div>
@@ -1020,6 +1043,7 @@ function DetailsTab({ node, onSelectChild }: { node: NodeDetail; onSelectChild: 
 const NOTE_TYPES = ['general', 'accruals', 'appraisal', 'provenance', 'processing']
 
 function NoteCard({ node, note, onDeleted }: { node: NodeDetail; note: any; onDeleted: () => void }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState(false)
   const [editContent, setEditContent] = useState(note.content)
@@ -1046,28 +1070,28 @@ function NoteCard({ node, note, onDeleted }: { node: NodeDetail; note: any; onDe
       <div className={styles.noteCard}>
         <div className={styles.noteForm}>
           <div className="form-group">
-            <label>Type</label>
+            <label>{t('resources.notes.type')}</label>
             <select value={editType} onChange={e => setEditType(e.target.value)}>
-              {NOTE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {NOTE_TYPES.map(nt => <option key={nt} value={nt}>{t(`resources.notes.types.${nt}`)}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label>Content</label>
+            <label>{t('resources.notes.content')}</label>
             <textarea value={editContent} onChange={e => setEditContent(e.target.value)} rows={4} autoFocus />
           </div>
           <label className={styles.checkboxLabel}>
             <input type="checkbox" checked={editPublic} onChange={e => setEditPublic(e.target.checked)} />
-            Visible on public portal
+            {t('resources.notes.visiblePublicPortal')}
           </label>
           <div className={styles.noteFormActions}>
             <button className="btn btn-ghost btn-sm" onClick={() => {
               setEditContent(note.content); setEditType(note.note_type)
               setEditPublic(note.is_public); setEditing(false)
-            }}>Cancel</button>
+            }}>{t('common.cancel')}</button>
             <button className="btn btn-primary btn-sm"
               disabled={!editContent || updateMutation.isPending}
               onClick={() => updateMutation.mutate()}>
-              Save
+              {t('common.save')}
             </button>
           </div>
         </div>
@@ -1078,15 +1102,15 @@ function NoteCard({ node, note, onDeleted }: { node: NodeDetail; note: any; onDe
   return (
     <div className={styles.noteCard}>
       <div className={styles.noteCardHeader}>
-        <span className={styles.noteType}>{note.note_type}</span>
-        {note.is_public && <span className="badge badge-published"><Globe size={9} /> public</span>}
+        <span className={styles.noteType}>{t(`resources.notes.types.${note.note_type}`)}</span>
+        {note.is_public && <span className="badge badge-published"><Globe size={9} /> {t('resources.notes.public')}</span>}
         <div className={styles.noteCardActions}>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setEditing(true)} title="Edit">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setEditing(true)} title={t('common.edit')}>
             <Edit2 size={12} />
           </button>
           <button className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => { if (confirm('Delete this note?')) deleteMutation.mutate() }}
-            title="Delete">
+            onClick={() => { if (confirm(t('resources.notes.deleteConfirm'))) deleteMutation.mutate() }}
+            title={t('common.delete')}>
             <Trash2 size={12} />
           </button>
         </div>
@@ -1094,13 +1118,14 @@ function NoteCard({ node, note, onDeleted }: { node: NodeDetail; note: any; onDe
       <p className={styles.noteContent}>{note.content}</p>
       <span className={styles.noteMeta}>
         {note.created_by} · {new Date(note.updated_at).toLocaleDateString()}
-        {note.updated_at !== note.created_at && ' (edited)'}
+        {note.updated_at !== note.created_at && ` ${t('resources.notes.edited')}`}
       </span>
     </div>
   )
 }
 
 function NotesTab({ node }: { node: NodeDetail }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [content, setContent] = useState('')
   const [noteType, setNoteType] = useState('general')
@@ -1121,35 +1146,35 @@ function NotesTab({ node }: { node: NodeDetail }) {
     <div className={styles.notesTab}>
       <div className={styles.notesHeader}>
         <button className="btn btn-secondary btn-sm" onClick={() => setAdding(!adding)}>
-          <Plus size={13} /> Add note
+          <Plus size={13} /> {t('resources.notes.addNote')}
         </button>
       </div>
       {adding && (
         <div className={styles.noteForm}>
           <div className="form-group">
-            <label>Type</label>
+            <label>{t('resources.notes.type')}</label>
             <select value={noteType} onChange={e => setNoteType(e.target.value)}>
-              {NOTE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              {NOTE_TYPES.map(nt => <option key={nt} value={nt}>{t(`resources.notes.types.${nt}`)}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label>Content</label>
+            <label>{t('resources.notes.content')}</label>
             <textarea value={content} onChange={e => setContent(e.target.value)} rows={4} autoFocus />
           </div>
           <label className={styles.checkboxLabel}>
             <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
-            Visible on public portal
+            {t('resources.notes.visiblePublicPortal')}
           </label>
           <div className={styles.noteFormActions}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>{t('common.cancel')}</button>
             <button className="btn btn-primary btn-sm" onClick={() => addMutation.mutate()} disabled={!content}>
-              Save note
+              {t('resources.notes.saveNote')}
             </button>
           </div>
         </div>
       )}
       {node.notes.length === 0 && !adding && (
-        <p className="text-faint" style={{ fontSize: 'var(--text-sm)' }}>No notes yet.</p>
+        <p className="text-faint" style={{ fontSize: 'var(--text-sm)' }}>{t('resources.notes.noneYet')}</p>
       )}
       {node.notes.map(note => (
         <NoteCard key={note.id} node={node} note={note} onDeleted={invalidate} />
@@ -1161,6 +1186,7 @@ function NotesTab({ node }: { node: NodeDetail }) {
 // ─── Attachments tab ──────────────────────────────────────────────────
 
 function AttachmentsTab({ node }: { node: NodeDetail }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
@@ -1187,7 +1213,7 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
       await nodesApi.uploadAttachment(node.id, formData)
       queryClient.invalidateQueries({ queryKey: ['node', node.id] })
     } catch (err: any) {
-      setUploadError(err.response?.data?.message ?? 'Upload failed.')
+      setUploadError(err.response?.data?.message ?? t('resources.attachments.uploadFailed'))
     } finally {
       setUploading(false)
       e.target.value = ''
@@ -1202,14 +1228,14 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
     <div className={styles.attachmentsTab}>
       <div className={styles.uploadRow}>
         <label className={`btn btn-secondary btn-sm ${uploading ? styles.uploadBtnLoading : ''}`}>
-          <Paperclip size={13} /> {uploading ? 'Uploading…' : 'Upload file'}
+          <Paperclip size={13} /> {uploading ? t('resources.attachments.uploading') : t('resources.attachments.uploadFile')}
           <input type="file" onChange={handleUpload} style={{ display: 'none' }} disabled={uploading} />
         </label>
         {uploadError && <span className={styles.uploadError}>{uploadError}</span>}
       </div>
 
       {node.attachments.length === 0 && (
-        <p className="text-faint" style={{ fontSize: 'var(--text-sm)' }}>No attachments yet.</p>
+        <p className="text-faint" style={{ fontSize: 'var(--text-sm)' }}>{t('resources.attachments.noneYet')}</p>
       )}
 
       {node.attachments.map((att: any) => {
@@ -1269,11 +1295,11 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                 />
                 <button className="btn btn-ghost btn-sm btn-icon"
                   onClick={() => setExpandedId(isExpanded ? null : att.id)}
-                  title="Technical metadata">
+                  title={t('resources.attachments.technicalMetadata')}>
                   <AlertCircle size={12} />
                 </button>
                 <a href={downloadUrl} target="_blank" rel="noreferrer"
-                  className="btn btn-ghost btn-sm btn-icon" title="View / download">
+                  className="btn btn-ghost btn-sm btn-icon" title={t('resources.attachments.viewDownload')}>
                   <Download size={12} />
                 </a>
                 {att.extracted_text === true && (
@@ -1281,13 +1307,13 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                     href={nodesApi.getTextUrl(node.id, att.id)}
                     download={att.original_filename.replace(/\.[^.]+$/, '') + '_text.txt'}
                     className="btn btn-ghost btn-sm btn-icon"
-                    title="Download extracted text"
+                    title={t('resources.attachments.downloadText')}
                   >
                     <FileText size={12} />
                   </a>
                 )}
                 <button className="btn btn-ghost btn-sm btn-icon"
-                  onClick={() => deleteMutation.mutate(att.id)} title="Delete">
+                  onClick={() => deleteMutation.mutate(att.id)} title={t('common.delete')}>
                   <Trash2 size={12} />
                 </button>
               </div>
@@ -1300,18 +1326,18 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                   {att.checksum_md5 && <><dt>MD5</dt><dd style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}>{att.checksum_md5}</dd></>}
                   {att.checksum_sha256 && <><dt>SHA-256</dt><dd style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)', wordBreak: 'break-all' }}>{att.checksum_sha256}</dd></>}
                   {att.pronom_id && <><dt>PRONOM</dt><dd><a href={`https://www.nationalarchives.gov.uk/pronom/${att.pronom_id}`} target="_blank" rel="noreferrer" style={{ color: 'var(--color-accent)' }}>{att.pronom_id}</a></dd></>}
-                  {att.image_width && <><dt>Dimensions</dt><dd>{att.image_width} × {att.image_height} px</dd></>}
-                  {att.image_dpi_x && <><dt>Resolution</dt><dd>{Math.round(att.image_dpi_x)} × {Math.round(att.image_dpi_y ?? att.image_dpi_x)} DPI</dd></>}
-                  {att.image_mode && <><dt>Colour mode</dt><dd>{att.image_mode}</dd></>}
-                  {att.image_bit_depth && <><dt>Bit depth</dt><dd>{att.image_bit_depth}-bit</dd></>}
-                  {att.duration_seconds && <><dt>Duration</dt><dd>{new Date(att.duration_seconds * 1000).toISOString().slice(11, 19)}</dd></>}
-                  {att.av_codec && <><dt>Codec</dt><dd>{att.av_codec}</dd></>}
-                  {att.av_bitrate && <><dt>Bitrate</dt><dd>{Math.round(att.av_bitrate / 1000)} kbps</dd></>}
-                  {att.tech_extracted_at && <><dt>Extracted</dt><dd>{new Date(att.tech_extracted_at).toLocaleString()}</dd></>}
+                  {att.image_width && <><dt>{t('resources.attachments.dimensions')}</dt><dd>{att.image_width} × {att.image_height} px</dd></>}
+                  {att.image_dpi_x && <><dt>{t('resources.attachments.resolution')}</dt><dd>{Math.round(att.image_dpi_x)} × {Math.round(att.image_dpi_y ?? att.image_dpi_x)} DPI</dd></>}
+                  {att.image_mode && <><dt>{t('resources.attachments.colourMode')}</dt><dd>{att.image_mode}</dd></>}
+                  {att.image_bit_depth && <><dt>{t('resources.attachments.bitDepth')}</dt><dd>{att.image_bit_depth}-bit</dd></>}
+                  {att.duration_seconds && <><dt>{t('resources.attachments.duration')}</dt><dd>{new Date(att.duration_seconds * 1000).toISOString().slice(11, 19)}</dd></>}
+                  {att.av_codec && <><dt>{t('resources.attachments.codec')}</dt><dd>{att.av_codec}</dd></>}
+                  {att.av_bitrate && <><dt>{t('resources.attachments.bitrate')}</dt><dd>{Math.round(att.av_bitrate / 1000)} kbps</dd></>}
+                  {att.tech_extracted_at && <><dt>{t('resources.attachments.extracted')}</dt><dd>{new Date(att.tech_extracted_at).toLocaleString()}</dd></>}
                 </div>
                 {att.exif_data && Object.keys(att.exif_data).length > 0 && (
                   <details className={styles.exifDetails}>
-                    <summary>EXIF / IPTC ({Object.keys(att.exif_data).length} fields)</summary>
+                    <summary>{t('resources.attachments.exifIptc', { count: Object.keys(att.exif_data).length })}</summary>
                     <div className={styles.attachmentTechGrid} style={{ marginTop: 'var(--space-2)' }}>
                       {Object.entries(att.exif_data).map(([k, v]) => (
                         <><dt key={`k-${k}`}>{k}</dt><dd key={`v-${k}`}>{String(v)}</dd></>
@@ -1324,7 +1350,7 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
                     disabled={reextractMutation.isPending}
                     onClick={() => reextractMutation.mutate(att.id)}>
                     {reextractMutation.isPending ? <Spinner size={12} /> : <MoveRight size={12} />}
-                    Re-extract metadata
+                    {t('resources.attachments.reextractMetadata')}
                   </button>
                 </div>
               </div>
@@ -1339,6 +1365,7 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
 // ─── History tab ──────────────────────────────────────────────────────
 
 function HistoryTab({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -1354,12 +1381,12 @@ function HistoryTab({ nodeId }: { nodeId: number }) {
     },
   })
 
-  if (isLoading) return <div className={styles.detailLoading}>Loading history…</div>
+  if (isLoading) return <div className={styles.detailLoading}>{t('resources.history.loading')}</div>
 
   return (
     <div className={styles.historyTab}>
       {(!data || data.length === 0) && (
-        <p className="text-faint" style={{ fontSize: 'var(--text-sm)' }}>No history yet.</p>
+        <p className="text-faint" style={{ fontSize: 'var(--text-sm)' }}>{t('resources.history.noneYet')}</p>
       )}
       {data?.map((change: any, i: number) => (
         <div key={change.id} className={styles.historyEntry}>
@@ -1371,9 +1398,9 @@ function HistoryTab({ nodeId }: { nodeId: number }) {
             {i > 0 && (
               <button
                 className="btn btn-ghost btn-sm"
-                onClick={() => { if (confirm('Revert to this version?')) revertMutation.mutate(change.id) }}
+                onClick={() => { if (confirm(t('resources.history.revertConfirm'))) revertMutation.mutate(change.id) }}
               >
-                <RotateCcw size={12} /> Revert
+                <RotateCcw size={12} /> {t('resources.history.revert')}
               </button>
             )}
           </div>
@@ -1389,6 +1416,7 @@ function HistoryTab({ nodeId }: { nodeId: number }) {
 type ViewMode = 'detail' | 'create' | 'edit' | 'add-child'
 
 export default function ResourcesPage() {
+  const { t } = useTranslation()
   const location = useLocation()
   const [searchParams] = useSearchParams()
 
@@ -1411,7 +1439,7 @@ export default function ResourcesPage() {
       queryClient.invalidateQueries({ queryKey: ['node-children'] })
       setSelectedIds(new Set())
       setBulkDeleteOpen(false)
-      if (errors.length > 0) alert('Some nodes were not deleted:\n' + errors.map((e: any) => e.error).join('\n'))
+      if (errors.length > 0) alert(t('resources.tree.bulkDeleteErrors') + '\n' + errors.map((e: any) => e.error).join('\n'))
     },
   })
 
@@ -1496,19 +1524,19 @@ export default function ResourcesPage() {
   const treePanel = (
     <div className={styles.treePanel}>
       <div className={styles.treePanelHeader}>
-        <h2 className={styles.treePanelTitle}>Resources</h2>
+        <h2 className={styles.treePanelTitle}>{t('nav.resources')}</h2>
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => setShowImport(true)}
-            title="Import EAD"
+            title={t('resources.tree.importEad')}
           >
             <Upload size={14} />
           </button>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => setShowRapidEntry(true)}
-            title={selectedNode ? `Rapid entry under ${selectedNode.ref_code}` : 'Select a node first to use rapid entry'}
+            title={selectedNode ? t('resources.tree.rapidEntryUnder', { ref: selectedNode.ref_code }) : t('resources.tree.rapidEntrySelectFirst')}
             disabled={!selectedNode}
           >
             <Zap size={14} />
@@ -1517,7 +1545,7 @@ export default function ResourcesPage() {
             className="btn btn-primary btn-sm"
             onClick={() => { setSelectedNode(null); setEditingNode(null); setViewMode('create') }}
           >
-            <Plus size={14} /> New
+            <Plus size={14} /> {t('resources.tree.newButton')}
           </button>
         </div>
       </div>
@@ -1528,7 +1556,7 @@ export default function ResourcesPage() {
             className={styles.treeSearchInput}
             value={treeSearch}
             onChange={e => setTreeSearch(e.target.value)}
-            placeholder="Filter resources…"
+            placeholder={t('resources.tree.filterPlaceholder')}
           />
           {treeSearch && (
             <button className={styles.treeSearchClear} onClick={() => setTreeSearch('')}>
@@ -1542,7 +1570,7 @@ export default function ResourcesPage() {
             value={hierarchyTypeFilter}
             onChange={e => setHierarchyTypeFilter(e.target.value)}
           >
-            <option value="">All</option>
+            <option value="">{t('flags.all')}</option>
             {hierarchyTypesForFilter?.map((ht: any) => (
               <option key={ht.id} value={ht.id}>{ht.name}</option>
             ))}
@@ -1551,7 +1579,7 @@ export default function ResourcesPage() {
         <button
           className="btn btn-ghost btn-sm btn-icon"
           onClick={toggleSelectMode}
-          title={selectMode ? 'Exit select mode' : 'Select items for bulk printing'}
+          title={selectMode ? t('resources.tree.exitSelectMode') : t('resources.tree.selectForPrinting')}
           style={{ color: selectMode ? 'var(--color-accent)' : undefined, flexShrink: 0 }}
         >
           {selectMode ? <CheckSquare size={14} /> : <Square size={14} />}
@@ -1560,21 +1588,21 @@ export default function ResourcesPage() {
 
       {selectMode && selectedIds.size > 0 && (
         <div className={styles.bulkActionsBar}>
-          <span className={styles.bulkCount}>{selectedIds.size} selected</span>
+          <span className={styles.bulkCount}>{t('resources.tree.selectedCount', { count: selectedIds.size })}</span>
           <div className={styles.bulkActions}>
             <PrintLabelsButton nodeIds={[...selectedIds]} label="" />
-            <button className="btn btn-ghost btn-sm btn-icon" title="Move selected" onClick={() => setBulkMoveOpen(true)}>
+            <button className="btn btn-ghost btn-sm btn-icon" title={t('resources.tree.moveSelected')} onClick={() => setBulkMoveOpen(true)}>
               <MoveRight size={13} />
             </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
-              title="Delete selected"
+              title={t('resources.tree.deleteSelected')}
               style={{ color: 'var(--color-error)' }}
               onClick={() => setBulkDeleteOpen(true)}
             >
               <Trash2 size={13} />
             </button>
-            <button className="btn btn-ghost btn-sm btn-icon" title="Clear selection" onClick={() => setSelectedIds(new Set())}>
+            <button className="btn btn-ghost btn-sm btn-icon" title={t('resources.tree.clearSelection')} onClick={() => setSelectedIds(new Set())}>
               <X size={13} />
             </button>
           </div>
@@ -1616,8 +1644,8 @@ export default function ResourcesPage() {
     <div className={styles.emptyState}>
       <div className={styles.emptyStateInner}>
         <FileText size={32} className={styles.emptyIcon} />
-        <p>Select a resource to view its description</p>
-        <p className="text-faint">or create a new one</p>
+        <p>{t('resources.emptyState.title')}</p>
+        <p className="text-faint">{t('resources.emptyState.subtitle')}</p>
       </div>
     </div>
   )

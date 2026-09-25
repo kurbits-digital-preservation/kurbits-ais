@@ -15,6 +15,7 @@ import {
 import { representationsApi, nodesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import type { NodeDetail, NodeRepresentation, RepresentationFile } from '@/types'
+import { useTranslation } from 'react-i18next'
 import styles from './RepresentationsTab.module.css'
 import OcrButton from '@/components/node/OcrButton'
 
@@ -52,6 +53,7 @@ function FileCard({
   file: RepresentationFile
   onDeleted: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(false)
 
@@ -138,7 +140,7 @@ function FileCard({
           <button
             className="btn btn-ghost btn-sm btn-icon"
             onClick={() => setExpanded((v) => !v)}
-            title="Technical metadata"
+            title={t('resources.attachments.technicalMetadata')}
           >
             <AlertCircle size={12} />
           </button>
@@ -149,7 +151,7 @@ function FileCard({
             target="_blank"
             rel="noreferrer"
             className="btn btn-ghost btn-sm btn-icon"
-            title="Download file"
+            title={t('representations.downloadFile')}
           >
             <Download size={12} />
           </a>
@@ -160,7 +162,7 @@ function FileCard({
               href={textUrl}
               download={file.original_filename.replace(/\.[^.]+$/, '') + '_text.txt'}
               className="btn btn-ghost btn-sm btn-icon"
-              title="Download extracted text as .txt"
+              title={t('representations.downloadTextTxt')}
             >
               <FileText size={12} />
             </a>
@@ -170,9 +172,9 @@ function FileCard({
           <button
             className="btn btn-ghost btn-sm btn-icon"
             onClick={() => {
-              if (confirm('Delete this file?')) deleteMutation.mutate()
+              if (confirm(t('representations.deleteFileConfirm'))) deleteMutation.mutate()
             }}
-            title="Delete"
+            title={t('common.delete')}
           >
             <Trash2 size={12} />
           </button>
@@ -210,40 +212,40 @@ function FileCard({
               </TechRow>
             )}
             {file.image_width && (
-              <TechRow label="Dimensions">
+              <TechRow label={t('resources.attachments.dimensions')}>
                 {file.image_width} x {file.image_height} px
               </TechRow>
             )}
             {file.image_dpi_x && (
-              <TechRow label="Resolution">
+              <TechRow label={t('resources.attachments.resolution')}>
                 {Math.round(file.image_dpi_x)} x{' '}
                 {Math.round(file.image_dpi_y ?? file.image_dpi_x)} DPI
               </TechRow>
             )}
             {file.image_mode && (
-              <TechRow label="Colour mode">{file.image_mode}</TechRow>
+              <TechRow label={t('resources.attachments.colourMode')}>{file.image_mode}</TechRow>
             )}
             {file.image_bit_depth && (
-              <TechRow label="Bit depth">{file.image_bit_depth}-bit</TechRow>
+              <TechRow label={t('resources.attachments.bitDepth')}>{file.image_bit_depth}-bit</TechRow>
             )}
             {file.duration_seconds && (
-              <TechRow label="Duration">
+              <TechRow label={t('resources.attachments.duration')}>
                 {new Date(file.duration_seconds * 1000).toISOString().slice(11, 19)}
               </TechRow>
             )}
-            {file.av_codec && <TechRow label="Codec">{file.av_codec}</TechRow>}
+            {file.av_codec && <TechRow label={t('resources.attachments.codec')}>{file.av_codec}</TechRow>}
             {file.av_bitrate && (
-              <TechRow label="Bitrate">
+              <TechRow label={t('resources.attachments.bitrate')}>
                 {Math.round(file.av_bitrate / 1000)} kbps
               </TechRow>
             )}
             {(file as any).extracted_text_at && (
-              <TechRow label="Text extracted">
+              <TechRow label={t('representations.textExtracted')}>
                 {new Date((file as any).extracted_text_at).toLocaleString()}
               </TechRow>
             )}
             {file.tech_extracted_at && (
-              <TechRow label="Tech extracted">
+              <TechRow label={t('representations.techExtracted')}>
                 {new Date(file.tech_extracted_at).toLocaleString()}
               </TechRow>
             )}
@@ -255,7 +257,7 @@ function FileCard({
               onClick={() => reextractMutation.mutate()}
             >
               {reextractMutation.isPending ? <Spinner size={12} /> : <AlertCircle size={12} />}
-              Re-extract metadata
+              {t('resources.attachments.reextractMetadata')}
             </button>
           </div>
         </div>
@@ -277,6 +279,7 @@ function RepresentationCard({
   repTypes: { id: number; name: string }[]
   onChanged: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(true)
   const [editing, setEditing] = useState(false)
@@ -319,7 +322,7 @@ function RepresentationCard({
       await representationsApi.uploadFile(nodeId, rep.id, fd)
       queryClient.invalidateQueries({ queryKey: ['representations', nodeId] })
     } catch (err: any) {
-      setUploadError(err?.response?.data?.message ?? 'Upload failed')
+      setUploadError(err?.response?.data?.message ?? t('resources.attachments.uploadFailed'))
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -343,7 +346,7 @@ function RepresentationCard({
             <input
               value={editLabel}
               onChange={(e) => setEditLabel(e.target.value)}
-              placeholder="Label (optional)"
+              placeholder={t('representations.label') + ' ' + t('representations.optional')}
               style={{ fontSize: 'var(--text-sm)', flex: 1 }}
             />
             <button
@@ -362,7 +365,7 @@ function RepresentationCard({
             <span className={styles.repTypeName}>{rep.rep_type_name}</span>
             {rep.label && <span className={styles.repLabel}>{rep.label}</span>}
             <span className={styles.repFileCount}>
-              {rep.files.length} file{rep.files.length !== 1 ? 's' : ''}
+              {t('representations.filesCount', { count: rep.files.length })}
             </span>
           </div>
         )}
@@ -372,17 +375,17 @@ function RepresentationCard({
             <button
               className="btn btn-ghost btn-sm btn-icon"
               onClick={() => setEditing(true)}
-              title="Edit"
+              title={t('common.edit')}
             >
               <Edit2 size={12} />
             </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
               onClick={() => {
-                if (confirm('Delete this representation and all its files?'))
+                if (confirm(t('representations.deleteRepConfirm')))
                   deleteMutation.mutate()
               }}
-              title="Delete"
+              title={t('common.delete')}
             >
               <Trash2 size={12} />
             </button>
@@ -399,12 +402,12 @@ function RepresentationCard({
           ))}
 
           {rep.files.length === 0 && (
-            <p className={styles.repEmpty}>No files yet - upload one below.</p>
+            <p className={styles.repEmpty}>{t('representations.noFilesYet')}</p>
           )}
 
           <div className={styles.uploadRow}>
             <label className="btn btn-secondary btn-sm">
-              <Upload size={12} /> {uploading ? 'Uploading...' : 'Upload file'}
+              <Upload size={12} /> {uploading ? t('resources.attachments.uploading') : t('resources.attachments.uploadFile')}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -435,6 +438,7 @@ function NewRepresentationForm({
   onCreated: () => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [repTypeId, setRepTypeId] = useState<number>(repTypes[0]?.id ?? 0)
   const [label, setLabel] = useState('')
@@ -457,7 +461,7 @@ function NewRepresentationForm({
     return (
       <div className={styles.noTypesWarning}>
         <AlertCircle size={14} />
-        No representation types configured. Add some under Administration, Vocabularies, Objects.
+        {t('representations.noTypesConfigured')}
       </div>
     )
   }
@@ -465,7 +469,7 @@ function NewRepresentationForm({
   return (
     <div className={styles.newRepForm}>
       <div className="form-group">
-        <label>Type *</label>
+        <label>{t('representations.type')}</label>
         <select value={repTypeId} onChange={(e) => setRepTypeId(Number(e.target.value))}>
           {repTypes.map((rt) => (
             <option key={rt.id} value={rt.id}>{rt.name}</option>
@@ -474,31 +478,31 @@ function NewRepresentationForm({
       </div>
       <div className="form-group">
         <label>
-          Label{' '}
-          <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>(optional)</span>
+          {t('representations.label')}{' '}
+          <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>{t('representations.optional')}</span>
         </label>
         <input
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="e.g. Recto, Side A, 2024 scan"
+          placeholder={t('representations.labelPlaceholder')}
         />
       </div>
       <div className="form-group">
         <label>
-          Note{' '}
-          <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>(optional)</span>
+          {t('representations.note')}{' '}
+          <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)' }}>{t('representations.optional')}</span>
         </label>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
       </div>
       <div className={styles.newRepActions}>
-        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>{t('common.cancel')}</button>
         <button
           className="btn btn-primary btn-sm"
           disabled={!repTypeId || createMutation.isPending}
           onClick={() => createMutation.mutate()}
         >
           {createMutation.isPending ? <Spinner size={13} /> : <Plus size={13} />}
-          Create representation
+          {t('representations.createRepresentation')}
         </button>
       </div>
     </div>
@@ -508,6 +512,7 @@ function NewRepresentationForm({
 // ─── Tab root ─────────────────────────────────────────────────────────
 
 export default function RepresentationsTab({ node }: { node: NodeDetail }) {
+  const { t } = useTranslation()
   const [adding, setAdding] = useState(false)
   const queryClient = useQueryClient()
 
@@ -534,7 +539,7 @@ export default function RepresentationsTab({ node }: { node: NodeDetail }) {
     <div className={styles.tab}>
       <div className={styles.tabHeader}>
         <button className="btn btn-secondary btn-sm" onClick={() => setAdding((v) => !v)}>
-          <Plus size={13} /> Add representation
+          <Plus size={13} /> {t('representations.addRepresentation')}
         </button>
       </div>
 
@@ -550,9 +555,9 @@ export default function RepresentationsTab({ node }: { node: NodeDetail }) {
       {!representations?.length && !adding && (
         <div className={styles.emptyState}>
           <Layers size={28} className={styles.emptyIcon} />
-          <p>No representations yet.</p>
+          <p>{t('representations.noneYet')}</p>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
-            A representation groups files (preservation master, access copy etc.) for this object.
+            {t('representations.noneYetDesc')}
           </p>
         </div>
       )}

@@ -4,6 +4,7 @@ import { Search, MoveRight, X, AlertCircle, ChevronRight } from 'lucide-react'
 import { nodesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import type { NodeDetail } from '@/types'
+import { useTranslation } from 'react-i18next'
 import styles from './MoveNodeDialog.module.css'
 
 // ─── Props ────────────────────────────────────────────────────────────
@@ -17,6 +18,7 @@ type MoveNodeDialogProps = (SingleMode | BulkMode) & {
 }
 
 export default function MoveNodeDialog({ node, nodeIds, onClose, onMoved }: MoveNodeDialogProps) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [selectedTarget, setSelectedTarget] = useState<any>(null)
@@ -51,7 +53,7 @@ export default function MoveNodeDialog({ node, nodeIds, onClose, onMoved }: Move
       }
     },
     onError: (err: any) => {
-      setMoveError(err.response?.data?.message ?? 'Move failed')
+      setMoveError(err.response?.data?.message ?? t('moveDialog.moveFailed'))
     },
   })
 
@@ -62,10 +64,10 @@ export default function MoveNodeDialog({ node, nodeIds, onClose, onMoved }: Move
         {/* Header */}
         <div className={styles.header}>
           <div>
-            <h3 className={styles.title}>Move {isBulk ? `${idsToMove.length} nodes` : 'node'}</h3>
+            <h3 className={styles.title}>{isBulk ? t('moveDialog.titleBulk', { count: idsToMove.length }) : t('moveDialog.titleSingle')}</h3>
             <div className={styles.subtitle}>
               {isBulk ? (
-                <span className={styles.nodeName}>{idsToMove.length} items selected</span>
+                <span className={styles.nodeName}>{t('moveDialog.itemsSelected', { count: idsToMove.length })}</span>
               ) : (
                 <>
                   <span className={styles.nodeName}>{node!.title}</span>
@@ -90,14 +92,14 @@ export default function MoveNodeDialog({ node, nodeIds, onClose, onMoved }: Move
           )}
 
           <p className={styles.instruction}>
-            Search for the new parent node. Leave empty and confirm to move to root level.
+            {t('moveDialog.instruction')}
           </p>
 
           <div className={styles.searchBox}>
             <Search size={14} className={styles.searchIcon} />
             <input
               className={styles.searchInput}
-              placeholder="Search nodes…"
+              placeholder={t('moveDialog.searchPlaceholder')}
               value={search}
               onChange={e => { setSearch(e.target.value); setSelectedTarget(null) }}
               autoFocus
@@ -133,32 +135,32 @@ export default function MoveNodeDialog({ node, nodeIds, onClose, onMoved }: Move
           {selectedTarget ? (
             <div className={styles.movePreview}>
               <div className={styles.moveFrom}>
-                <span className={styles.movePLabel}>Moving</span>
-                <span>{isBulk ? `${idsToMove.length} nodes` : (node!.title || node!.ref_code)}</span>
+                <span className={styles.movePLabel}>{t('moveDialog.moving')}</span>
+                <span>{isBulk ? t('moveDialog.nodeCount', { count: idsToMove.length }) : (node!.title || node!.ref_code)}</span>
               </div>
               <MoveRight size={16} className={styles.moveArrow} />
               <div className={styles.moveTo}>
-                <span className={styles.movePLabel}>Into</span>
+                <span className={styles.movePLabel}>{t('moveDialog.into')}</span>
                 <span>{selectedTarget.title || selectedTarget.ref_code}</span>
               </div>
             </div>
           ) : (
             <p className={styles.moveToRoot}>
-              No target selected — will move to <strong>root level</strong>
+              {t('moveDialog.noTargetSelected')} <strong>{t('moveDialog.rootLevel')}</strong>
             </p>
           )}
         </div>
 
         {/* Footer */}
         <div className={styles.footer}>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="btn btn-primary btn-sm"
             onClick={() => moveMutation.mutate()}
             disabled={moveMutation.isPending}
           >
             {moveMutation.isPending ? <Spinner size={13} /> : <MoveRight size={13} />}
-            Move
+            {t('moveDialog.move')}
           </button>
         </div>
       </div>
