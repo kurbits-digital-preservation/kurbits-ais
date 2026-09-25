@@ -1,11 +1,5 @@
 """
-Simple threaded task runner. No external dependencies.
-Tasks run in daemon threads and update BackgroundTask rows for polling.
-
-Concurrency is capped: a bulk import can enqueue hundreds of extraction jobs,
-and one unbounded thread per job would thrash the server (image decoding and
-checksumming are CPU- and IO-heavy). Work above the cap waits its turn rather
-than running immediately.
+Simple threaded task runner
 """
 from __future__ import annotations
 import os
@@ -15,9 +9,9 @@ from typing import Callable
 
 log = logging.getLogger(__name__)
 
-# Cap concurrent background tasks. Override with KURBITS_TASK_WORKERS.
-# Default is deliberately small — these jobs are CPU-bound, so more threads
-# past a few cores makes everything slower, not faster.
+
+
+
 _MAX_CONCURRENT = int(os.environ.get('KURBITS_TASK_WORKERS', '3'))
 _semaphore = threading.BoundedSemaphore(_MAX_CONCURRENT)
 
@@ -41,7 +35,7 @@ def run_in_background(
                     fn(task_id)
                 except Exception as e:
                     log.exception(f'Background task {task_id} crashed: {e}')
-                    # Last-resort: mark task as error if fn didn't handle it
+
                     try:
                         from app.extensions import db
                         from app.models.background_task import BackgroundTask

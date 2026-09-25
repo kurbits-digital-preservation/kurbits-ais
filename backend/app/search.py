@@ -68,7 +68,7 @@ def search_attachment_text(
         """)
         rows = list(db.session.execute(sql, params))
     else:
-        # SQLite fallback
+
         from app.models.node import Node, NodeAttachment
         pattern = f'%{q}%'
         query = (
@@ -114,7 +114,7 @@ def search_attachment_text(
 
 
 
-# ── PostgreSQL queries ─────────────────────────────────────────────────
+
 
 def _pg_node_query(
     q: str, institution_id: int,
@@ -149,7 +149,7 @@ def _pg_node_query(
         where.append("n.date_end <= :date_to")
         params['date_to'] = filters['date_to']
 
-    # ── New filters ────────────────────────────────────────────────────
+
     if filters.get('has_scope_note') == 'true':
         where.append("n.scope_and_content IS NOT NULL AND n.scope_and_content != ''")
     if filters.get('has_scope_note') == 'false':
@@ -177,7 +177,7 @@ def _pg_node_query(
             AND na.extracted_text IS NOT NULL AND na.extracted_text != ''
         )""")
 
-    # Tag filter — match by tag name
+
     if filters.get('tag'):
         where.append("""EXISTS (
             SELECT 1 FROM node_tags nt
@@ -187,7 +187,7 @@ def _pg_node_query(
         )""")
         params['tag_name'] = filters['tag']
 
-    # Tag category filter
+
     if filters.get('tag_category'):
         where.append("""EXISTS (
             SELECT 1 FROM node_tags nt
@@ -197,7 +197,7 @@ def _pg_node_query(
         )""")
         params['tag_category'] = filters['tag_category']
 
-    # Linked agent name filter
+
     if filters.get('agent_name'):
         where.append("""EXISTS (
             SELECT 1 FROM agent_node_associations ana
@@ -208,7 +208,7 @@ def _pg_node_query(
         )""")
         params['agent_name_pattern'] = f"%{filters['agent_name'].lower()}%"
 
-    # Has notes filter
+
     if filters.get('has_notes') == 'true':
         where.append("EXISTS (SELECT 1 FROM node_notes nn WHERE nn.node_id = n.id)")
     if filters.get('has_notes') == 'false':
@@ -299,7 +299,7 @@ def _pg_agent_query(
     ], int(total)
 
 
-# ── SQLite fallback queries ────────────────────────────────────────────
+
 
 def _sqlite_node_query(
     q: str, institution_id: int,
@@ -341,7 +341,7 @@ def _sqlite_node_query(
     if filters.get('date_to'):
         query = query.filter(Node.date_end <= filters['date_to'])
 
-    # ── Property filters ───────────────────────────────────────────────
+
     if filters.get('has_scope_note') == 'true':
         query = query.filter(Node.scope_and_content.isnot(None), Node.scope_and_content != '')
     if filters.get('has_scope_note') == 'false':
@@ -391,7 +391,7 @@ def _sqlite_node_query(
             ~sa.exists(sa.select(NodeNote.id).where(NodeNote.node_id == Node.id))
         )
 
-    # ── Tag filters ────────────────────────────────────────────────────
+
     if filters.get('tag'):
         from app.models.geo import Tag
         query = query.filter(
@@ -417,7 +417,7 @@ def _sqlite_node_query(
             )
         )
 
-    # ── Agent name filter ──────────────────────────────────────────────
+
     if filters.get('agent_name'):
         from app.models.agent import Agent, agent_node_association
         agent_pattern = f"%{filters['agent_name'].lower()}%"
@@ -435,7 +435,7 @@ def _sqlite_node_query(
             )
         )
 
-    # ── has_agents filter ──────────────────────────────────────────────
+
     if filters.get('has_agents') == 'true':
         from app.models.agent import agent_node_association
         query = query.filter(
@@ -512,7 +512,7 @@ def _sqlite_agent_query(
     ], total
 
 
-# ── Public API ─────────────────────────────────────────────────────────
+
 
 def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
     """Compute facet counts for a search, respecting the query and active filters.
@@ -535,7 +535,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
     if len(q) < 2:
         return facets
 
-    # ── Base NODE filter (text + all filters EXCEPT the one being faceted) ──
+
     def _node_base(exclude: str = ''):
         query = db.session.query(Node.id).filter(
             Node.institution_id == institution_id,
@@ -568,7 +568,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
             query = query.filter(Node.date_end <= filters['date_to'])
         return query
 
-    # ── Level facet ──
+
     for level, count in (
         db.session.query(Node.level_of_description, sa.func.count())
         .filter(Node.id.in_(_node_base('level').subquery().select()))
@@ -578,7 +578,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
             facets['level'].append({'value': level, 'count': count})
     facets['level'].sort(key=lambda x: -x['count'])
 
-    # ── Status facet ──
+
     for status, count in (
         db.session.query(Node.status, sa.func.count())
         .filter(Node.id.in_(_node_base('status').subquery().select()))
@@ -589,7 +589,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
             facets['status'].append({'value': val, 'count': count})
     facets['status'].sort(key=lambda x: -x['count'])
 
-    # ── Hierarchy type facet ──
+
     from app.models.hierarchy import HierarchyType
     for ht_id, name, count in (
         db.session.query(HierarchyType.id, HierarchyType.name, sa.func.count(Node.id))
@@ -600,7 +600,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
         facets['hierarchy_type'].append({'value': str(ht_id), 'label': name, 'count': count})
     facets['hierarchy_type'].sort(key=lambda x: -x['count'])
 
-    # ── Classification facet (flat, across schemes) ──
+
     base_ids = _node_base('classification').subquery().select()
     rows = (
         db.session.query(Classification.id, Classification.name, Classification.code, sa.func.count(CNA.c.node_id))
@@ -613,9 +613,9 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
         [{'value': str(cid), 'label': f'{name}', 'code': code, 'count': cnt}
          for cid, name, code, cnt in rows],
         key=lambda x: -x['count']
-    )[:30]  # cap to the 30 most-populated classes
+    )[:30]
 
-    # ── Agent type facet (over matching AGENTS, not nodes) ──
+
     agent_base = db.session.query(Agent.id).filter(
         Agent.institution_id == institution_id,
         sa.or_(
@@ -636,7 +636,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
     return facets
 
 
-# ── File search (phase 1: metadata + filename, grouped by node) ───────
+
 
 def _file_query(q, institution_id, filters, limit, offset):
     """Search node attachments by filename and technical metadata.
@@ -665,7 +665,7 @@ def _file_query(q, institution_id, filters, limit, offset):
         .filter(Node.institution_id == institution_id)
     )
 
-    # Filename match (original + stored). Cheap ILIKE on short strings.
+
     base = base.filter(
         sa.or_(
             NodeAttachment.original_filename.ilike(pattern),
@@ -673,7 +673,7 @@ def _file_query(q, institution_id, filters, limit, offset):
         )
     )
 
-    # ── Technical-metadata filters ──
+
     if filters.get('file_mime'):
         base = base.filter(NodeAttachment.mime_type == filters['file_mime'])
     if filters.get('file_pronom'):
@@ -689,23 +689,23 @@ def _file_query(q, institution_id, filters, limit, offset):
     if filters.get('file_min_height'):
         base = base.filter(NodeAttachment.image_height >= int(filters['file_min_height']))
 
-    # Total distinct nodes (for pagination of node groups)
+
     node_id_rows = base.with_entities(NodeAttachment.node_id).distinct().all()
     total_nodes = len(node_id_rows)
 
-    # Page over node groups, ordered by node id for stability
+
     page_node_ids = [r[0] for r in sorted(node_id_rows)][offset:offset + limit]
     if not page_node_ids:
         return [], total_nodes
 
-    # Fetch the matching files for the paged nodes
+
     files = (
         base.filter(NodeAttachment.node_id.in_(page_node_ids))
         .order_by(NodeAttachment.node_id, NodeAttachment.original_filename)
         .all()
     )
 
-    # Group by node
+
     nodes = {n.id: n for n in Node.query.filter(Node.id.in_(page_node_ids)).all()}
     grouped: dict = {}
     for f in files:
@@ -813,11 +813,11 @@ def search(
     if 'files' in types:
         file_results, file_total = _file_query(q, institution_id, filters, limit, offset)
     else:
-        # Cheap hint for the "N files also match" link in textual modes.
+
         file_match_hint = _file_match_count(q, institution_id)
 
-    # Merge and sort by rank across the requested textual types (files stay
-    # in their own list — they are a distinct result category).
+
+
     text_types = [t for t in types if t in ('nodes', 'agents')]
     if len(text_types) > 1:
         all_results = sorted(

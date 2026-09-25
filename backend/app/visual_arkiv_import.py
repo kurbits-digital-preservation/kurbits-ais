@@ -33,7 +33,7 @@ import click
 from xml.etree.ElementTree import iterparse
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
+
 
 def _txt(el, tag: str, default: str = '') -> str:
     child = el.find(tag)
@@ -107,7 +107,7 @@ def _nivaa_to_level_name(nivaa: str) -> str:
     return mapping.get(nivaa.strip(), f'Nivå-{nivaa.strip()}')
 
 
-# ── Hierarchy bootstrap ───────────────────────────────────────────────
+
 
 def _ensure_va_hierarchy(institution_id: int, db, log, parse_codes: bool = False) -> tuple:
     """
@@ -217,7 +217,7 @@ def _year_to_date(year_str: str | None, end: bool = False):
     return date_cls(year, 1, 1)
 
 
-# ── Agent import ──────────────────────────────────────────────────────
+
 
 def _get_system_user_id(institution_id: int, db) -> int | None:
     from app.models.institution import user_institution_association
@@ -337,7 +337,7 @@ def _upsert_va_identifier(model_cls, fk_field: str, entity_id: int, scheme,
 
     if existing_for_entity:
         if existing_for_entity.value == value:
-            return  # nothing to do
+            return
         if clash and getattr(clash, fk_field) != entity_id:
             log(f'    WARNING: Visual Arkiv ID {value} is already used by another '
                 f'{entity_label} — not reassigning')
@@ -430,7 +430,7 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
     return agent, created
 
 
-# ── Fonds import ──────────────────────────────────────────────────────
+
 
 def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_user_id=None) -> object:
     from app.models.node import Node, NodeNote, NodeIdentifier
@@ -457,11 +457,11 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
         description_parts.append(f'Access restrictions: {sek_text}')
     description = '\n'.join(description_parts) if description_parts else None
 
-    # A fonds is matched across repeated imports of the same export by its
-    # Visual Arkiv ID (Arkiv_ID_Org), rather than always creating a new node.
-    # Without this, re-running the import on the same file created a second
-    # copy of the fonds every time (local_ref just got a "-2", "-3"...
-    # suffix to avoid collision, it never recognised the record).
+
+
+
+
+
     va_scheme = None
     existing_node = None
     if arkiv_id_org:
@@ -525,9 +525,9 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
         after_data={'arkiv_id_org': arkiv_id_org} if arkiv_id_org else None,
     )
 
-    # Notes are upserted by type rather than appended, so re-importing the
-    # same export doesn't pile up duplicate "general"/"administrative_history"
-    # notes on a fonds that's matched via existing_node above.
+
+
+
     def _upsert_note(note_type, content):
         if not content:
             return
@@ -549,7 +549,7 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
     return node
 
 
-# ── AA Series import ──────────────────────────────────────────────────
+
 
 def _build_serie_node(el, parent_node, level_name, local_ref, institution_id, ht, db, log, system_user_id=None):
     """Create a single Series / Sub-series / Sub-sub-series node from <SerieAA>."""
@@ -629,7 +629,7 @@ def _import_series_parsed(arkiv_el, fonds_node, institution_id, ht, levels, db, 
     """
     from app.models.node import Node
 
-    # Collect all series elements keyed by their full code
+
     series_els: dict[str, object] = {}
     for serie_el in arkiv_el.findall('.//SerieAA'):
         code = _serie_code(serie_el)
@@ -711,8 +711,8 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
     omf_mgd   = _txt(el, 'Volym_OmfMgd', '0')
     forvtyp   = _txt(el, 'Volyml_ForvaringsenhetTyp') or None
 
-    # Dates are already captured structurally as date_start/date_end below —
-    # repeating them in the title is redundant.
+
+
     title = f'Vol. {volnr}'
 
     description_parts = []
@@ -758,7 +758,7 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
     return node
 
 
-# ── Classification import ─────────────────────────────────────────────
+
 
 def _ensure_klass_root(institution_id: int, ht, version_label: str, db, log, system_user_id=None) -> object:
     """
@@ -911,7 +911,7 @@ def _link_node_to_classification(node, classification, db) -> None:
         )
 
 
-# ── HandlingsSlag / FörvaringsenhetRel import ─────────────────────────
+
 
 def _build_handlingsslag_node(hs_el, parent_node, institution_id, ht, strukt_map,
                                db, log, system_user_id, level_name='Series') -> object:
@@ -1058,16 +1058,16 @@ def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
     omf_mgd    = _txt(el, 'ForvenhRel_OmfMgd', '0')
     forvtyp    = _txt(el, 'ForvenhRel_ForvaringsenhetTyp') or None
 
-    # Etrad1/Etrad2 are VA7's PRINTED LABEL LINE fields — free text meant for
-    # a physical box/spine label, not a reliable source for the record title.
-    # They've been seen holding boilerplate that belongs in the remarks field
-    # instead (e.g. "Anmärkningar - Förvaringsenhet 1"), silently corrupting
-    # titles. Deliberately not used here — the systematic "Vol. <beteckning>"
-    # designation is always used instead. This only affects the process-based
-    # (verksamhetsbaserad / HandlingsSlag) import path; AA-schema volumes are
-    # built by _import_volym, a separate function that never touches Etrad.
-    # Dates are already captured structurally as date_start/date_end below —
-    # repeating them in the title is redundant.
+
+
+
+
+
+
+
+
+
+
     title = f'Vol. {beteckning}'
 
     description_parts = []
@@ -1116,7 +1116,7 @@ def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
     return node
 
 
-# ── Agent -> Fonds link ───────────────────────────────────────────────
+
 
 def _link_agent_to_node(agent, fonds_node, institution_id: int, db) -> None:
     from app.models.agent import agent_node_association
@@ -1138,7 +1138,7 @@ def _link_agent_to_node(agent, fonds_node, institution_id: int, db) -> None:
         )
 
 
-# ── Schema detection ──────────────────────────────────────────────────
+
 
 def _detect_schema(arkiv_el) -> str:
     """Return 'klass' if classification-based, else 'aa'."""
@@ -1149,7 +1149,7 @@ def _detect_schema(arkiv_el) -> str:
     return 'aa'
 
 
-# ── Main iterparse walk ───────────────────────────────────────────────
+
 
 def _stream_import(filepath: str, institution_id: int, force_agents: bool,
                    dry_run: bool, batch_size: int, parse_codes: bool, db, log) -> dict:
@@ -1283,7 +1283,7 @@ def _dry_run_arkivbildare(el, log, stats):
                 stats['volumes_created'] += len(serie_el.findall('.//Volym'))
 
 
-# ── CLI command registration ──────────────────────────────────────────
+
 
 def register_visual_arkiv_import(app):
     @app.cli.command('import-visual-arkiv')

@@ -1,6 +1,6 @@
 """
-Converts EAC-CPF ParsedAgent objects into Kurbits Agent model instances.
-Handles duplicate detection, agent-to-agent relations, and notes.
+Converts EAC-CPF into Kurbits Agent model instances.
+
 """
 from __future__ import annotations
 from app.extensions import db

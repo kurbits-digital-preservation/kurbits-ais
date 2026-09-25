@@ -79,7 +79,7 @@ def run_whisper(task_id: str) -> None:
     institution_id = attachment.node.institution_id
     node_id        = attachment.node_id
 
-    # ── Get Whisper service config ────────────────────────────────────
+
     try:
         wc = _get_whisper_config(institution_id)
     except RuntimeError as e:
@@ -87,8 +87,8 @@ def run_whisper(task_id: str) -> None:
         db.session.commit()
         return
 
-    # Use task-level model override if set, otherwise fall back to
-    # institution whisper config, then the model_size from the task options
+
+
     model = wc['model'] or model_size
 
     upload_dir = os.path.join(
@@ -103,7 +103,7 @@ def run_whisper(task_id: str) -> None:
         db.session.commit()
         return
 
-    # ── Submit job to Whisper service ─────────────────────────────────
+
     task.set_progress(5)
     db.session.commit()
 
@@ -114,7 +114,7 @@ def run_whisper(task_id: str) -> None:
                 files={'file': (attachment.original_filename, f, attachment.mime_type)},
                 data={'model': model},
                 headers={'x-api-key': wc['api_key']},
-                timeout=120,  # upload timeout
+                timeout=120,
             )
         resp.raise_for_status()
         job_id = resp.json()['job_id']
@@ -128,7 +128,7 @@ def run_whisper(task_id: str) -> None:
     task.set_progress(10)
     db.session.commit()
 
-    # ── Poll for completion ───────────────────────────────────────────
+
     elapsed  = 0
     last_pct = 10
 
@@ -151,7 +151,7 @@ def run_whisper(task_id: str) -> None:
         status   = job_data.get('status')
         progress = job_data.get('progress', 0)
 
-        # Map service progress (0-100) into our task progress (10-95)
+
         mapped_pct = 10 + int(progress * 0.85)
         if mapped_pct > last_pct:
             last_pct = mapped_pct
@@ -193,7 +193,7 @@ def run_whisper(task_id: str) -> None:
             db.session.commit()
             return
 
-    # Timeout
+
     task.set_error(f'Timed out waiting for Whisper job {job_id} after {MAX_WAIT}s')
     db.session.commit()
 

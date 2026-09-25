@@ -1,8 +1,7 @@
 """
 EAD 2002 export.
 
-Produces valid EAD 2002 XML from a Kurbits node (with optional descendants).
-Spec: https://www.loc.gov/ead/ead2002.xsd
+Produces valid EAD 2002 XML from a Kurbits node.
 """
 from __future__ import annotations
 from typing import Optional
@@ -14,7 +13,7 @@ EAD_NS = 'urn:isbn:1-931666-22-9'
 XLINK_NS = 'http://www.w3.org/1999/xlink'
 XSI_NS = 'http://www.w3.org/2001/XMLSchema-instance'
 
-# Map Kurbits level names to EAD @level attribute values
+
 LEVEL_MAP = {
     'fonds':        'fonds',
     'sub-fonds':    'subfonds',
@@ -81,7 +80,7 @@ def _build_did(c: etree._Element, node: Node) -> None:
         _text_el(langmaterial, 'language', node.language,
                  {'langcode': node.language[:3].lower()})
 
-    # ref_code as abstract / repository identifier
+
     if node.ref_code:
         _text_el(did, 'unitid', node.ref_code,
                  {'label': 'Full reference code', 'type': 'local'})
@@ -95,10 +94,10 @@ def _build_component(parent: etree._Element, node: Node,
     if ol:
         attrs['otherlevel'] = ol
 
-    # Root element is <archdesc>, nested are <c> (component)
+
     tag = 'archdesc' if parent.tag in ('archdesc', 'ead') else 'c'
-    # Actually archdesc is only the top level; nested are always <c>
-    # We handle this at call site
+
+
     tag = 'c'
     c = etree.SubElement(parent, tag, attrs)
 
@@ -124,9 +123,9 @@ def _build_component(parent: etree._Element, node: Node,
         otherfindaid = etree.SubElement(c, 'otherfindaid')
         _text_el(otherfindaid, 'p', node.finding_aids)
 
-    # Notes
+
     for note in node.notes:
-        if note.is_public or True:  # include all notes in export
+        if note.is_public or True:
             odd = etree.SubElement(c, 'odd')
             odd.set('type', note.note_type)
             _text_el(odd, 'p', note.content)
@@ -156,7 +155,7 @@ def export_node(node: Node, include_children: bool = True) -> bytes:
         f'{EAD_NS} http://www.loc.gov/ead/ead.xsd'
     )
 
-    # ── eadheader ──────────────────────────────────────────────────────
+
     eadheader = etree.SubElement(ead, 'eadheader',
                                   {'langencoding': 'iso639-2b',
                                    'countryencoding': 'iso3166-1',
@@ -175,7 +174,7 @@ def export_node(node: Node, include_children: bool = True) -> bytes:
     creation = etree.SubElement(profiledesc, 'creation')
     creation.text = 'Exported from Kurbits AIS'
 
-    # ── archdesc ───────────────────────────────────────────────────────
+
     level = _ead_level(node.level_of_description)
     attrs = {'level': level}
     ol = _otherlevel_attr(node.level_of_description)

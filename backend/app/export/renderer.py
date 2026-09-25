@@ -1,8 +1,5 @@
 """
 Template-based export engine for Kurbits.
-
-Renders a node (and optional descendants) using a Jinja2 template.
-New formats: add a template file + register in FORMATS.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -20,12 +17,12 @@ _env = Environment(
     lstrip_blocks=True,
 )
 
-# Add tojson filter (Jinja2 doesn't include it by default outside Flask)
+
 import json as _json
 _env.filters['tojson'] = lambda v: _json.dumps(v, ensure_ascii=False)
 
 
-# ── Format registry ───────────────────────────────────────────────────
+
 
 class ExportFormat:
     def __init__(self, label: str, template: str,

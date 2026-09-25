@@ -1,14 +1,13 @@
 """
 Native PDF text extraction using pdfplumber.
-Fast path for born-digital PDFs that already have embedded text.
 """
 from __future__ import annotations
 import logging
 
 log = logging.getLogger(__name__)
 
-# Threshold: if average chars per page is below this,
-# the PDF is likely scanned and OCR is needed instead
+
+
 MIN_CHARS_PER_PAGE = 80
 
 

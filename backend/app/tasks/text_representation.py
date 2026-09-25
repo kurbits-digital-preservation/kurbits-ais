@@ -18,7 +18,7 @@ def create_text_representation(
     institution_id: int,
     source_filename: str,
     text: str,
-    method: str,          # 'ocr' | 'whisper'
+    method: str,
     upload_folder: str,
     uploaded_by_id: int,
 ) -> bool:
@@ -36,7 +36,7 @@ def create_text_representation(
             log.warning(f'create_text_representation: node {node_id} not found')
             return False
 
-        # ── Find or create the RepresentationType ─────────────────────
+
         rep_type = RepresentationType.query.filter_by(
             institution_id=institution_id,
             name=TRANSCRIPTION_TYPE_NAME,
@@ -52,12 +52,12 @@ def create_text_representation(
             db.session.flush()
             log.info(f'Created RepresentationType "{TRANSCRIPTION_TYPE_NAME}" for institution {institution_id}')
 
-        # ── Build label for the representation ─────────────────────────
+
         base_name = source_filename.rsplit('.', 1)[0]
         method_label = 'OCR' if method == 'ocr' else 'Whisper'
         rep_label = f'{base_name} ({method_label})'
 
-        # ── Create the representation ──────────────────────────────────
+
         representation = NodeRepresentation(
             node_id=node_id,
             rep_type_id=rep_type.id,
@@ -67,7 +67,7 @@ def create_text_representation(
         db.session.add(representation)
         db.session.flush()
 
-        # ── Write text to disk as .txt ─────────────────────────────────
+
         upload_dir = os.path.join(upload_folder, str(institution_id), str(node_id))
         os.makedirs(upload_dir, exist_ok=True)
 
@@ -81,7 +81,7 @@ def create_text_representation(
 
         file_size = os.path.getsize(file_path)
 
-        # ── Create NodeAttachment linked to the representation ─────────
+
         attachment = NodeAttachment(
             node_id=node_id,
             representation_id=representation.id,

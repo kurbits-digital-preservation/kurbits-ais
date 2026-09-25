@@ -4,20 +4,6 @@ EAC-CPF (Encoded Archival Context — Corporate Bodies, Persons, and Families) p
 Supports:
   - EAC-CPF 2010 (urn:isbn:1-931666-33-4) — most archives
   - EAC-CPF 2022 (https://archivists.org/ns/eac/v2) — newer exports
-
-Namespace-agnostic: uses local-name() matching so it works regardless of
-how the namespace is declared in the source document.
-
-Parses:
-  - entityType → AgentType (person / corporateBody→organization / family)
-  - nameEntry / authorizedForm → authorized_form + name
-  - existDates → date_from / date_to
-  - biogHist / structureOrGenealogy → description
-  - generalContext → description (appended)
-  - mandate / occupation / function → description (appended)
-  - recordId / otherRecordId → identifier
-  - relations (cpfRelation) → agent_relations list
-  - notes (maintenanceHistory) → ignored (internal provenance)
 """
 from __future__ import annotations
 from typing import Optional
@@ -26,16 +12,16 @@ from lxml import etree
 
 class ParsedAgent:
     def __init__(self):
-        self.agent_type: str = 'organization'          # person | organization | family
-        self.name: str = ''                             # preferred name
-        self.authorized_form: Optional[str] = None     # authorized form of name
-        self.parallel_names: list[str] = []            # other authorized forms
+        self.agent_type: str = 'organization'
+        self.name: str = ''
+        self.authorized_form: Optional[str] = None
+        self.parallel_names: list[str] = []
         self.date_from: Optional[str] = None
         self.date_to: Optional[str] = None
         self.description: Optional[str] = None
         self.identifier: Optional[str] = None
-        self.relations: list[dict] = []                # [{name, relation_type, identifier}]
-        self.source_id: str = ''                       # recordId from the file
+        self.relations: list[dict] = []
+        self.source_id: str = ''
 
 
 class ParseResult:
@@ -62,8 +48,6 @@ def _agent_summary(a: ParsedAgent) -> dict:
         'identifier': a.identifier,
     }
 
-
-# ── Namespace-agnostic helpers ─────────────────────────────────────────
 
 def _localname(tag_or_el) -> str:
     tag = tag_or_el if isinstance(tag_or_el, str) else tag_or_el.tag
@@ -122,7 +106,6 @@ def _p_text(el: Optional[etree._Element]) -> str:
     return _text(el)
 
 
-# ── Entity type mapping ────────────────────────────────────────────────
 
 _ENTITY_TYPE_MAP = {
     'person':              'person',
@@ -143,8 +126,6 @@ def _parse_entity_type(el: etree._Element) -> str:
     return 'organization'
 
 
-# ── Name parsing ───────────────────────────────────────────────────────
-
 def _parse_names(identity_el: etree._Element) -> tuple[str, Optional[str], list[str]]:
     """
     Returns (name, authorized_form, parallel_names).
@@ -158,14 +139,13 @@ def _parse_names(identity_el: etree._Element) -> tuple[str, Optional[str], list[
     parallel_names = []
 
     for ne in name_entries:
-        # Check if this is the authorized form
+        # Check if  authorized form
         is_authorized = (
             _find(ne, 'authorizedForm') is not None
             or ne.get('localType', '').lower() in ('authorized', 'authorizedform')
             or ne.get('scriptCode') is not None  # 2022 schema
         )
 
-        # Build full name from parts
         parts = _findall_deep(ne, 'part')
         if parts:
             full = ' '.join(p.text.strip() for p in parts if p.text and p.text.strip())
@@ -187,14 +167,11 @@ def _parse_names(identity_el: etree._Element) -> tuple[str, Optional[str], list[
         else:
             parallel_names.append(full)
 
-    # Fallback
     if not name and authorized_form:
         name = authorized_form
 
     return name, authorized_form, parallel_names
 
-
-# ── Date parsing ───────────────────────────────────────────────────────
 
 def _parse_dates(description_el: etree._Element) -> tuple[Optional[str], Optional[str]]:
     """Extract existDates / dates as (date_from, date_to)."""
@@ -202,7 +179,6 @@ def _parse_dates(description_el: etree._Element) -> tuple[Optional[str], Optiona
     if exist_dates is None:
         return None, None
 
-    # <dateRange><fromDate>/<toDate>
     date_range = _find(exist_dates, 'dateRange')
     if date_range is not None:
         from_el = _find(date_range, 'fromDate')
@@ -211,7 +187,6 @@ def _parse_dates(description_el: etree._Element) -> tuple[Optional[str], Optiona
         date_to = (to_el.get('standardDate') or _text(to_el) or '').strip()[:10] or None
         return date_from, date_to
 
-    # <date standardDate="YYYY"> or <date>YYYY</date>
     date_el = _find(exist_dates, 'date')
     if date_el is not None:
         val = (date_el.get('standardDate') or _text(date_el) or '').strip()[:10]
@@ -220,30 +195,24 @@ def _parse_dates(description_el: etree._Element) -> tuple[Optional[str], Optiona
     return None, None
 
 
-# ── Description assembly ───────────────────────────────────────────────
-
 def _parse_description(description_el: etree._Element) -> Optional[str]:
     parts = []
 
-    # biogHist — biographical/historical note
     for bh in _findall_deep(description_el, 'biogHist'):
         t = _p_text(bh).strip()
         if t:
             parts.append(t)
 
-    # structureOrGenealogy — organizational structure or genealogy
     for sg in _findall_deep(description_el, 'structureOrGenealogy'):
         t = _p_text(sg).strip()
         if t:
             parts.append(t)
 
-    # generalContext
     for gc in _findall_deep(description_el, 'generalContext'):
         t = _p_text(gc).strip()
         if t:
             parts.append(t)
 
-    # mandate, occupation, function — summarised
     for tag in ('mandate', 'occupation', 'function', 'legalStatus'):
         for el in _findall_deep(description_el, tag):
             t = _p_text(el).strip()
@@ -252,8 +221,6 @@ def _parse_description(description_el: etree._Element) -> Optional[str]:
 
     return '\n\n'.join(parts) if parts else None
 
-
-# ── Relations ──────────────────────────────────────────────────────────
 
 def _parse_relations(relations_el: Optional[etree._Element]) -> list[dict]:
     if relations_el is None:
@@ -264,7 +231,6 @@ def _parse_relations(relations_el: Optional[etree._Element]) -> list[dict]:
         rel_type = cpf_rel.get('cpfRelationType', '') or cpf_rel.get('relationType', '')
         href = cpf_rel.get('{http://www.w3.org/1999/xlink}href', '') or cpf_rel.get('href', '')
 
-        # Name of related entity
         related_entry = _find(cpf_rel, 'relationEntry')
         name = _text(related_entry).strip() if related_entry is not None else ''
 
@@ -277,22 +243,17 @@ def _parse_relations(relations_el: Optional[etree._Element]) -> list[dict]:
     return result
 
 
-# ── Identifier ────────────────────────────────────────────────────────
-
 def _parse_identifier(control_el: etree._Element) -> str:
     record_id = _find(control_el, 'recordId')
     if record_id is not None and record_id.text:
         return record_id.text.strip()
 
-    # Try otherRecordId (ISNI, VIAF etc.)
     for other in _findall_deep(control_el, 'otherRecordId'):
         if other.text and other.text.strip():
             return other.text.strip()
 
     return ''
 
-
-# ── Single <eac-cpf> element ───────────────────────────────────────────
 
 def _parse_eac_element(eac_el: etree._Element, result: ParseResult) -> Optional[ParsedAgent]:
     agent = ParsedAgent()
@@ -304,7 +265,7 @@ def _parse_eac_element(eac_el: etree._Element, result: ParseResult) -> Optional[
 
     agent.source_id = _parse_identifier(control_el)
 
-    # Identity
+
     identity_el = _find(eac_el, 'identity')
     if identity_el is None:
         result.warnings.append(f'Record {agent.source_id} missing <identity> — skipped')
@@ -317,20 +278,20 @@ def _parse_eac_element(eac_el: etree._Element, result: ParseResult) -> Optional[
         result.warnings.append(f'Record {agent.source_id} has no parseable name — skipped')
         return None
 
-    # Description
+
     description_el = _find(eac_el, 'description')
     if description_el is not None:
         agent.date_from, agent.date_to = _parse_dates(description_el)
         agent.description = _parse_description(description_el)
 
-    # Relations
+
     relations_el = _find(eac_el, 'relations')
     agent.relations = _parse_relations(relations_el)
 
     return agent
 
 
-# ── Public API ─────────────────────────────────────────────────────────
+
 
 def parse_file(xml_bytes: bytes) -> ParseResult:
     """
@@ -352,7 +313,7 @@ def parse_file(xml_bytes: bytes) -> ParseResult:
 
     root_ln = _localname(root.tag)
 
-    # Collect all eac-cpf elements
+
     eac_elements = []
 
     if root_ln in ('eac-cpf', 'eac'):
@@ -360,7 +321,7 @@ def parse_file(xml_bytes: bytes) -> ParseResult:
     elif root_ln in ('eac-cpf-collection', 'collection'):
         eac_elements = [c for c in root if _localname(c.tag) in ('eac-cpf', 'eac')]
     else:
-        # Try to find eac-cpf descendants
+
         eac_elements = _findall_deep(root, 'eac-cpf') + _findall_deep(root, 'eac')
 
     if not eac_elements:

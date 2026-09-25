@@ -14,7 +14,7 @@ from flask import current_app
 log = logging.getLogger(__name__)
 
 
-# ── Serialisation ─────────────────────────────────────────────────────
+
 
 def _iso(v) -> Optional[str]:
     if v is None:
@@ -31,7 +31,7 @@ def build_node_payload(node) -> dict:
 
     institution = node.institution
 
-    # Agents
+
     agents = []
     for agent in node.agents:
         rel = db.session.execute(
@@ -51,7 +51,7 @@ def build_node_payload(node) -> dict:
 
 
 
-    # Classifications — lazy='dynamic' so call .all()
+
     classifications = []
     for c in node.classifications.all():
         classifications.append({
@@ -60,7 +60,7 @@ def build_node_payload(node) -> dict:
             'full_code': c.get_full_code() if hasattr(c, 'get_full_code') else c.code,
         })
 
-    # Public notes only
+
     notes = [
         {
             'note_type': n.note_type,
@@ -70,7 +70,7 @@ def build_node_payload(node) -> dict:
         if n.is_public
     ]
 
-    # Tags — lazy='dynamic' so call .all()
+
     tags = [
         {
             'id': t.id,
@@ -80,7 +80,7 @@ def build_node_payload(node) -> dict:
         for t in node.tags.all()
     ]
 
-    # Representations (files)
+
     representations = []
     for rep in node.representations:
         files = []
@@ -99,7 +99,7 @@ def build_node_payload(node) -> dict:
             'files': files,
         })
 
-    # Standalone attachments
+
     attachments = [
         {
             'id': a.id,
@@ -113,7 +113,7 @@ def build_node_payload(node) -> dict:
         if a.representation_id is None
     ]
 
-    # Breadcrumb
+
     breadcrumb = []
     ancestor = node.parent
     while ancestor:
@@ -183,7 +183,7 @@ def build_unpublish_payload(node) -> dict:
     }
 
 
-# ── HMAC signing ──────────────────────────────────────────────────────
+
 
 def _sign(payload_bytes: bytes, secret: str) -> str:
     return hmac.new(
@@ -193,7 +193,7 @@ def _sign(payload_bytes: bytes, secret: str) -> str:
     ).hexdigest()
 
 
-# ── Dispatch ──────────────────────────────────────────────────────────
+
 
 def _portal_settings(institution) -> Optional[dict]:
     settings = institution.settings or {}
@@ -263,8 +263,8 @@ def _enqueue_file_sync(node, portal: dict) -> None:
     from app.extensions import db
     from flask import current_app
 
-    # created_by_id is non-nullable — fall back to created_by_id if updated_by_id is None
-    # and further fall back to any admin user if both are None (e.g. bulk sync)
+
+
     creator_id = node.updated_by_id or node.created_by_id
     if not creator_id:
         from app.models.user import User

@@ -1,9 +1,5 @@
 """
 EAC-CPF export for a single agent.
-
-Produces EAC-CPF 2010 XML (urn:isbn:1-931666-33-4). The output is designed to
-round-trip through this system's own EAC-CPF importer: entityType, nameEntry/
-authorizedForm, existDates, and biogHist all map back to the same fields.
 """
 from datetime import datetime, timezone
 from lxml import etree
@@ -12,16 +8,14 @@ EAC_NS = 'urn:isbn:1-931666-33-4'
 XLINK_NS = 'http://www.w3.org/1999/xlink'
 NSMAP = {None: EAC_NS, 'xlink': XLINK_NS}
 
-# AgentType (model) -> EAC-CPF entityType
+
 _ENTITY_TYPE = {
     'person': 'person',
     'organization': 'corporateBody',
     'family': 'family',
-    'software': 'corporateBody',   # no EAC entityType for software; nearest is corporateBody
+    'software': 'corporateBody',   # nearest is corporateBody
 }
 
-# Kurbits agent->resource relationship names -> EAC-CPF resourceRelationType.
-# EAC-CPF 2010 allows: creatorOf | subjectOf | other (+ arcrole for detail).
 _RESOURCE_REL_TYPE = {
     'creator': 'creatorOf',
     'author': 'creatorOf',
@@ -32,8 +26,6 @@ _RESOURCE_REL_TYPE = {
     'owner': 'other',
 }
 
-# Kurbits agent<->agent relationship names -> EAC-CPF cpfRelationType.
-# EAC-CPF 2010 allows: identity | hierarchical | temporal | family | associative.
 _CPF_REL_TYPE = {
     'member of': 'hierarchical',
     'member': 'hierarchical',
@@ -130,9 +122,7 @@ def export_agent_eac(agent, institution=None) -> bytes:
             if para:
                 _sub(biog, 'p', para)
 
-    # ── Notes ─────────────────────────────────────────────────────────
-    # Map each note type to a standard EAC-CPF element so they round-trip
-    # and remain meaningful in other EAC-CPF tools.
+
     notes = list(getattr(agent, 'notes', None) or [])
 
     def _note_paras(parent, text):
@@ -154,13 +144,10 @@ def export_agent_eac(agent, institution=None) -> bytes:
             gc = _sub(description, 'generalContext')
             _note_paras(gc, content)
         elif ntype == 'sources':
-            # collected into control/sources below (see note_sources)
             pass
         else:
-            # maintenance / internal → maintenanceHistory event note
             pass
 
-    # external identifiers as <source> links in control, plus a note
     ids = []
     for attr, label in (('isni', 'ISNI'), ('viaf', 'VIAF'),
                         ('wikidata', 'Wikidata'), ('orcid', 'ORCID'),
@@ -168,7 +155,6 @@ def export_agent_eac(agent, institution=None) -> bytes:
         val = getattr(agent, attr, None)
         if val:
             ids.append((label, val))
-    # Source notes -> control/sources (alongside identifier sources)
     source_notes = [n for n in notes
                     if (getattr(n, 'note_type', '') or '') == 'sources'
                     and (getattr(n, 'content', '') or '').strip()]
@@ -186,7 +172,6 @@ def export_agent_eac(agent, institution=None) -> bytes:
                 if para:
                     _sub(de, 'p', para)
 
-    # maintenance / internal notes -> maintenanceHistory events
     for n in notes:
         ntype = getattr(n, 'note_type', '') or ''
         content = getattr(n, 'content', '') or ''
@@ -200,7 +185,6 @@ def export_agent_eac(agent, institution=None) -> bytes:
             _sub(ev, 'agent', getattr(n, 'created_by', None) or 'Kurbits')
             desc_ev = _sub(ev, 'eventDescription', content.strip()[:500])
 
-    # ── Relations: resourceRelation (to resources) + cpfRelation (to agents) ──
     resource_links = list(getattr(agent, 'resource_links', None) or [])
     agent_relations = list(getattr(agent, 'relations', None) or [])
 
@@ -222,7 +206,6 @@ def export_agent_eac(agent, institution=None) -> bytes:
             _sub(rr, 'relationEntry', title or ref_code or '')
 
         for ar in agent_relations:
-            # ar expected shape from serializer: {agent: {name,...}, association_type, direction}
             if isinstance(ar, dict):
                 other = ar.get('agent') or {}
                 other_name = (other.get('name') if isinstance(other, dict) else None) or ar.get('name')

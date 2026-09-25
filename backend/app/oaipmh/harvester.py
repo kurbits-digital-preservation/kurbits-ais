@@ -35,7 +35,7 @@ class HarvestRecord:
         self.datestamp: str = ''
         self.deleted: bool = False
 
-        # Normalised fields
+
         self.title: str = ''
         self.description: Optional[str] = None
         self.scope_and_content: Optional[str] = None
@@ -50,7 +50,7 @@ class HarvestRecord:
         self.creators: list[str] = []
         self.subjects: list[str] = []
         self.notes: list[dict] = []
-        self.children: list['HarvestRecord'] = []  # nested <c> components
+        self.children: list['HarvestRecord'] = []
 
 
 class HarvestResult:
@@ -83,7 +83,7 @@ def _record_summary(r: HarvestRecord) -> dict:
     }
 
 
-# ── HTTP helpers ──────────────────────────────────────────────────────
+
 
 def _fetch_xml(url: str) -> etree._Element:
     try:
@@ -117,17 +117,17 @@ def _check_oai_error(root: etree._Element) -> None:
 def _build_url(base: str, **params) -> str:
     """Build OAI-PMH URL. Encodes spaces as %20 (not +) to preserve OAI identifiers."""
     clean = base.rstrip('?&')
-    # Use quote() for values so spaces become %20, not +
+
     parts = []
     for k, v in params.items():
         if v is not None:
-            # Strip the trailing underscore from from_ param name
+
             key = k.rstrip('_')
             parts.append(f'{key}={quote(str(v), safe="/:@!$&'()*+,;=")}')
     return clean + '?' + '&'.join(parts)
 
 
-# ── Record parsers ────────────────────────────────────────────────────
+
 
 def _text(el: Optional[etree._Element]) -> Optional[str]:
     if el is None:
@@ -229,11 +229,7 @@ def _find_deep_local(el: etree._Element, *localnames: str) -> etree._Element | N
 
 def _parse_ead_metadata(metadata_el: etree._Element, rec: HarvestRecord,
                          result: HarvestResult) -> None:
-    """
-    Parse EAD metadata block from OAI response.
-    Namespace-agnostic — works with EAD 2002, APE EAD, and bare EAD.
-    """
-    # Find the <ead> root — may be directly in metadata or one level down
+
     ead_el = None
     for el in [metadata_el] + list(metadata_el):
         if _localname(el.tag) == 'ead':
@@ -257,13 +253,13 @@ def _parse_ead_metadata(metadata_el: etree._Element, rec: HarvestRecord,
         title_el = _find_local(did, 'unittitle')
         rec.title = _text(title_el) or ''
 
-        # unitids
+
         for uid in _findall_local(did, 'unitid'):
             text = (uid.text or '').strip()
             if text and not rec.local_ref:
                 rec.local_ref = text
 
-        # unitdate
+
         date_el = _find_local(did, 'unitdate')
         if date_el is not None:
             normal = date_el.get('normal', '')
@@ -274,13 +270,13 @@ def _parse_ead_metadata(metadata_el: etree._Element, rec: HarvestRecord,
             elif normal:
                 rec.date_from = normal[:4]
 
-        # physdesc/extent
+
         physdesc = _find_local(did, 'physdesc')
         if physdesc is not None:
             ext = _find_local(physdesc, 'extent')
             rec.extent = _text(ext) or _text(physdesc)
 
-        # langmaterial
+
         langmaterial = _find_local(did, 'langmaterial')
         if langmaterial is not None:
             lang_el = _find_local(langmaterial, 'language')
@@ -289,13 +285,13 @@ def _parse_ead_metadata(metadata_el: etree._Element, rec: HarvestRecord,
             else:
                 rec.language = _text(langmaterial)
 
-        # origination/creators
+
         for orig in _findall_local(did, 'origination'):
             name = _text(orig)
             if name:
                 rec.creators.append(name)
 
-    # Narrative fields
+
     scope = _find_local(archdesc, 'scopecontent')
     rec.scope_and_content = _p_text(scope)
 
@@ -313,7 +309,7 @@ def _parse_ead_metadata(metadata_el: etree._Element, rec: HarvestRecord,
         if content:
             rec.notes.append({'type': odd.get('type', 'general'), 'content': content})
 
-    # Parse <dsc> into child records
+
     dsc = _find_local(archdesc, 'dsc')
     if dsc is not None:
         for child_el in dsc:
@@ -382,7 +378,7 @@ def _parse_c_element(c_el: etree._Element, result: HarvestResult) -> 'HarvestRec
         if content:
             rec.notes.append({'type': odd.get('type', 'general'), 'content': content})
 
-    # Recurse into <dsc> or direct <c> children
+
     dsc = _find_local(c_el, 'dsc')
     children_container = dsc if dsc is not None else c_el
     for child_el in children_container:
@@ -421,7 +417,7 @@ def _parse_record(record_el: etree._Element, metadata_prefix: str,
     return rec
 
 
-# ── Public API ────────────────────────────────────────────────────────
+
 
 def get_record(base_url: str, identifier: str,
                metadata_prefix: str = 'oai_dc') -> HarvestResult:
@@ -493,7 +489,7 @@ def list_records(base_url: str,
                 result.records.append(rec)
                 result.total_fetched += 1
 
-        # Check resumption token
+
         token_el = list_el.find(f'{{{OAI_NS}}}resumptionToken')
         if token_el is not None and token_el.text and token_el.text.strip():
             url = _build_url(base_url,

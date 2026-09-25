@@ -49,7 +49,7 @@ def _resolve_level(level_hint: Optional[str],
         if level_hint.lower() in available:
             return available[level_hint.lower()]
 
-    # Default to the first (lowest sort_order) level
+
     levels = sorted(hierarchy_type.levels, key=lambda l: l.sort_order)
     if levels:
         fallback = levels[0].name
@@ -113,20 +113,20 @@ def records_to_nodes(harvest: HarvestResult,
         if not level_name:
             return None
 
-        # local_ref may be a full path like "SE/GLA/16213/B" — take only the last segment
+
         raw_ref = (rec.local_ref or
                    (rec.identifier.split(':')[-1] if rec.identifier else '') or
                    'imported')
-        # Strip leading path components — keep only what comes after the last '/'
-        # that isn't a country/institution prefix shared with the parent
+
+
         if parent and '/' in raw_ref:
-            parent_ref = parent.ref_code.split('/', 1)[-1]  # strip institution prefix
+            parent_ref = parent.ref_code.split('/', 1)[-1]
             if raw_ref.startswith(parent_ref + '/'):
                 raw_ref = raw_ref[len(parent_ref) + 1:]
             elif '/' in raw_ref:
                 raw_ref = raw_ref.split('/')[-1]
         base_ref = raw_ref or 'imported'
-        # Remove any middle dots used as separators in some EAD exports
+
         base_ref = base_ref.replace('·', '-').strip()
         local_ref = _unique_local_ref(
             base_ref, institution_id,
@@ -165,7 +165,7 @@ def records_to_nodes(harvest: HarvestResult,
             except (ValueError, TypeError):
                 pass
 
-        # Compute ref_code BEFORE add — ref_code is NOT NULL
+
         if parent:
             node.ref_code = f'{parent.ref_code}/{local_ref}'
         else:
@@ -206,7 +206,7 @@ def records_to_nodes(harvest: HarvestResult,
             'oai_identifier': rec.identifier,
         })
 
-        # Recursively create child nodes from <dsc>/<c> elements
+
         for child_rec in rec.children:
             _create_node(child_rec, node)
 

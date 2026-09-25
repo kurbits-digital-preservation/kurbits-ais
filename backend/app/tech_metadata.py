@@ -1,15 +1,5 @@
 """
 Technical metadata extraction for uploaded files.
-
-Extracts:
-  - MD5 + SHA-256 checksums
-  - MIME type via libmagic (more reliable than extension-based)
-  - Image: dimensions, DPI, colour mode, bit depth, EXIF/IPTC data
-  - PDF: page count (via Pillow PDF support)
-  - AV: duration, codec, bitrate (via ffprobe if available)
-  - Generates thumbnail for images and PDFs
-
-All extraction is non-fatal — if a step fails, the others still run.
 """
 from __future__ import annotations
 
@@ -22,8 +12,8 @@ from pathlib import Path
 from typing import Optional
 
 
-# ── PRONOM format map (common formats) ────────────────────────────────
-# Maps mime_type → PRONOM ID for the most common archival formats
+
+
 PRONOM_MAP = {
     'image/tiff':                'fmt/353',
     'image/jpeg':                'fmt/41',
@@ -31,7 +21,7 @@ PRONOM_MAP = {
     'image/gif':                 'fmt/3',
     'image/webp':                'fmt/1507',
     'image/jp2':                 'x-fmt/392',
-    'application/pdf':           'fmt/276',   # PDF 1.7 default; refined below
+    'application/pdf':           'fmt/276',
     'text/plain':                'x-fmt/111',
     'text/csv':                  'x-fmt/18',
     'text/html':                 'fmt/96',
@@ -94,7 +84,7 @@ def _clean_exif_value(val) -> object:
     if isinstance(val, (int, float, str, bool, type(None))):
         return val
     if hasattr(val, 'numerator') and hasattr(val, 'denominator'):
-        # IFDRational
+
         try:
             return float(val)
         except Exception:
@@ -103,7 +93,7 @@ def _clean_exif_value(val) -> object:
 
 
 EXIF_TAGS_OF_INTEREST = {
-    # Camera / capture
+
     271:  'Make',
     272:  'Model',
     305:  'Software',
@@ -117,22 +107,22 @@ EXIF_TAGS_OF_INTEREST = {
     37383: 'MeteringMode',
     37384: 'LightSource',
     37385: 'Flash',
-    # GPS
+
     1:    'GPSLatitudeRef',
     2:    'GPSLatitude',
     3:    'GPSLongitudeRef',
     4:    'GPSLongitude',
     6:    'GPSAltitude',
-    # Image characteristics
+
     274:  'Orientation',
     296:  'ResolutionUnit',
     282:  'XResolution',
     283:  'YResolution',
-    # Copyright / attribution
+
     315:  'Artist',
     33432: 'Copyright',
     270:  'ImageDescription',
-    # IPTC/XMP often exposed via PIL tags
+
 }
 
 
@@ -146,7 +136,7 @@ def extract_image_metadata(filepath: str) -> dict:
             result['image_height'] = img.height
             result['image_mode'] = img.mode
 
-            # Bit depth from mode
+
             mode_bits = {
                 '1': 1, 'L': 8, 'P': 8, 'RGB': 8, 'RGBA': 8,
                 'CMYK': 8, 'YCbCr': 8, 'LAB': 8, 'HSV': 8,
@@ -155,13 +145,13 @@ def extract_image_metadata(filepath: str) -> dict:
             }
             result['image_bit_depth'] = mode_bits.get(img.mode, 8)
 
-            # DPI
+
             dpi = img.info.get('dpi') or img.info.get('jfif_density')
             if dpi and isinstance(dpi, (tuple, list)) and len(dpi) == 2:
                 result['image_dpi_x'] = float(dpi[0]) if dpi[0] else None
                 result['image_dpi_y'] = float(dpi[1]) if dpi[1] else None
             elif hasattr(img, 'tag_v2'):
-                # TIFF
+
                 xres = img.tag_v2.get(282)
                 yres = img.tag_v2.get(283)
                 if xres:
@@ -169,10 +159,10 @@ def extract_image_metadata(filepath: str) -> dict:
                 if yres:
                     result['image_dpi_y'] = float(yres)
 
-            # EXIF
+
             exif_data: dict = {}
             try:
-                raw_exif = img._getexif()  # type: ignore
+                raw_exif = img._getexif()
                 if raw_exif:
                     for tag_id, value in raw_exif.items():
                         tag_name = EXIF_TAGS_OF_INTEREST.get(tag_id) or ExifTags.TAGS.get(tag_id)
@@ -181,12 +171,12 @@ def extract_image_metadata(filepath: str) -> dict:
             except (AttributeError, Exception):
                 pass
 
-            # IPTC keywords if present
+
             try:
                 from PIL import IptcImagePlugin
                 iptc = IptcImagePlugin.getiptcinfo(img)
                 if iptc:
-                    kw = iptc.get((2, 25))  # Keywords
+                    kw = iptc.get((2, 25))
                     if kw:
                         if isinstance(kw, list):
                             exif_data['IPTC_Keywords'] = [
@@ -237,7 +227,7 @@ def extract_av_metadata(filepath: str) -> dict:
         if bitrate:
             result['av_bitrate'] = int(bitrate)
 
-        # Find primary video or audio codec
+
         for stream in streams:
             if stream.get('codec_type') in ('video', 'audio'):
                 codec = stream.get('codec_name')
@@ -263,7 +253,7 @@ def generate_thumbnail(filepath: str, thumb_path: str,
         os.makedirs(os.path.dirname(thumb_path), exist_ok=True)
 
         if mime_type == 'application/pdf':
-            # Render first page of PDF at 72 DPI via Pillow
+
             with Image.open(filepath) as img:
                 img.thumbnail((max_size, max_size), Image.LANCZOS)
                 img.save(thumb_path, 'JPEG', quality=85, optimize=True)
@@ -271,7 +261,7 @@ def generate_thumbnail(filepath: str, thumb_path: str,
 
         if mime_type in IMAGE_TYPES or mime_type.startswith('image/'):
             with Image.open(filepath) as img:
-                # Convert to RGB for JPEG output (handles CMYK, P, RGBA etc.)
+
                 if img.mode in ('RGBA', 'P', 'CMYK', 'LAB', 'HSV', 'I', 'F'):
                     img = img.convert('RGB')
                 img.thumbnail((max_size, max_size), Image.LANCZOS)
@@ -292,7 +282,7 @@ def extract_all(filepath: str, mime_type: str, thumb_dir: str,
     """
     result: dict = {}
 
-    # 1. Checksums
+
     try:
         md5, sha256 = compute_checksums(filepath)
         result['checksum_md5'] = md5
@@ -300,7 +290,7 @@ def extract_all(filepath: str, mime_type: str, thumb_dir: str,
     except Exception:
         pass
 
-    # 2. Authoritative MIME type via libmagic
+
     try:
         detected = detect_mime_type(filepath)
         if detected and detected != 'application/octet-stream':
@@ -309,24 +299,24 @@ def extract_all(filepath: str, mime_type: str, thumb_dir: str,
     except Exception:
         pass
 
-    # 3. PRONOM ID
+
     result['pronom_id'] = PRONOM_MAP.get(mime_type)
 
-    # 4. Image metadata
+
     if mime_type in IMAGE_TYPES or mime_type.startswith('image/'):
         img_meta = extract_image_metadata(filepath)
         result.update({k: v for k, v in img_meta.items() if not k.startswith('_')})
 
-    # 5. AV metadata
+
     elif mime_type in VIDEO_TYPES | AUDIO_TYPES:
         av_meta = extract_av_metadata(filepath)
         result.update(av_meta)
 
-    # 6. Thumbnail
+
     thumb_filename = f'thumb_{stored_filename}.jpg'
     thumb_path = os.path.join(thumb_dir, thumb_filename)
     if generate_thumbnail(filepath, thumb_path, mime_type):
-        # Store relative path from upload folder root
+
         result['thumbnail_path'] = os.path.relpath(thumb_path,
             os.path.dirname(thumb_dir))
 

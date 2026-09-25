@@ -91,15 +91,15 @@ def run_portal_file_sync(task_id: str) -> None:
             errors.append(f'attachment:{att_id}:not_found')
             continue
 
-        # Build path directly — avoid lazy loading att.node
+
         file_path = os.path.join(
             upload_folder,
-            str(att.node_id),   # main system stores as {upload}/{institution_id}/{node_id}/
+            str(att.node_id),
             att.filename,
         )
 
-        # Try with institution_id prefix first (actual layout)
-        # Query institution_id directly from the node table
+
+
         from app.models.node import Node
         node = Node.query.get(att.node_id)
         if node:

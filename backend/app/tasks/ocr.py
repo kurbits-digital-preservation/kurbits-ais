@@ -1,7 +1,5 @@
 """
 Tesseract OCR worker.
-Extracts text from images and scanned PDFs, stores in attachment.extracted_text,
-then optionally re-indexes the parent node's search_vector.
 """
 from __future__ import annotations
 import os
@@ -10,7 +8,7 @@ from datetime import datetime, timezone
 
 log = logging.getLogger(__name__)
 
-# MIME types this worker handles
+
 OCR_MIME_TYPES = {
     'image/jpeg', 'image/png', 'image/tiff', 'image/bmp', 'image/webp',
     'application/pdf',
@@ -33,7 +31,7 @@ def run_ocr(task_id: str) -> None:
     if not task:
         return
 
-    # Read options from task result field (set at creation time)
+
     options = task.result or {}
     force_ocr = options.get('force_ocr', False)
 
@@ -117,10 +115,10 @@ def _extract_text_smart(
             task.set_progress(100)
             return text, 'native_pdf'
 
-        # Not useful — fall through to OCR
+
         log.info(f'Native PDF text sparse ({len(text)} chars), falling back to OCR')
 
-    # OCR path
+
     if mime_type == 'application/pdf':
         text = _ocr_pdf(file_path, task, db)
         return text, 'ocr_pdf'
@@ -168,7 +166,7 @@ def _reindex_node(node, db) -> None:
         if not institution.index_attachment_text:
             return
 
-        # Collect all extracted text from attachments
+
         attachment_texts = [
             a.extracted_text for a in node.attachments
             if a.extracted_text
@@ -178,7 +176,7 @@ def _reindex_node(node, db) -> None:
 
         combined = ' '.join(attachment_texts)
 
-        # Update search_vector — PostgreSQL only
+
         if _db.engine.dialect.name == 'postgresql':
             _db.session.execute(sa.text("""
                 UPDATE nodes SET search_vector = (

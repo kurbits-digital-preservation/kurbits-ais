@@ -1,16 +1,5 @@
 """
 PDF report generators for Kurbits:
-
-  generate_finding_aid(node_id, institution_id, db) -> bytes
-    Full finding aid for a fonds (or any node), including:
-    - Title page with creator agents and dates
-    - Table of contents (hierarchical)
-    - Administrative/biographical history notes
-    - Series descriptions with volume inventory tables
-
-  generate_location_inventory(location_id, institution_id, db) -> bytes
-    Inventory of all objects currently stored at a location (and children),
-    formatted as a table suitable for shelf checks.
 """
 from __future__ import annotations
 
@@ -30,7 +19,7 @@ from reportlab.platypus import (
 from reportlab.platypus.flowables import Flowable
 
 
-# ── Colours & styles ──────────────────────────────────────────────────
+
 
 INK       = colors.HexColor('#1a1a2e')
 INK_MUTED = colors.HexColor('#555555')
@@ -45,14 +34,14 @@ def _styles():
     base = getSampleStyleSheet()
 
     def S(name, **kw):
-        # Define defaults in a dictionary
+
         defaults = {
             'fontName': 'Helvetica',
             'fontSize': 10,
             'textColor': INK,
             'leading': 14
         }
-        # Update defaults with whatever you passed in via kw
+
         defaults.update(kw)
         return ParagraphStyle(name, **defaults)
 
@@ -90,7 +79,7 @@ def _date_range(node) -> str:
     return y1 or y2 or ''
 
 
-# ── Page templates (header/footer) ───────────────────────────────────
+
 
 def _make_page_template(title: str, institution: str):
     """Returns onFirstPage and onLaterPages callbacks."""
@@ -101,18 +90,18 @@ def _make_page_template(title: str, institution: str):
         w, h = A4
 
         if show_header and doc.page > 1:
-            # Top rule
+
             canvas.setStrokeColor(BORDER)
             canvas.setLineWidth(0.5)
             canvas.line(15*mm, h - 14*mm, w - 15*mm, h - 14*mm)
-            # Title left
+
             canvas.setFont('Helvetica', 7)
             canvas.setFillColor(INK_FAINT)
             canvas.drawString(15*mm, h - 11*mm, title)
-            # Institution right
+
             canvas.drawRightString(w - 15*mm, h - 11*mm, institution)
 
-        # Footer
+
         canvas.setStrokeColor(BORDER)
         canvas.setLineWidth(0.5)
         canvas.line(15*mm, 12*mm, w - 15*mm, 12*mm)
@@ -132,7 +121,7 @@ def _make_page_template(title: str, institution: str):
     return on_first, on_later
 
 
-# ── Tree traversal ────────────────────────────────────────────────────
+
 
 def _collect_tree(node_id: int, institution_id: int, db, max_depth: int = 10) -> dict:
     """Recursively load node tree with agents and notes."""
@@ -144,7 +133,7 @@ def _collect_tree(node_id: int, institution_id: int, db, max_depth: int = 10) ->
     if not node or node.institution_id != institution_id:
         return {}
 
-    # Agents linked to this node
+
     rows = db.session.execute(
         sa.select(Agent, agent_node_association.c.relation_type)
         .join(agent_node_association, Agent.id == agent_node_association.c.agent_id)
@@ -153,7 +142,7 @@ def _collect_tree(node_id: int, institution_id: int, db, max_depth: int = 10) ->
     agents = [{'name': a.name, 'relation': rel, 'date_from': a.date_from, 'date_to': a.date_to}
               for a, rel in rows]
 
-    # Current location
+
     location_path = None
     if node.current_location_id:
         from app.models.location import Location
@@ -190,7 +179,7 @@ def _collect_tree(node_id: int, institution_id: int, db, max_depth: int = 10) ->
     return result
 
 
-# ── Finding aid ───────────────────────────────────────────────────────
+
 
 def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
     """Generate a full finding aid PDF for a node and its descendants."""
@@ -221,10 +210,10 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
 
     story = []
 
-    # ── Title page ────────────────────────────────────────────────────
+
     story.append(Spacer(1, 20*mm))
 
-    # Institution name small above
+
     story.append(Paragraph(inst_name.upper(), ST['label']))
     story.append(Spacer(1, 2*mm))
 
@@ -245,7 +234,7 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
     if tree.get('extent'):
         story.append(Paragraph(f'<b>Extent:</b> {tree["extent"]}', ST['body']))
 
-    # Creators
+
     creators = [a for a in tree.get('agents', [])
                 if a['relation'].lower() in ('creator', 'skapare')]
     if creators:
@@ -257,7 +246,7 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
 
     story.append(PageBreak())
 
-    # ── Table of contents ─────────────────────────────────────────────
+
     story.append(Paragraph('Table of Contents', ST['h2']))
     story.append(HRFlowable(width='100%', thickness=0.5, color=BORDER, spaceAfter=4))
     story.append(Spacer(1, 2*mm))
@@ -294,7 +283,7 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
 
     story.append(PageBreak())
 
-    # ── History & administrative notes ────────────────────────────────
+
     history_notes = [n for n in tree.get('notes', [])
                      if n['type'] in ('history', 'administrative_history', 'biographical_history')]
     other_notes = [n for n in tree.get('notes', [])
@@ -326,12 +315,12 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
 
         story.append(PageBreak())
 
-    # ── Series descriptions ───────────────────────────────────────────
+
     def _render_series(nodes, parent_title=''):
         for node in nodes:
             is_leaf = not node.get('children')
 
-            # Series header block
+
             header_items = []
             header_items.append(Paragraph(node['level'].upper(), ST['label']))
             header_items.append(Paragraph(node['title'], ST['h3']))
@@ -364,7 +353,7 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
                 note_label = note['type'].replace('_', ' ').title()
                 header_items.append(Paragraph(f'<b>{note_label}:</b> {note["content"]}', ST['small']))
 
-            # Agents at this level
+
             node_agents = [a for a in node.get('agents', []) if a['relation'].lower() != 'creator']
             for agent in node_agents:
                 header_items.append(Paragraph(
@@ -374,7 +363,7 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
             story.append(KeepTogether(header_items))
             story.append(Spacer(1, 2*mm))
 
-            # Volume/item table for leaf nodes or nodes with children that are volumes
+
             children = node.get('children', [])
             leaf_children = [c for c in children
                              if not c.get('children') and c['level'] in
@@ -416,7 +405,7 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
                 story.append(t)
                 story.append(Spacer(1, 4*mm))
 
-            # Recurse into non-leaf children
+
             non_leaf_children = [c for c in children if c not in leaf_children]
             if non_leaf_children:
                 _render_series(non_leaf_children)
@@ -432,7 +421,7 @@ def generate_finding_aid(node_id: int, institution_id: int, db) -> bytes:
     return buf.getvalue()
 
 
-# ── Location inventory ────────────────────────────────────────────────
+
 
 def generate_location_inventory(location_id: int, institution_id: int, db) -> bytes:
     """Generate a shelf inventory PDF for a location and all its children."""
@@ -462,7 +451,7 @@ def generate_location_inventory(location_id: int, institution_id: int, db) -> by
 
     story = []
 
-    # ── Header ────────────────────────────────────────────────────────
+
     story.append(Paragraph(inst_name.upper(), ST['label']))
     story.append(Spacer(1, 2*mm))
     story.append(Paragraph('LOCATION INVENTORY', ParagraphStyle(
@@ -477,7 +466,7 @@ def generate_location_inventory(location_id: int, institution_id: int, db) -> by
     ))
     story.append(Spacer(1, 6*mm))
 
-    # ── Collect all locations recursively ────────────────────────────
+
     def _get_location_tree(loc, depth=0):
         yield loc, depth
         for child in loc.children:
@@ -486,7 +475,7 @@ def generate_location_inventory(location_id: int, institution_id: int, db) -> by
     total_items = 0
 
     for loc, depth in _get_location_tree(root_loc):
-        # Get all nodes stored here
+
         nodes = db.session.execute(
             sa.select(Node)
             .where(Node.current_location_id == loc.id)
@@ -496,7 +485,7 @@ def generate_location_inventory(location_id: int, institution_id: int, db) -> by
         if not nodes and not loc.can_store_nodes:
             continue
 
-        # Location header
+
         indent = '  ' * depth
         story.append(KeepTogether([
             Paragraph(
@@ -516,13 +505,13 @@ def generate_location_inventory(location_id: int, institution_id: int, db) -> by
 
         total_items += len(nodes)
 
-        # Items table
+
         table_data = [[
             Paragraph('Reference code', ST['label']),
             Paragraph('Title', ST['label']),
             Paragraph('Level', ST['label']),
             Paragraph('Dates', ST['label']),
-            Paragraph('☑', ST['label']),  # Checkbox column for physical verification
+            Paragraph('☑', ST['label']),
         ]]
 
         for node in nodes:
@@ -560,7 +549,7 @@ def generate_location_inventory(location_id: int, institution_id: int, db) -> by
         story.append(t)
         story.append(Spacer(1, 5*mm))
 
-    # Summary footer
+
     story.append(HRFlowable(width='100%', thickness=0.5, color=BORDER, spaceAfter=4))
     story.append(Paragraph(
         f'Total items: <b>{total_items}</b>', ST['body']

@@ -1,9 +1,5 @@
 """
-EAD 2002 import.
-
 Parses an EAD 2002 XML file and creates new Kurbits nodes.
-Always creates new nodes — never updates existing ones.
-Agents in <origination> are skipped (will be handled by EAC import later).
 """
 from __future__ import annotations
 from datetime import date, datetime
@@ -15,10 +11,10 @@ from app.models.hierarchy import HierarchyType, HierarchyLevel
 
 
 EAD_NS = 'urn:isbn:1-931666-22-9'
-# Some EAD files have no namespace at all
+
 NSMAP_VARIANTS = [
-    f'{{{EAD_NS}}}{{}}',   # namespaced
-    '{}',                   # no namespace
+    f'{{{EAD_NS}}}{{}}',
+    '{}',
 ]
 
 
@@ -28,7 +24,7 @@ class EADImportError(Exception):
 
 class ImportResult:
     def __init__(self):
-        self.created: list[dict] = []   # [{'title': ..., 'ref_code': ...}]
+        self.created: list[dict] = []
         self.warnings: list[str] = []
         self.skipped: list[str] = []
 
@@ -59,7 +55,7 @@ def _findall(el: etree._Element, tag: str) -> list[etree._Element]:
 def _text(el: Optional[etree._Element]) -> Optional[str]:
     if el is None:
         return None
-    # Collect all text including tail text of child elements
+
     parts = []
     if el.text:
         parts.append(el.text.strip())
@@ -102,7 +98,7 @@ def _parse_normal_date(normal: Optional[str]) -> tuple[Optional[date], Optional[
     return _parse_date(normal), None
 
 
-# EAD level → Kurbits level name (best-effort matching)
+
 EAD_LEVEL_MAP = {
     'fonds':     'Fonds',
     'subfonds':  'Sub-fonds',
@@ -123,20 +119,20 @@ def _resolve_level(ead_level: str, otherlevel: Optional[str],
     """Map EAD @level to a level name that exists in the hierarchy type."""
     available = {l.name.lower(): l.name for l in hierarchy_type.levels}
 
-    # Try otherlevel first (most specific)
+
     if otherlevel and otherlevel.lower() in available:
         return available[otherlevel.lower()]
 
-    # Try the EAD level map
+
     mapped = EAD_LEVEL_MAP.get(ead_level.lower())
     if mapped and mapped.lower() in available:
         return available[mapped.lower()]
 
-    # Try the raw EAD level name directly
+
     if ead_level.lower() in available:
         return available[ead_level.lower()]
 
-    # Fall back to first available level with a warning
+
     if hierarchy_type.levels:
         fallback = sorted(hierarchy_type.levels, key=lambda l: l.sort_order)[0].name
         result.warnings.append(
@@ -151,11 +147,11 @@ def _parse_did(did: etree._Element) -> dict:
     """Extract fields from a <did> element."""
     data: dict = {}
 
-    # Title
+
     unittitle = _find(did, 'unittitle')
     data['title'] = _text(unittitle) or 'Untitled'
 
-    # Unit IDs — prefer the one without a label, or the first one
+
     unitids = _findall(did, 'unitid')
     local_ref = None
     for uid in unitids:
@@ -167,13 +163,13 @@ def _parse_did(did: etree._Element) -> dict:
         local_ref = (unitids[0].text or '').strip()
     data['local_ref'] = local_ref or ''
 
-    # Date
+
     unitdate = _find(did, 'unitdate')
     if unitdate is not None:
         normal = unitdate.get('normal')
         date_start, date_end = _parse_normal_date(normal)
         if not date_start:
-            # Try parsing the text content as a year
+
             date_start = _parse_date((unitdate.text or '').strip()[:4])
         data['date_start'] = date_start
         data['date_end'] = date_end
@@ -181,13 +177,13 @@ def _parse_did(did: etree._Element) -> dict:
         if certainty:
             data['date_certainty'] = certainty
 
-    # Extent
+
     physdesc = _find(did, 'physdesc')
     if physdesc is not None:
         extent_el = _find(physdesc, 'extent')
         data['extent'] = _text(extent_el) or _text(physdesc)
 
-    # Language
+
     langmaterial = _find(did, 'langmaterial')
     if langmaterial is not None:
         lang_el = _find(langmaterial, 'language')
@@ -222,10 +218,10 @@ def _parse_component(el: etree._Element, institution_id: int,
 
     did_data = _parse_did(did)
 
-    # Build ref code
+
     local_ref = did_data.get('local_ref') or f'imported-{datetime.now().timestamp():.0f}'
 
-    # Ensure local_ref is unique under parent
+
     existing_siblings = (
         Node.query.filter_by(parent_id=parent_node.id if parent_node else None,
                              institution_id=institution_id)
@@ -260,7 +256,7 @@ def _parse_component(el: etree._Element, institution_id: int,
         metadata_spec={},
     )
 
-    # Narrative fields from archdesc/c children
+
     scopecontent = _find(el, 'scopecontent')
     node.scope_and_content = _p_text(scopecontent)
 
@@ -273,15 +269,15 @@ def _parse_component(el: etree._Element, institution_id: int,
     userestrict = _find(el, 'userestrict')
     node.reproduction_conditions = _p_text(userestrict)
 
-    # bioghist → description
+
     bioghist = _find(el, 'bioghist')
     if bioghist is not None:
         node.description = _p_text(bioghist)
 
-    # <odd> → notes
+
     odds = _findall(el, 'odd')
 
-    # Compute ref_code BEFORE add — ref_code is NOT NULL
+
     from app.models import Institution
     institution = db.session.get(Institution, institution_id)
     if parent_node:
@@ -292,7 +288,7 @@ def _parse_component(el: etree._Element, institution_id: int,
     db.session.add(node)
     db.session.flush()
 
-    # Add notes
+
     from app.models.node import NodeNote
     for odd in odds:
         note_type = odd.get('type', 'general')
@@ -307,7 +303,7 @@ def _parse_component(el: etree._Element, institution_id: int,
             )
             db.session.add(note)
 
-    # Record creation change
+
     node.record_change(
         change_type='create',
         description=f'Imported from EAD',
@@ -318,7 +314,7 @@ def _parse_component(el: etree._Element, institution_id: int,
 
     result.created.append({'title': node.title, 'ref_code': node.ref_code})
 
-    # Recurse into <dsc> children
+
     dsc = _find(el, 'dsc')
     if dsc is not None:
         for child_el in dsc:
@@ -329,7 +325,7 @@ def _parse_component(el: etree._Element, institution_id: int,
                 _parse_component(child_el, institution_id, hierarchy_type,
                                  node, created_by_id, result, depth + 1)
 
-    # Also handle numbered <c01>…<c12> directly under the component
+
     for child_el in el:
         local_tag = child_el.tag.replace(f'{{{EAD_NS}}}', '')
         if local_tag in ('c01', 'c02', 'c03', 'c04', 'c05',
@@ -354,7 +350,7 @@ def import_ead(xml_bytes: bytes, institution_id: int,
     except etree.XMLSyntaxError as e:
         raise EADImportError(f'Invalid XML: {e}')
 
-    # Normalise root tag (handle namespaced and bare EAD)
+
     local_root = root.tag.replace(f'{{{EAD_NS}}}', '')
     if local_root != 'ead':
         raise EADImportError(f'Root element must be <ead>, got <{local_root}>')

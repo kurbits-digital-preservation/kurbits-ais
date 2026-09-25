@@ -36,7 +36,7 @@ from pathlib import Path
 import click
 
 
-# ── Wikidata lookup ───────────────────────────────────────────────────
+
 
 def _fetch_wikidata(qid: str, verbose: bool) -> dict:
     """Fetch entity data from Wikidata API. Returns {} on any error."""
@@ -68,7 +68,7 @@ def _get_claim_value(entity: dict, prop: str) -> str | None:
     if vtype == 'string':
         return val.get('value')
     if vtype == 'time':
-        # Extract year from +YYYY-MM-DDT...
+
         raw = val.get('value', {}).get('time', '')
         if raw.startswith('+') or raw.startswith('-'):
             return raw[1:5]
@@ -99,7 +99,7 @@ def _enrich_from_wikidata(agent_data: dict, verbose: bool) -> dict:
 
     if verbose:
         click.echo(f'    [wikidata] Fetching {qid} for {agent_data["name"]}…')
-    time.sleep(0.2)  # be polite to Wikidata
+    time.sleep(0.2)
 
     entity = _fetch_wikidata(qid, verbose)
     if not entity:
@@ -107,18 +107,18 @@ def _enrich_from_wikidata(agent_data: dict, verbose: bool) -> dict:
 
     enriched = dict(agent_data)
 
-    # Fill label if name not set
+
     label = _get_label(entity)
     if label and not enriched.get('name'):
         enriched['name'] = label
 
-    # Description
+
     desc = _get_description(entity)
     if desc and not enriched.get('description'):
         enriched['description'] = desc
 
-    # Birth date (P569) / Death date (P570)
-    # Organisation: inception (P571) / dissolved (P576)
+
+
     if enriched.get('agent_type') == 'person':
         if not enriched.get('date_from'):
             enriched['date_from'] = _get_claim_value(entity, 'P569')
@@ -130,7 +130,7 @@ def _enrich_from_wikidata(agent_data: dict, verbose: bool) -> dict:
         if not enriched.get('date_to'):
             enriched['date_to'] = _get_claim_value(entity, 'P576')
 
-    # VIAF (P214) and ISNI (P213)
+
     viaf = _get_claim_value(entity, 'P214')
     if viaf and not enriched.get('viaf_id'):
         enriched['viaf_id'] = viaf
@@ -146,7 +146,7 @@ def _enrich_from_wikidata(agent_data: dict, verbose: bool) -> dict:
     return enriched
 
 
-# ── Agent import ──────────────────────────────────────────────────────
+
 
 def _import_agents(agents_data: list, institution_id: int, system_user_id: int,
                    use_wikidata: bool, dry_run: bool, verbose: bool, db, log) -> dict:
@@ -169,7 +169,7 @@ def _import_agents(agents_data: list, institution_id: int, system_user_id: int,
         name = data.get('name', 'Unknown')
         agent_type_str = data.get('agent_type', 'organization')
 
-        # Check for existing
+
         existing = db.session.execute(
             sa.select(Agent).where(
                 Agent.institution_id == institution_id,
@@ -192,7 +192,7 @@ def _import_agents(agents_data: list, institution_id: int, system_user_id: int,
         except ValueError:
             agent_type = AgentType.organization
 
-        # Build identifier string from available external IDs
+
         identifiers = []
         if data.get('wikidata_id'): identifiers.append(f'wikidata:{data["wikidata_id"]}')
         if data.get('viaf_id'):     identifiers.append(f'viaf:{data["viaf_id"]}')
@@ -227,7 +227,7 @@ def _import_agents(agents_data: list, institution_id: int, system_user_id: int,
     return id_map
 
 
-# ── Node import ───────────────────────────────────────────────────────
+
 
 def _get_or_create_hierarchy(institution_id: int, db) -> tuple:
     """Get default ISAD(G) hierarchy type and levels map."""
@@ -329,13 +329,13 @@ def _import_node(data: dict, parent_id, institution_id: int,
 
     if dry_run:
         log(f'{indent}[dry-run] Would create {level_str}: {title}')
-        # Still recurse so we can count children
+
         for child in data.get('series', []) + data.get('files', []) + data.get('items', []):
             _import_node(child, None, institution_id, ht, levels_map, agent_id_map,
                          system_user_id, inst_ref_prefix, dry_run, verbose, db, log, depth + 1)
         return None
 
-    # Compute ref_code
+
     if parent_id is None:
         ref_code = f'{inst_ref_prefix}/{local_ref}'
     else:
@@ -361,7 +361,7 @@ def _import_node(data: dict, parent_id, institution_id: int,
 
     log(f'{indent}✓ {level_str}: {ref_code} — {title}')
 
-    # Notes
+
     for note in data.get('notes', []):
         db.session.add(NodeNote(
             node_id=node.id,
@@ -371,7 +371,7 @@ def _import_node(data: dict, parent_id, institution_id: int,
             created_by_id=system_user_id,
         ))
 
-    # Creator links (fonds-level shorthand)
+
     for creator_id in data.get('creators', []):
         agent = agent_id_map.get(creator_id)
         if agent:
@@ -392,11 +392,11 @@ def _import_node(data: dict, parent_id, institution_id: int,
                     )
                 )
 
-    # Agent links (file/item level)
+
     if data.get('agents'):
         _link_agents(node, data['agents'], agent_id_map, db)
 
-    # Recurse into children
+
     for child in data.get('series', []) + data.get('files', []) + data.get('items', []):
         _import_node(child, node.id, institution_id, ht, levels_map, agent_id_map,
                      system_user_id, inst_ref_prefix, dry_run, verbose, db, log, depth + 1)
@@ -416,7 +416,7 @@ def _parse_year(year_str: str | None, end: bool = False):
         return None
 
 
-# ── Main runner ───────────────────────────────────────────────────────
+
 
 def _import_fixture(filepath: str, institution_id: int,
                     use_wikidata: bool, dry_run: bool, verbose: bool, db) -> dict:
@@ -437,7 +437,7 @@ def _import_fixture(filepath: str, institution_id: int,
     if not institution:
         raise RuntimeError(f'Institution {institution_id} not found')
 
-    # Get system user for attribution
+
     system_user_id = db.session.execute(
         sa.select(user_institution_association.c.user_id).where(
             user_institution_association.c.institution_id == institution_id
@@ -450,7 +450,7 @@ def _import_fixture(filepath: str, institution_id: int,
         if verbose or 'ERROR' in msg or '✓' in msg or '[dry-run]' in msg:
             click.echo(msg)
 
-    # 1. Import agents
+
     agents_data = fixture.get('agents', [])
     if agents_data:
         click.echo(f'\n  Agents ({len(agents_data)}):')
@@ -462,7 +462,7 @@ def _import_fixture(filepath: str, institution_id: int,
     else:
         agent_id_map = {}
 
-    # 2. Import fonds
+
     fonds_data = fixture.get('fonds')
     if fonds_data:
         click.echo(f'\n  Resources:')
@@ -480,7 +480,7 @@ def _import_fixture(filepath: str, institution_id: int,
     return stats
 
 
-# ── CLI registration ──────────────────────────────────────────────────
+
 
 def register_testdata_import(app):
 

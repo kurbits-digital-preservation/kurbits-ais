@@ -1,7 +1,3 @@
-"""
-Converts Node objects into a plain dict structure for use in export templates.
-All templates receive the same data shape.
-"""
 from __future__ import annotations
 from typing import Optional
 from app.models.node import Node
@@ -55,19 +51,19 @@ def serialize_node(node: Node, include_children: bool = True) -> dict:
     ]
 
     data = {
-        # Identity
+
         'id': node.id,
         'ref_code': node.ref_code,
         'local_ref': node.local_ref,
         'title': node.title,
         'level': node.level_of_description,
 
-        # Institution
+
         'institution_name': institution.name if institution else '',
         'institution_ref_prefix': institution.ref_prefix if institution else '',
         'country_code': institution.country_code if institution else '',
 
-        # Dates
+
         'date_start': _date_str(node.date_start),
         'date_end': _date_str(node.date_end),
         'date_start_year': _year(node.date_start),
@@ -75,7 +71,7 @@ def serialize_node(node: Node, include_children: bool = True) -> dict:
         'date_certainty': node.date_certainty,
         'date_display': _build_date_display(node),
 
-        # Description fields
+
         'description': node.description,
         'scope_and_content': node.scope_and_content,
         'arrangement': node.arrangement,
@@ -85,22 +81,22 @@ def serialize_node(node: Node, include_children: bool = True) -> dict:
         'reproduction_conditions': node.reproduction_conditions,
         'finding_aids': node.finding_aids,
 
-        # Metadata
+
         'metadata_spec': node.metadata_spec or {},
         'status': node.status.value,
 
-        # Relations
+
         'agents': agents,
         'creators': [a for a in agents if a['relation_type'].lower() in ('creator', 'author', 'originator')],
         'classifications': classifications,
         'notes': notes,
         'public_notes': [n for n in notes if n['is_public']],
 
-        # Hierarchy
+
         'parent_id': node.parent_id,
         'breadcrumb': node.get_breadcrumb(),
 
-        # Timestamps
+
         'created_at': node.created_at.isoformat(),
         'updated_at': node.updated_at.isoformat(),
         'created_by': node.created_by.username if node.created_by else None,
