@@ -5,8 +5,6 @@ from app.api.v1.helpers import success, error, require_write
 from app.models.node import Node
 
 
-# GET /api/v1/nodes/<id>/ead-export
-# Query params: include_children=true|false
 @bp.route('/nodes/<int:node_id>/ead-export', methods=['GET'])
 @login_required
 def export_ead(node_id):
@@ -33,9 +31,6 @@ def export_ead(node_id):
         }
     )
 
-
-# POST /api/v1/ead-import
-# Multipart form: file=<xml>, hierarchy_type_id=<int>, parent_node_id=<int|null>
 @bp.route('/ead-import', methods=['POST'])
 @login_required
 @require_write

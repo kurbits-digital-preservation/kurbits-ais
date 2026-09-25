@@ -1,5 +1,11 @@
-from flask import request
+import os
+import uuid
+
+import sqlalchemy as sa
+from flask import request, current_app, send_from_directory, Response
 from flask_login import login_required, current_user
+from werkzeug.utils import secure_filename
+
 from app.api.v1 import bp
 from app.api.v1.helpers import success, error, require_write, require_institution_admin
 from app.api.v1.agents.serializers import (
@@ -7,19 +13,17 @@ from app.api.v1.agents.serializers import (
     serialize_agent_note, serialize_relation_type, serialize_node_relation_type
 )
 from app.api.v1.nodes.serializers import serialize_node_stub
+from app.api.v1.nodes.routes import MIME_MAP, _allowed_file
 from app.extensions import db
 from app.models import Agent, AgentType, AgentRelationType, AgentNodeRelationType, AgentNote
-from app.models.agent import agent_node_association
-import sqlalchemy as sa
+from app.models.agent import agent_node_association, AgentIdentifier, AgentAttachment
+from app.models.node import IdentifierScheme, NodeIdentifier, Node
+from app.eaccpf.exporter import export_agent_eac
 
 
 def _get_agent_or_404(agent_id: int, institution_id: int):
     return Agent.query.filter_by(id=agent_id, institution_id=institution_id).first()
 
-
-# ---------------------------------------------------------------------------
-# Agents CRUD
-# ---------------------------------------------------------------------------
 
 @bp.route('/agents', methods=['GET'])
 @login_required
@@ -28,15 +32,15 @@ def list_agents():
     if not institution_id:
         return error('No active institution', 400)
 
-    page     = request.args.get('page', 1, type=int)
+    page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 25, type=int), 200)
-    search       = request.args.get('q', '').strip()
-    type_filter  = request.args.get('type')
-    has_website  = request.args.get('has_website')
+    search = request.args.get('q', '').strip()
+    type_filter = request.args.get('type')
+    has_website = request.args.get('has_website')
     has_identifier = request.args.get('has_identifier')
     has_description = request.args.get('has_description')
-    date_from    = request.args.get('date_from')
-    date_to      = request.args.get('date_to')
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
 
     query = sa.select(Agent).where(Agent.institution_id == institution_id)
 
@@ -81,7 +85,6 @@ def list_agents():
     )
 
 
-# GET /api/v1/agents/<id>
 @bp.route('/agents/<int:agent_id>', methods=['GET'])
 @login_required
 def get_agent(agent_id):
@@ -93,7 +96,6 @@ def get_agent(agent_id):
     return success(serialize_agent_detail(agent))
 
 
-# POST /api/v1/agents
 @bp.route('/agents', methods=['POST'])
 @login_required
 @require_write
@@ -127,7 +129,6 @@ def create_agent():
     return success(serialize_agent_detail(agent), 201)
 
 
-# PATCH /api/v1/agents/<id>
 @bp.route('/agents/<int:agent_id>', methods=['PATCH'])
 @login_required
 @require_write
@@ -153,7 +154,6 @@ def update_agent(agent_id):
     return success(serialize_agent_detail(agent))
 
 
-# DELETE /api/v1/agents/<id>
 @bp.route('/agents/<int:agent_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -168,11 +168,6 @@ def delete_agent(agent_id):
     return success({'message': 'Agent deleted'})
 
 
-# ---------------------------------------------------------------------------
-# Agent ↔ Node associations
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/nodes
 @bp.route('/agents/<int:agent_id>/nodes', methods=['GET'])
 @login_required
 def get_agent_nodes(agent_id):
@@ -185,7 +180,6 @@ def get_agent_nodes(agent_id):
     search = request.args.get('q', '').strip()
     nodes_q = agent.nodes
     if search:
-        from app.models import Node
         nodes_q = nodes_q.filter(Node.title.ilike(f'%{search}%'))
 
     rows = db.session.execute(
@@ -193,7 +187,6 @@ def get_agent_nodes(agent_id):
         .where(agent_node_association.c.agent_id == agent_id)
     ).all()
 
-    from app.models import Node
     result = []
     for node_id, rel_type in rows:
         node = Node.query.get(node_id)
@@ -205,7 +198,6 @@ def get_agent_nodes(agent_id):
     return success(result)
 
 
-# POST /api/v1/agents/<id>/nodes
 @bp.route('/agents/<int:agent_id>/nodes', methods=['POST'])
 @login_required
 @require_write
@@ -222,7 +214,6 @@ def add_agent_node(agent_id):
     if not node_id or not relation_type:
         return error('node_id and relation_type are required', 400)
 
-    from app.models import Node
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
     if not node:
         return error('Node not found', 404)
@@ -247,7 +238,6 @@ def add_agent_node(agent_id):
     return success({'message': 'Association added'}, 201)
 
 
-# DELETE /api/v1/agents/<id>/nodes/<node_id>
 @bp.route('/agents/<int:agent_id>/nodes/<int:node_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -267,11 +257,6 @@ def remove_agent_node(agent_id, node_id):
     return success({'message': 'Association removed'})
 
 
-# ---------------------------------------------------------------------------
-# Agent ↔ Agent relations
-# ---------------------------------------------------------------------------
-
-# POST /api/v1/agents/<id>/relations
 @bp.route('/agents/<int:agent_id>/relations', methods=['POST'])
 @login_required
 @require_write
@@ -301,7 +286,6 @@ def add_agent_relation(agent_id):
     return success({'message': 'Relation added'}, 201)
 
 
-# DELETE /api/v1/agents/<id>/relations/<target_id>
 @bp.route('/agents/<int:agent_id>/relations/<int:target_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -320,11 +304,6 @@ def remove_agent_relation(agent_id, target_id):
     return success({'message': 'Relation removed'})
 
 
-# ---------------------------------------------------------------------------
-# Notes
-# ---------------------------------------------------------------------------
-
-# POST /api/v1/agents/<id>/notes
 @bp.route('/agents/<int:agent_id>/notes', methods=['POST'])
 @login_required
 @require_write
@@ -349,7 +328,6 @@ def add_agent_note(agent_id):
     return success(serialize_agent_note(note), 201)
 
 
-# DELETE /api/v1/agents/<id>/notes/<note_id>
 @bp.route('/agents/<int:agent_id>/notes/<int:note_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -368,11 +346,6 @@ def delete_agent_note(agent_id, note_id):
     return success({'message': 'Note deleted'})
 
 
-# ---------------------------------------------------------------------------
-# Relation type admin
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/relation-types
 @bp.route('/agents/relation-types', methods=['GET'])
 @login_required
 def list_relation_types():
@@ -384,7 +357,6 @@ def list_relation_types():
     return success([serialize_relation_type(t) for t in types])
 
 
-# POST /api/v1/agents/relation-types
 @bp.route('/agents/relation-types', methods=['POST'])
 @login_required
 @require_institution_admin
@@ -422,7 +394,38 @@ def create_relation_type():
     return success(serialize_relation_type(rt), 201)
 
 
-# DELETE /api/v1/agents/relation-types/<id>
+@bp.route('/agents/relation-types/<int:type_id>', methods=['PATCH'])
+@login_required
+@require_institution_admin
+def update_relation_type(type_id):
+    institution_id = current_user.active_institution_id
+    rt = AgentRelationType.query.filter_by(id=type_id, institution_id=institution_id).first()
+    if not rt:
+        return error('Relation type not found', 404)
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        rt.name = data['name']
+    if 'description' in data:
+        rt.description = data['description']
+    if 'is_symmetric' in data:
+        rt.is_symmetric = data['is_symmetric']
+    if 'complementary_name' in data and data['complementary_name']:
+        if rt.complementary:
+            rt.complementary.name = data['complementary_name']
+        else:
+            comp = AgentRelationType(
+                institution_id=rt.institution_id,
+                name=data['complementary_name'],
+                is_symmetric=False,
+                complementary_id=rt.id,
+            )
+            db.session.add(comp)
+            db.session.flush()
+            rt.complementary_id = comp.id
+    db.session.commit()
+    return success(serialize_relation_type(rt))
+
+
 @bp.route('/agents/relation-types/<int:type_id>', methods=['DELETE'])
 @login_required
 @require_institution_admin
@@ -439,7 +442,6 @@ def delete_relation_type(type_id):
     return success({'message': 'Relation type deleted'})
 
 
-# GET /api/v1/agents/node-relation-types
 @bp.route('/agents/node-relation-types', methods=['GET'])
 @login_required
 def list_node_relation_types():
@@ -451,7 +453,6 @@ def list_node_relation_types():
     return success([serialize_node_relation_type(t) for t in types])
 
 
-# POST /api/v1/agents/node-relation-types
 @bp.route('/agents/node-relation-types', methods=['POST'])
 @login_required
 @require_institution_admin
@@ -472,41 +473,6 @@ def create_node_relation_type():
     return success(serialize_node_relation_type(rt), 201)
 
 
-# PATCH /api/v1/agents/relation-types/<id>
-@bp.route('/agents/relation-types/<int:type_id>', methods=['PATCH'])
-@login_required
-@require_institution_admin
-def update_relation_type(type_id):
-    institution_id = current_user.active_institution_id
-    rt = AgentRelationType.query.filter_by(id=type_id, institution_id=institution_id).first()
-    if not rt:
-        return error('Relation type not found', 404)
-    data = request.get_json(silent=True) or {}
-    if 'name' in data:
-        rt.name = data['name']
-    if 'description' in data:
-        rt.description = data['description']
-    if 'is_symmetric' in data:
-        rt.is_symmetric = data['is_symmetric']
-    if 'complementary_name' in data and data['complementary_name']:
-        if rt.complementary:
-            rt.complementary.name = data['complementary_name']
-        else:
-            from app.models import AgentRelationType as ART
-            comp = ART(
-                institution_id=rt.institution_id,
-                name=data['complementary_name'],
-                is_symmetric=False,
-                complementary_id=rt.id,
-            )
-            db.session.add(comp)
-            db.session.flush()
-            rt.complementary_id = comp.id
-    db.session.commit()
-    return success(serialize_relation_type(rt))
-
-
-# PATCH /api/v1/agents/node-relation-types/<id>
 @bp.route('/agents/node-relation-types/<int:type_id>', methods=['PATCH'])
 @login_required
 @require_institution_admin
@@ -539,7 +505,6 @@ def update_node_relation_type(type_id):
     return success(serialize_node_relation_type(rt))
 
 
-# DELETE /api/v1/agents/node-relation-types/<id>
 @bp.route('/agents/node-relation-types/<int:type_id>', methods=['DELETE'])
 @login_required
 @require_institution_admin
@@ -553,7 +518,6 @@ def delete_node_relation_type(type_id):
     return success({'message': 'Deleted'})
 
 
-# POST /api/v1/agents/import/eaccpf
 @bp.route('/agents/import/eaccpf', methods=['POST'])
 @login_required
 @require_write
@@ -595,7 +559,43 @@ def import_eaccpf():
     return success(import_result.to_dict(), 201)
 
 
-# ── Places ─────────────────────────────────────────────────────────────
+@bp.route('/agents/<int:agent_id>/export/eac', methods=['GET'])
+@login_required
+def export_agent_eaccpf(agent_id):
+    institution_id = current_user.active_institution_id
+    agent = Agent.query.filter_by(id=agent_id, institution_id=institution_id).first()
+    if not agent:
+        return error('Agent not found', 404)
+
+    rows = db.session.execute(
+        sa.select(agent_node_association.c.node_id, agent_node_association.c.relation_type)
+        .where(agent_node_association.c.agent_id == agent_id)
+    ).all()
+    resource_links = []
+    for node_id, relation_type in rows:
+        node = Node.query.get(node_id)
+        if node:
+            resource_links.append({
+                'ref_code': node.ref_code or node.local_ref,
+                'title': node.title,
+                'relation_type': relation_type,
+            })
+    agent.resource_links = resource_links
+
+    institution = agent.institution if hasattr(agent, 'institution') else None
+    xml = export_agent_eac(agent, institution)
+
+    safe_name = (agent.authorized_form or agent.name or f'agent-{agent_id}')
+    safe_name = ''.join(c if c.isalnum() or c in '-_ ' else '_' for c in safe_name).strip()[:80]
+
+    return Response(
+        xml,
+        mimetype='application/xml',
+        headers={
+            'Content-Disposition': f'attachment; filename="{safe_name or f"agent-{agent_id}"}.eac.xml"'
+        },
+    )
+
 
 def _get_agent(agent_id: int) -> 'Agent | None':
     return Agent.query.filter_by(
@@ -669,8 +669,6 @@ def delete_agent_place(agent_id, place_id):
     return success({'message': 'Deleted'})
 
 
-# ── Tags ───────────────────────────────────────────────────────────────
-
 @bp.route('/agents/<int:agent_id>/tags', methods=['GET'])
 @login_required
 def get_agent_tags(agent_id):
@@ -693,7 +691,6 @@ def add_agent_tag(agent_id):
     if not name:
         return error('name is required', 400)
     from app.models.geo import Tag
-    import sqlalchemy as sa
     tag = Tag.query.filter(
         Tag.institution_id == institution_id,
         sa.func.lower(Tag.name) == name.lower()
@@ -723,69 +720,7 @@ def remove_agent_tag(agent_id, tag_id):
         db.session.commit()
     return success({'message': 'Removed'})
 
-from flask import Response
-import sqlalchemy as sa
-from app.eaccpf.exporter import export_agent_eac
 
-
-@bp.route('/agents/<int:agent_id>/export/eac', methods=['GET'])
-@login_required
-def export_agent_eaccpf(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = Agent.query.filter_by(id=agent_id, institution_id=institution_id).first()
-    if not agent:
-        return error('Agent not found', 404)
-
-    # ── Load linked resources (agent -> nodes) for resourceRelation ──
-    from app.models.agent import agent_node_association
-    from app.models.node import Node
-    rows = db.session.execute(
-        sa.select(agent_node_association.c.node_id, agent_node_association.c.relation_type)
-        .where(agent_node_association.c.agent_id == agent_id)
-    ).all()
-    resource_links = []
-    for node_id, relation_type in rows:
-        node = Node.query.get(node_id)
-        if node:
-            resource_links.append({
-                'ref_code': node.ref_code or node.local_ref,
-                'title': node.title,
-                'relation_type': relation_type,
-            })
-    agent.resource_links = resource_links
-
-    institution = agent.institution if hasattr(agent, 'institution') else None
-    xml = export_agent_eac(agent, institution)
-
-    safe_name = (agent.authorized_form or agent.name or f'agent-{agent_id}')
-    safe_name = ''.join(c if c.isalnum() or c in '-_ ' else '_' for c in safe_name).strip()[:80]
-
-    return Response(
-        xml,
-        mimetype='application/xml',
-        headers={
-            'Content-Disposition': f'attachment; filename="{safe_name or f"agent-{agent_id}"}.eac.xml"'
-        },
-    )
-
-# ── Append to app/api/v1/agents/routes.py ──────────────────────────────
-#
-# Requires these additional imports at the top of the file:
-#
-import os
-import uuid
-from flask import current_app, send_from_directory
-from werkzeug.utils import secure_filename
-from app.models.agent import AgentIdentifier, AgentAttachment
-from app.models.node import IdentifierScheme
-from app.api.v1.nodes.routes import MIME_MAP, _allowed_file
-
-
-# ---------------------------------------------------------------------------
-# Identifiers
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/identifiers
 @bp.route('/agents/<int:agent_id>/identifiers', methods=['GET'])
 @login_required
 def list_agent_identifiers(agent_id):
@@ -796,7 +731,6 @@ def list_agent_identifiers(agent_id):
     return success([i.to_dict() for i in agent.identifiers])
 
 
-# POST /api/v1/agents/<id>/identifiers
 @bp.route('/agents/<int:agent_id>/identifiers', methods=['POST'])
 @login_required
 @require_write
@@ -819,7 +753,6 @@ def add_agent_identifier(agent_id):
     if not scheme:
         return error('Identifier scheme not found', 404)
 
-    from app.models.node import NodeIdentifier
     clash_agent = AgentIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
     clash_node = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
     if clash_agent or clash_node:
@@ -845,7 +778,6 @@ def add_agent_identifier(agent_id):
     return success(ident.to_dict(), 201)
 
 
-# PATCH /api/v1/agents/<id>/identifiers/<ident_id>
 @bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['PATCH'])
 @login_required
 @require_write
@@ -866,7 +798,6 @@ def update_agent_identifier(agent_id, ident_id):
         if not new_value:
             return error('value cannot be empty', 400)
         if new_value != ident.value:
-            from app.models.node import NodeIdentifier
             clash = (AgentIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first()
                      or NodeIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first())
             if clash:
@@ -888,7 +819,6 @@ def update_agent_identifier(agent_id, ident_id):
     return success(ident.to_dict())
 
 
-# DELETE /api/v1/agents/<id>/identifiers/<ident_id>
 @bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -907,11 +837,6 @@ def delete_agent_identifier(agent_id, ident_id):
     return success({'message': 'Identifier deleted'})
 
 
-# ---------------------------------------------------------------------------
-# Attachments (simple — no technical-metadata extraction)
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/attachments
 @bp.route('/agents/<int:agent_id>/attachments', methods=['GET'])
 @login_required
 def list_agent_attachments(agent_id):
@@ -922,7 +847,6 @@ def list_agent_attachments(agent_id):
     return success([a.to_dict() for a in agent.attachments])
 
 
-# POST /api/v1/agents/<id>/attachments
 @bp.route('/agents/<int:agent_id>/attachments', methods=['POST'])
 @login_required
 @require_write
@@ -945,9 +869,6 @@ def upload_agent_attachment(agent_id):
     original_filename = secure_filename(file.filename)
     stored_filename = f'{uuid.uuid4().hex}_{original_filename}'
 
-    # Agent files live in their own institution-scoped tree, parallel to the
-    # node upload tree (UPLOAD_FOLDER/<institution_id>/nodes/<node_id>/…):
-    #   UPLOAD_FOLDER/<institution_id>/agents/<agent_id>/…
     upload_dir = os.path.join(
         current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
     os.makedirs(upload_dir, exist_ok=True)
@@ -973,7 +894,6 @@ def upload_agent_attachment(agent_id):
     return success(attachment.to_dict(), 201)
 
 
-# GET /api/v1/agents/<id>/attachments/<attachment_id>/download
 @bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>/download', methods=['GET'])
 @login_required
 def download_agent_attachment(agent_id, attachment_id):
@@ -989,7 +909,7 @@ def download_agent_attachment(agent_id, attachment_id):
     upload_dir = os.path.join(
         current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
     INLINE_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp',
-                    'image/tiff', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv'}
+                     'image/tiff', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv'}
     as_attachment = attachment.mime_type not in INLINE_TYPES
     return send_from_directory(
         upload_dir, attachment.filename,
@@ -999,1027 +919,6 @@ def download_agent_attachment(agent_id, attachment_id):
     )
 
 
-# DELETE /api/v1/agents/<id>/attachments/<attachment_id>
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    file_path = os.path.join(upload_dir, attachment.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-    db.session.delete(attachment)
-    db.session.commit()
-    return success({'message': 'Attachment deleted'})
-
-# ── Append to app/api/v1/agents/routes.py ──────────────────────────────
-#
-# Requires these additional imports at the top of the file:
-#
-import os
-import uuid
-from flask import current_app, send_from_directory
-from werkzeug.utils import secure_filename
-from app.models.agent import AgentIdentifier, AgentAttachment
-from app.models.node import IdentifierScheme
-from app.api.v1.nodes.routes import MIME_MAP, _allowed_file
-
-
-# ---------------------------------------------------------------------------
-# Identifiers
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['GET'])
-@login_required
-def list_agent_identifiers(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([i.to_dict() for i in agent.identifiers])
-
-
-# POST /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['POST'])
-@login_required
-@require_write
-def add_agent_identifier(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    data = request.get_json(silent=True) or {}
-    scheme_id = data.get('scheme_id')
-    value = (data.get('value') or '').strip()
-    if not scheme_id:
-        return error('scheme_id is required', 400)
-    if not value:
-        return error('value is required', 400)
-
-    scheme = IdentifierScheme.query.filter_by(
-        id=scheme_id, institution_id=institution_id).first()
-    if not scheme:
-        return error('Identifier scheme not found', 404)
-
-    from app.models.node import NodeIdentifier
-    clash_agent = AgentIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    clash_node = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    if clash_agent or clash_node:
-        return error(
-            f'That {scheme.name} identifier is already used by another record.', 409)
-
-    make_primary = data.get('is_primary', False)
-    if make_primary:
-        for existing in agent.identifiers:
-            if existing.scheme_id == scheme_id:
-                existing.is_primary = False
-
-    ident = AgentIdentifier(
-        agent_id=agent_id,
-        scheme_id=scheme_id,
-        value=value,
-        is_primary=make_primary,
-        note=data.get('note'),
-        created_by_id=current_user.id,
-    )
-    db.session.add(ident)
-    db.session.commit()
-    return success(ident.to_dict(), 201)
-
-
-# PATCH /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['PATCH'])
-@login_required
-@require_write
-def update_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    data = request.get_json(silent=True) or {}
-
-    if 'value' in data:
-        new_value = (data['value'] or '').strip()
-        if not new_value:
-            return error('value cannot be empty', 400)
-        if new_value != ident.value:
-            from app.models.node import NodeIdentifier
-            clash = (AgentIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first()
-                     or NodeIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first())
-            if clash:
-                return error('That identifier value is already in use.', 409)
-        ident.value = new_value
-
-    if 'note' in data:
-        ident.note = data['note']
-
-    if data.get('is_primary'):
-        for existing in agent.identifiers:
-            if existing.scheme_id == ident.scheme_id and existing.id != ident.id:
-                existing.is_primary = False
-        ident.is_primary = True
-    elif 'is_primary' in data and not data['is_primary']:
-        ident.is_primary = False
-
-    db.session.commit()
-    return success(ident.to_dict())
-
-
-# DELETE /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    db.session.delete(ident)
-    db.session.commit()
-    return success({'message': 'Identifier deleted'})
-
-
-# ---------------------------------------------------------------------------
-# Attachments (simple — no technical-metadata extraction)
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['GET'])
-@login_required
-def list_agent_attachments(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([a.to_dict() for a in agent.attachments])
-
-
-# POST /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['POST'])
-@login_required
-@require_write
-def upload_agent_attachment(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    if 'file' not in request.files:
-        return error('No file provided', 400)
-
-    file = request.files['file']
-    if not file.filename:
-        return error('No file selected', 400)
-
-    if not _allowed_file(file.filename):
-        return error('File type not allowed. Supported: ' + ', '.join(sorted(MIME_MAP.keys())), 400)
-
-    original_filename = secure_filename(file.filename)
-    stored_filename = f'{uuid.uuid4().hex}_{original_filename}'
-
-    # Agent files live in their own institution-scoped tree, parallel to the
-    # node upload tree (UPLOAD_FOLDER/<institution_id>/nodes/<node_id>/…):
-    #   UPLOAD_FOLDER/<institution_id>/agents/<agent_id>/…
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_path = os.path.join(upload_dir, stored_filename)
-    file.save(file_path)
-    file_size = os.path.getsize(file_path)
-
-    ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-    mime_type = MIME_MAP.get(ext, 'application/octet-stream')
-
-    attachment = AgentAttachment(
-        agent_id=agent_id,
-        filename=stored_filename,
-        original_filename=original_filename,
-        file_size=file_size,
-        mime_type=mime_type,
-        description=request.form.get('description'),
-        uploaded_by_id=current_user.id,
-    )
-    db.session.add(attachment)
-    db.session.commit()
-    return success(attachment.to_dict(), 201)
-
-
-# GET /api/v1/agents/<id>/attachments/<attachment_id>/download
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>/download', methods=['GET'])
-@login_required
-def download_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    INLINE_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp',
-                    'image/tiff', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv'}
-    as_attachment = attachment.mime_type not in INLINE_TYPES
-    return send_from_directory(
-        upload_dir, attachment.filename,
-        download_name=attachment.original_filename,
-        as_attachment=as_attachment,
-        mimetype=attachment.mime_type,
-    )
-
-
-# DELETE /api/v1/agents/<id>/attachments/<attachment_id>
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    file_path = os.path.join(upload_dir, attachment.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-    db.session.delete(attachment)
-    db.session.commit()
-    return success({'message': 'Attachment deleted'})
-
-# ── Append to app/api/v1/agents/routes.py ──────────────────────────────
-#
-# Requires these additional imports at the top of the file:
-#
-import os
-import uuid
-from flask import current_app, send_from_directory
-from werkzeug.utils import secure_filename
-from app.models.agent import AgentIdentifier, AgentAttachment
-from app.models.node import IdentifierScheme
-from app.api.v1.nodes.routes import MIME_MAP, _allowed_file
-
-
-# ---------------------------------------------------------------------------
-# Identifiers
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['GET'])
-@login_required
-def list_agent_identifiers(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([i.to_dict() for i in agent.identifiers])
-
-
-# POST /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['POST'])
-@login_required
-@require_write
-def add_agent_identifier(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    data = request.get_json(silent=True) or {}
-    scheme_id = data.get('scheme_id')
-    value = (data.get('value') or '').strip()
-    if not scheme_id:
-        return error('scheme_id is required', 400)
-    if not value:
-        return error('value is required', 400)
-
-    scheme = IdentifierScheme.query.filter_by(
-        id=scheme_id, institution_id=institution_id).first()
-    if not scheme:
-        return error('Identifier scheme not found', 404)
-
-    from app.models.node import NodeIdentifier
-    clash_agent = AgentIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    clash_node = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    if clash_agent or clash_node:
-        return error(
-            f'That {scheme.name} identifier is already used by another record.', 409)
-
-    make_primary = data.get('is_primary', False)
-    if make_primary:
-        for existing in agent.identifiers:
-            if existing.scheme_id == scheme_id:
-                existing.is_primary = False
-
-    ident = AgentIdentifier(
-        agent_id=agent_id,
-        scheme_id=scheme_id,
-        value=value,
-        is_primary=make_primary,
-        note=data.get('note'),
-        created_by_id=current_user.id,
-    )
-    db.session.add(ident)
-    db.session.commit()
-    return success(ident.to_dict(), 201)
-
-
-# PATCH /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['PATCH'])
-@login_required
-@require_write
-def update_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    data = request.get_json(silent=True) or {}
-
-    if 'value' in data:
-        new_value = (data['value'] or '').strip()
-        if not new_value:
-            return error('value cannot be empty', 400)
-        if new_value != ident.value:
-            from app.models.node import NodeIdentifier
-            clash = (AgentIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first()
-                     or NodeIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first())
-            if clash:
-                return error('That identifier value is already in use.', 409)
-        ident.value = new_value
-
-    if 'note' in data:
-        ident.note = data['note']
-
-    if data.get('is_primary'):
-        for existing in agent.identifiers:
-            if existing.scheme_id == ident.scheme_id and existing.id != ident.id:
-                existing.is_primary = False
-        ident.is_primary = True
-    elif 'is_primary' in data and not data['is_primary']:
-        ident.is_primary = False
-
-    db.session.commit()
-    return success(ident.to_dict())
-
-
-# DELETE /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    db.session.delete(ident)
-    db.session.commit()
-    return success({'message': 'Identifier deleted'})
-
-
-# ---------------------------------------------------------------------------
-# Attachments (simple — no technical-metadata extraction)
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['GET'])
-@login_required
-def list_agent_attachments(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([a.to_dict() for a in agent.attachments])
-
-
-# POST /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['POST'])
-@login_required
-@require_write
-def upload_agent_attachment(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    if 'file' not in request.files:
-        return error('No file provided', 400)
-
-    file = request.files['file']
-    if not file.filename:
-        return error('No file selected', 400)
-
-    if not _allowed_file(file.filename):
-        return error('File type not allowed. Supported: ' + ', '.join(sorted(MIME_MAP.keys())), 400)
-
-    original_filename = secure_filename(file.filename)
-    stored_filename = f'{uuid.uuid4().hex}_{original_filename}'
-
-    # Agent files live in their own institution-scoped tree, parallel to the
-    # node upload tree (UPLOAD_FOLDER/<institution_id>/nodes/<node_id>/…):
-    #   UPLOAD_FOLDER/<institution_id>/agents/<agent_id>/…
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_path = os.path.join(upload_dir, stored_filename)
-    file.save(file_path)
-    file_size = os.path.getsize(file_path)
-
-    ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-    mime_type = MIME_MAP.get(ext, 'application/octet-stream')
-
-    attachment = AgentAttachment(
-        agent_id=agent_id,
-        filename=stored_filename,
-        original_filename=original_filename,
-        file_size=file_size,
-        mime_type=mime_type,
-        description=request.form.get('description'),
-        uploaded_by_id=current_user.id,
-    )
-    db.session.add(attachment)
-    db.session.commit()
-    return success(attachment.to_dict(), 201)
-
-
-# GET /api/v1/agents/<id>/attachments/<attachment_id>/download
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>/download', methods=['GET'])
-@login_required
-def download_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    INLINE_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp',
-                    'image/tiff', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv'}
-    as_attachment = attachment.mime_type not in INLINE_TYPES
-    return send_from_directory(
-        upload_dir, attachment.filename,
-        download_name=attachment.original_filename,
-        as_attachment=as_attachment,
-        mimetype=attachment.mime_type,
-    )
-
-
-# DELETE /api/v1/agents/<id>/attachments/<attachment_id>
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    file_path = os.path.join(upload_dir, attachment.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-    db.session.delete(attachment)
-    db.session.commit()
-    return success({'message': 'Attachment deleted'})
-
-# ── Append to app/api/v1/agents/routes.py ──────────────────────────────
-#
-# Requires these additional imports at the top of the file:
-#
-import os
-import uuid
-from flask import current_app, send_from_directory
-from werkzeug.utils import secure_filename
-from app.models.agent import AgentIdentifier, AgentAttachment
-from app.models.node import IdentifierScheme
-from app.api.v1.nodes.routes import MIME_MAP, _allowed_file
-
-
-# ---------------------------------------------------------------------------
-# Identifiers
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['GET'])
-@login_required
-def list_agent_identifiers(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([i.to_dict() for i in agent.identifiers])
-
-
-# POST /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['POST'])
-@login_required
-@require_write
-def add_agent_identifier(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    data = request.get_json(silent=True) or {}
-    scheme_id = data.get('scheme_id')
-    value = (data.get('value') or '').strip()
-    if not scheme_id:
-        return error('scheme_id is required', 400)
-    if not value:
-        return error('value is required', 400)
-
-    scheme = IdentifierScheme.query.filter_by(
-        id=scheme_id, institution_id=institution_id).first()
-    if not scheme:
-        return error('Identifier scheme not found', 404)
-
-    from app.models.node import NodeIdentifier
-    clash_agent = AgentIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    clash_node = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    if clash_agent or clash_node:
-        return error(
-            f'That {scheme.name} identifier is already used by another record.', 409)
-
-    make_primary = data.get('is_primary', False)
-    if make_primary:
-        for existing in agent.identifiers:
-            if existing.scheme_id == scheme_id:
-                existing.is_primary = False
-
-    ident = AgentIdentifier(
-        agent_id=agent_id,
-        scheme_id=scheme_id,
-        value=value,
-        is_primary=make_primary,
-        note=data.get('note'),
-        created_by_id=current_user.id,
-    )
-    db.session.add(ident)
-    db.session.commit()
-    return success(ident.to_dict(), 201)
-
-
-# PATCH /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['PATCH'])
-@login_required
-@require_write
-def update_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    data = request.get_json(silent=True) or {}
-
-    if 'value' in data:
-        new_value = (data['value'] or '').strip()
-        if not new_value:
-            return error('value cannot be empty', 400)
-        if new_value != ident.value:
-            from app.models.node import NodeIdentifier
-            clash = (AgentIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first()
-                     or NodeIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first())
-            if clash:
-                return error('That identifier value is already in use.', 409)
-        ident.value = new_value
-
-    if 'note' in data:
-        ident.note = data['note']
-
-    if data.get('is_primary'):
-        for existing in agent.identifiers:
-            if existing.scheme_id == ident.scheme_id and existing.id != ident.id:
-                existing.is_primary = False
-        ident.is_primary = True
-    elif 'is_primary' in data and not data['is_primary']:
-        ident.is_primary = False
-
-    db.session.commit()
-    return success(ident.to_dict())
-
-
-# DELETE /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    db.session.delete(ident)
-    db.session.commit()
-    return success({'message': 'Identifier deleted'})
-
-
-# ---------------------------------------------------------------------------
-# Attachments (simple — no technical-metadata extraction)
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['GET'])
-@login_required
-def list_agent_attachments(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([a.to_dict() for a in agent.attachments])
-
-
-# POST /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['POST'])
-@login_required
-@require_write
-def upload_agent_attachment(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    if 'file' not in request.files:
-        return error('No file provided', 400)
-
-    file = request.files['file']
-    if not file.filename:
-        return error('No file selected', 400)
-
-    if not _allowed_file(file.filename):
-        return error('File type not allowed. Supported: ' + ', '.join(sorted(MIME_MAP.keys())), 400)
-
-    original_filename = secure_filename(file.filename)
-    stored_filename = f'{uuid.uuid4().hex}_{original_filename}'
-
-    # Agent files live in their own institution-scoped tree, parallel to the
-    # node upload tree (UPLOAD_FOLDER/<institution_id>/nodes/<node_id>/…):
-    #   UPLOAD_FOLDER/<institution_id>/agents/<agent_id>/…
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_path = os.path.join(upload_dir, stored_filename)
-    file.save(file_path)
-    file_size = os.path.getsize(file_path)
-
-    ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-    mime_type = MIME_MAP.get(ext, 'application/octet-stream')
-
-    attachment = AgentAttachment(
-        agent_id=agent_id,
-        filename=stored_filename,
-        original_filename=original_filename,
-        file_size=file_size,
-        mime_type=mime_type,
-        description=request.form.get('description'),
-        uploaded_by_id=current_user.id,
-    )
-    db.session.add(attachment)
-    db.session.commit()
-    return success(attachment.to_dict(), 201)
-
-
-# GET /api/v1/agents/<id>/attachments/<attachment_id>/download
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>/download', methods=['GET'])
-@login_required
-def download_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    INLINE_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp',
-                    'image/tiff', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv'}
-    as_attachment = attachment.mime_type not in INLINE_TYPES
-    return send_from_directory(
-        upload_dir, attachment.filename,
-        download_name=attachment.original_filename,
-        as_attachment=as_attachment,
-        mimetype=attachment.mime_type,
-    )
-
-
-# DELETE /api/v1/agents/<id>/attachments/<attachment_id>
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    file_path = os.path.join(upload_dir, attachment.filename)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-
-    db.session.delete(attachment)
-    db.session.commit()
-    return success({'message': 'Attachment deleted'})
-
-# ── Append to app/api/v1/agents/routes.py ──────────────────────────────
-#
-# Requires these additional imports at the top of the file:
-#
-import os
-import uuid
-from flask import current_app, send_from_directory
-from werkzeug.utils import secure_filename
-from app.models.agent import AgentIdentifier, AgentAttachment
-from app.models.node import IdentifierScheme
-from app.api.v1.nodes.routes import MIME_MAP, _allowed_file
-
-
-# ---------------------------------------------------------------------------
-# Identifiers
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['GET'])
-@login_required
-def list_agent_identifiers(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([i.to_dict() for i in agent.identifiers])
-
-
-# POST /api/v1/agents/<id>/identifiers
-@bp.route('/agents/<int:agent_id>/identifiers', methods=['POST'])
-@login_required
-@require_write
-def add_agent_identifier(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    data = request.get_json(silent=True) or {}
-    scheme_id = data.get('scheme_id')
-    value = (data.get('value') or '').strip()
-    if not scheme_id:
-        return error('scheme_id is required', 400)
-    if not value:
-        return error('value is required', 400)
-
-    scheme = IdentifierScheme.query.filter_by(
-        id=scheme_id, institution_id=institution_id).first()
-    if not scheme:
-        return error('Identifier scheme not found', 404)
-
-    from app.models.node import NodeIdentifier
-    clash_agent = AgentIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    clash_node = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    if clash_agent or clash_node:
-        return error(
-            f'That {scheme.name} identifier is already used by another record.', 409)
-
-    make_primary = data.get('is_primary', False)
-    if make_primary:
-        for existing in agent.identifiers:
-            if existing.scheme_id == scheme_id:
-                existing.is_primary = False
-
-    ident = AgentIdentifier(
-        agent_id=agent_id,
-        scheme_id=scheme_id,
-        value=value,
-        is_primary=make_primary,
-        note=data.get('note'),
-        created_by_id=current_user.id,
-    )
-    db.session.add(ident)
-    db.session.commit()
-    return success(ident.to_dict(), 201)
-
-
-# PATCH /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['PATCH'])
-@login_required
-@require_write
-def update_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    data = request.get_json(silent=True) or {}
-
-    if 'value' in data:
-        new_value = (data['value'] or '').strip()
-        if not new_value:
-            return error('value cannot be empty', 400)
-        if new_value != ident.value:
-            from app.models.node import NodeIdentifier
-            clash = (AgentIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first()
-                     or NodeIdentifier.query.filter_by(scheme_id=ident.scheme_id, value=new_value).first())
-            if clash:
-                return error('That identifier value is already in use.', 409)
-        ident.value = new_value
-
-    if 'note' in data:
-        ident.note = data['note']
-
-    if data.get('is_primary'):
-        for existing in agent.identifiers:
-            if existing.scheme_id == ident.scheme_id and existing.id != ident.id:
-                existing.is_primary = False
-        ident.is_primary = True
-    elif 'is_primary' in data and not data['is_primary']:
-        ident.is_primary = False
-
-    db.session.commit()
-    return success(ident.to_dict())
-
-
-# DELETE /api/v1/agents/<id>/identifiers/<ident_id>
-@bp.route('/agents/<int:agent_id>/identifiers/<int:ident_id>', methods=['DELETE'])
-@login_required
-@require_write
-def delete_agent_identifier(agent_id, ident_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    ident = AgentIdentifier.query.filter_by(id=ident_id, agent_id=agent_id).first()
-    if not ident:
-        return error('Identifier not found', 404)
-
-    db.session.delete(ident)
-    db.session.commit()
-    return success({'message': 'Identifier deleted'})
-
-
-# ---------------------------------------------------------------------------
-# Attachments (simple — no technical-metadata extraction)
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['GET'])
-@login_required
-def list_agent_attachments(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-    return success([a.to_dict() for a in agent.attachments])
-
-
-# POST /api/v1/agents/<id>/attachments
-@bp.route('/agents/<int:agent_id>/attachments', methods=['POST'])
-@login_required
-@require_write
-def upload_agent_attachment(agent_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    if 'file' not in request.files:
-        return error('No file provided', 400)
-
-    file = request.files['file']
-    if not file.filename:
-        return error('No file selected', 400)
-
-    if not _allowed_file(file.filename):
-        return error('File type not allowed. Supported: ' + ', '.join(sorted(MIME_MAP.keys())), 400)
-
-    original_filename = secure_filename(file.filename)
-    stored_filename = f'{uuid.uuid4().hex}_{original_filename}'
-
-    # Agent files live in their own institution-scoped tree, parallel to the
-    # node upload tree (UPLOAD_FOLDER/<institution_id>/nodes/<node_id>/…):
-    #   UPLOAD_FOLDER/<institution_id>/agents/<agent_id>/…
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    os.makedirs(upload_dir, exist_ok=True)
-
-    file_path = os.path.join(upload_dir, stored_filename)
-    file.save(file_path)
-    file_size = os.path.getsize(file_path)
-
-    ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-    mime_type = MIME_MAP.get(ext, 'application/octet-stream')
-
-    attachment = AgentAttachment(
-        agent_id=agent_id,
-        filename=stored_filename,
-        original_filename=original_filename,
-        file_size=file_size,
-        mime_type=mime_type,
-        description=request.form.get('description'),
-        uploaded_by_id=current_user.id,
-    )
-    db.session.add(attachment)
-    db.session.commit()
-    return success(attachment.to_dict(), 201)
-
-
-# GET /api/v1/agents/<id>/attachments/<attachment_id>/download
-@bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>/download', methods=['GET'])
-@login_required
-def download_agent_attachment(agent_id, attachment_id):
-    institution_id = current_user.active_institution_id
-    agent = _get_agent_or_404(agent_id, institution_id)
-    if not agent:
-        return error('Agent not found', 404)
-
-    attachment = AgentAttachment.query.filter_by(id=attachment_id, agent_id=agent_id).first()
-    if not attachment:
-        return error('Attachment not found', 404)
-
-    upload_dir = os.path.join(
-        current_app.config['UPLOAD_FOLDER'], str(institution_id), 'agents', str(agent_id))
-    INLINE_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp',
-                    'image/tiff', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv'}
-    as_attachment = attachment.mime_type not in INLINE_TYPES
-    return send_from_directory(
-        upload_dir, attachment.filename,
-        download_name=attachment.original_filename,
-        as_attachment=as_attachment,
-        mimetype=attachment.mime_type,
-    )
-
-
-# DELETE /api/v1/agents/<id>/attachments/<attachment_id>
 @bp.route('/agents/<int:agent_id>/attachments/<int:attachment_id>', methods=['DELETE'])
 @login_required
 @require_write

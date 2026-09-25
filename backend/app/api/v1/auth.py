@@ -41,7 +41,7 @@ def _serialize_user(user: User) -> dict:
     }
 
 
-# POST /api/v1/auth/login
+
 @bp.route('/auth/login', methods=['POST'])
 def login():
     if current_user.is_authenticated:
@@ -72,7 +72,7 @@ def login():
     return success(_serialize_user(user))
 
 
-# POST /api/v1/auth/logout
+
 @bp.route('/auth/logout', methods=['POST'])
 @login_required
 def logout():
@@ -80,14 +80,14 @@ def logout():
     return success({'message': 'Logged out'})
 
 
-# GET /api/v1/auth/me
+
 @bp.route('/auth/me', methods=['GET'])
 @login_required
 def me():
     return success(_serialize_user(current_user))
 
 
-# POST /api/v1/auth/switch-institution
+
 @bp.route('/auth/switch-institution', methods=['POST'])
 @login_required
 def switch_institution():
@@ -108,7 +108,6 @@ def switch_institution():
     return success(_serialize_user(current_user))
 
 
-# POST /api/v1/auth/institutions/<id>/members
 @bp.route('/auth/institutions/<int:institution_id>/members', methods=['POST'])
 @login_required
 def add_member(institution_id):
@@ -142,7 +141,6 @@ def add_member(institution_id):
     return success({'message': f'{user.username} added to {institution.name} as {role}'}, 201)
 
 
-# DELETE /api/v1/auth/institutions/<id>/members/<user_id>
 @bp.route('/auth/institutions/<int:institution_id>/members/<int:user_id>', methods=['DELETE'])
 @login_required
 def remove_member(institution_id, user_id):
@@ -162,7 +160,6 @@ def remove_member(institution_id, user_id):
     return success({'message': 'Member removed'})
 
 
-# PATCH /api/v1/auth/institutions/<id>/members/<user_id>
 @bp.route('/auth/institutions/<int:institution_id>/members/<int:user_id>', methods=['PATCH'])
 @login_required
 def update_member_role(institution_id, user_id):
@@ -189,9 +186,6 @@ def update_member_role(institution_id, user_id):
     return success({'message': 'Role updated'})
 
 
-# ---------------------------------------------------------------------------
-# Institution management
-# ---------------------------------------------------------------------------
 
 def _serialize_institution(inst) -> dict:
     from app.models.institution import user_institution_association
@@ -228,7 +222,6 @@ def _serialize_member(user, role: str) -> dict:
     }
 
 
-# GET /api/v1/auth/institutions/current
 @bp.route('/auth/institutions/current', methods=['GET'])
 @login_required
 def get_current_institution():
@@ -240,7 +233,6 @@ def get_current_institution():
     return success(_serialize_institution(inst))
 
 
-# PATCH /api/v1/auth/institutions/current
 @bp.route('/auth/institutions/current', methods=['PATCH'])
 @login_required
 def update_current_institution():
@@ -263,7 +255,6 @@ def update_current_institution():
     return success(_serialize_institution(inst))
 
 
-# GET /api/v1/auth/institutions/current/members
 @bp.route('/auth/institutions/current/members', methods=['GET'])
 @login_required
 def list_members():
@@ -280,8 +271,6 @@ def list_members():
     return success(members)
 
 
-# POST /api/v1/auth/institutions/current/invite
-# Create a new user and add them to the institution
 @bp.route('/auth/institutions/current/invite', methods=['POST'])
 @login_required
 def invite_user():

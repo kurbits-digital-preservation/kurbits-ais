@@ -1,5 +1,7 @@
-from flask import request
+from flask import request, current_app, make_response
 from flask_login import login_required, current_user
+import sqlalchemy as sa
+
 from app.api.v1 import bp
 from app.api.v1.helpers import success, error, require_write
 from app.api.v1.locations.serializers import (
@@ -7,20 +9,17 @@ from app.api.v1.locations.serializers import (
 )
 from app.api.v1.nodes.serializers import serialize_node_stub
 from app.extensions import db
-from app.models import Location, LocationMovement
-from app.models.location import location_node_association
-import sqlalchemy as sa
+from app.models import Location, LocationMovement, Node
+from app.models.location import (
+    location_node_association, CHECKOUT_ROOT_CODE, DEFAULT_CHECKOUT_CATEGORIES
+)
+from app.reports import generate_location_inventory
 
 
 def _get_location_or_404(location_id: int, institution_id: int):
     return Location.query.filter_by(id=location_id, institution_id=institution_id).first()
 
 
-# ---------------------------------------------------------------------------
-# Tree
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/locations/tree
 @bp.route('/locations/tree', methods=['GET'])
 @login_required
 def get_location_tree():
@@ -35,7 +34,6 @@ def get_location_tree():
     return success([serialize_location_stub(loc) for loc in roots])
 
 
-# GET /api/v1/locations/<id>/children
 @bp.route('/locations/<int:location_id>/children', methods=['GET'])
 @login_required
 def get_location_children(location_id):
@@ -50,11 +48,6 @@ def get_location_children(location_id):
     return success([serialize_location_stub(c) for c in children])
 
 
-# ---------------------------------------------------------------------------
-# CRUD
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/locations/<id>
 @bp.route('/locations/<int:location_id>', methods=['GET'])
 @login_required
 def get_location(location_id):
@@ -66,7 +59,6 @@ def get_location(location_id):
     return success(serialize_location_detail(loc))
 
 
-# POST /api/v1/locations
 @bp.route('/locations', methods=['POST'])
 @login_required
 @require_write
@@ -107,7 +99,6 @@ def create_location():
     return success(serialize_location_detail(loc), 201)
 
 
-# PATCH /api/v1/locations/<id>
 @bp.route('/locations/<int:location_id>', methods=['PATCH'])
 @login_required
 @require_write
@@ -127,7 +118,6 @@ def update_location(location_id):
     return success(serialize_location_detail(loc))
 
 
-# DELETE /api/v1/locations/<id>
 @bp.route('/locations/<int:location_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -148,11 +138,6 @@ def delete_location(location_id):
     return success({'message': 'Location deleted'})
 
 
-# ---------------------------------------------------------------------------
-# Stored nodes (check in / check out / transfer)
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/locations/<id>/nodes
 @bp.route('/locations/<int:location_id>/nodes', methods=['GET'])
 @login_required
 def get_stored_nodes(location_id):
@@ -167,16 +152,7 @@ def get_stored_nodes(location_id):
     return success([serialize_node_stub(n) for n in loc.stored_nodes])
 
 
-
-
-
 def _get_or_create_checked_out_location(institution_id: int, db):
-    """Get or create the virtual 'Checked out' root for an institution.
-
-    On first creation, the default checkout categories are seeded as child
-    locations. Admins manage them afterwards like any other location.
-    """
-    from app.models.location import CHECKOUT_ROOT_CODE, DEFAULT_CHECKOUT_CATEGORIES
     loc = Location.query.filter_by(
         institution_id=institution_id,
         code=CHECKOUT_ROOT_CODE,
@@ -201,23 +177,11 @@ def _get_or_create_checked_out_location(institution_id: int, db):
         db.session.add(loc)
         db.session.flush()
 
-    # Backfill default categories for any missing codes. Runs whether the root
-    # was just created or already existed from the old flat checkout system,
-    # so upgrading databases get categories without a migration. Categories the
-    # admin later deletes are not resurrected, because we only add codes that
-    # have never existed — see the guard below.
     _seed_checkout_categories(loc, db)
     return loc
 
 
 def _seed_checkout_categories(root, db):
-    """Add any default checkout categories that don't yet exist under `root`.
-
-    Only seeds when the root currently has NO children at all, so an admin who
-    has deliberately curated the category list (renaming or removing some) is
-    never overridden on subsequent calls.
-    """
-    from app.models.location import DEFAULT_CHECKOUT_CATEGORIES
     existing = root.children.count()
     if existing > 0:
         return
@@ -235,8 +199,8 @@ def _seed_checkout_categories(root, db):
         ))
     db.session.flush()
 
+
 def _update_node_current_location(node, location_id, db):
-    """Denormalise current location onto node for fast lookup."""
     node.current_location_id = location_id
 
 
@@ -251,7 +215,7 @@ def _date_or_none(val):
     except (ValueError, TypeError):
         return None
 
-# POST /api/v1/locations/<id>/check-in
+
 @bp.route('/locations/<int:location_id>/check-in', methods=['POST'])
 @login_required
 @require_write
@@ -271,7 +235,6 @@ def check_in(location_id):
     if not node_id:
         return error('node_id is required', 400)
 
-    from app.models import Node
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
     if not node:
         return error('Node not found', 404)
@@ -285,7 +248,6 @@ def check_in(location_id):
     if existing:
         return error('Node is already at this location', 409)
 
-    # Remove from ALL previous locations — a node can only be in one place
     db.session.execute(
         location_node_association.delete().where(
             location_node_association.c.node_id == node_id
@@ -313,7 +275,6 @@ def check_in(location_id):
     return success({'message': 'Node checked in', 'movement': movement.to_dict()}, 201)
 
 
-# POST /api/v1/locations/<id>/check-out
 @bp.route('/locations/<int:location_id>/check-out', methods=['POST'])
 @login_required
 @require_write
@@ -335,13 +296,10 @@ def check_out(location_id):
         )
     )
 
-    from app.models import Node
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
 
-    # Auto-assign to virtual "Checked out" location for this institution
     checked_out_root = _get_or_create_checked_out_location(institution_id, db)
 
-    # Optional category (a child of the virtual root, admin-managed)
     checked_out_loc = checked_out_root
     category_id = data.get('category_location_id')
     if category_id:
@@ -350,7 +308,6 @@ def check_out(location_id):
             return error('Invalid checkout category', 422)
         checked_out_loc = category
 
-    # Move to checked-out virtual location
     db.session.execute(
         location_node_association.insert().values(
             location_id=checked_out_loc.id, node_id=node_id
@@ -373,10 +330,6 @@ def check_out(location_id):
     return success({'message': 'Node checked out', 'movement': movement.to_dict()})
 
 
-
-
-# POST /api/v1/locations/<id>/move
-# Move a node from this location directly to another location
 @bp.route('/locations/<int:location_id>/move', methods=['POST'])
 @login_required
 @require_write
@@ -400,12 +353,10 @@ def move_node_between_locations(location_id):
     if target_loc.capacity is not None and target_loc.stored_nodes.count() >= target_loc.capacity:
         return error('Target location is at full capacity', 409)
 
-    from app.models import Node
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
     if not node:
         return error('Node not found', 404)
 
-    # Remove from all current locations, add to target
     db.session.execute(
         location_node_association.delete().where(
             location_node_association.c.node_id == node_id
@@ -431,12 +382,11 @@ def move_node_between_locations(location_id):
     db.session.commit()
     return success({'message': 'Node moved', 'movement': movement.to_dict()})
 
-# POST /api/v1/locations/<id>/transfer
+
 @bp.route('/locations/<int:location_id>/transfer', methods=['POST'])
 @login_required
 @require_write
 def transfer_node(location_id):
-    """Move a node from one location to another in a single operation."""
     institution_id = current_user.active_institution_id
     source_loc = _get_location_or_404(location_id, institution_id)
     if not source_loc:
@@ -469,7 +419,6 @@ def transfer_node(location_id):
         )
     )
 
-    from app.models import Node
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
     movement = LocationMovement(
         node_id=node_id,
@@ -487,7 +436,6 @@ def transfer_node(location_id):
     return success({'message': 'Node transferred', 'movement': movement.to_dict()})
 
 
-# GET /api/v1/locations/<id>/movements
 @bp.route('/locations/<int:location_id>/movements', methods=['GET'])
 @login_required
 def get_movements(location_id):
@@ -512,7 +460,6 @@ def get_movements(location_id):
     )
 
 
-# GET /api/v1/locations/search?q=shelf&storable=true
 @bp.route('/locations/search', methods=['GET'])
 @login_required
 def search_locations():
@@ -550,18 +497,11 @@ def search_locations():
     } for loc in locations])
 
 
-# ── Institution-wide location overview ────────────────────────────────
-
-
-
-# POST /api/v1/nodes/<id>/move
-# Convenience endpoint — move a node to a new location with full status
 @bp.route('/nodes/<int:node_id>/move', methods=['POST'])
 @login_required
 @require_write
 def move_node_to_location(node_id):
     institution_id = current_user.active_institution_id
-    from app.models.node import Node
 
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
     if not node:
@@ -571,15 +511,12 @@ def move_node_to_location(node_id):
     target_location_id = data.get('location_id')
     movement_type = data.get('movement_type', 'moved')
 
-    # Validate target location exists (optional — missing = on_loan_out with no internal loc)
     target_loc = None
     if target_location_id:
         target_loc = _get_location_or_404(target_location_id, institution_id)
         if not target_loc:
             return error('Target location not found', 404)
 
-        # Update node-location association
-        # Remove from any existing location
         db.session.execute(
             sa.text('DELETE FROM location_node_association WHERE node_id = :nid'),
             {'nid': node_id}
@@ -606,12 +543,10 @@ def move_node_to_location(node_id):
     return success(movement.to_dict(), 201)
 
 
-# GET /api/v1/nodes/<id>/movements
 @bp.route('/nodes/<int:node_id>/movements', methods=['GET'])
 @login_required
 def get_node_movements(node_id):
     institution_id = current_user.active_institution_id
-    from app.models.node import Node
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
     if not node:
         return error('Node not found', 404)
@@ -623,14 +558,10 @@ def get_node_movements(node_id):
     ).scalars().all()
     return success([m.to_dict() for m in movements])
 
-# GET /api/v1/locations/<id>/inventory
+
 @bp.route('/locations/<int:location_id>/inventory', methods=['GET'])
 @login_required
 def print_location_inventory(location_id):
-    """Generate an inventory PDF for a location and all its sub-locations."""
-    from flask import make_response
-    from app.reports import generate_location_inventory
-
     institution_id = current_user.active_institution_id
     loc = _get_location_or_404(location_id, institution_id)
     if not loc:
@@ -648,12 +579,7 @@ def print_location_inventory(location_id):
     response.headers['Content-Disposition'] = f'inline; filename="{safe_name}_inventory.pdf"'
     return response
 
-# ---------------------------------------------------------------------------
-# Bulk movement
-# ---------------------------------------------------------------------------
 
-# POST /api/v1/locations/<id>/move-contents
-# Relocate every stored item from this location to another, in one transaction.
 @bp.route('/locations/<int:location_id>/move-contents', methods=['POST'])
 @login_required
 @require_write
@@ -694,14 +620,12 @@ def move_location_contents(location_id):
                 409,
             )
 
-    # Re-point associations
     db.session.execute(
         location_node_association.delete().where(
             location_node_association.c.location_id == source.id,
             location_node_association.c.node_id.in_(node_ids),
         )
     )
-    # Guard against duplicates if some item already sits at the target
     db.session.execute(
         location_node_association.delete().where(
             location_node_association.c.location_id == target.id,
@@ -713,7 +637,6 @@ def move_location_contents(location_id):
         [{'location_id': target.id, 'node_id': nid} for nid in node_ids],
     )
 
-    # One movement record per item
     for nid in node_ids:
         db.session.add(LocationMovement(
             node_id=nid,
@@ -724,8 +647,6 @@ def move_location_contents(location_id):
             moved_by_id=current_user.id,
         ))
 
-    # Keep the denormalised pointer in sync
-    from app.models import Node
     db.session.execute(
         sa.update(Node)
         .where(Node.id.in_(node_ids))
@@ -739,10 +660,6 @@ def move_location_contents(location_id):
     })
 
 
-# POST /api/v1/locations/quick-move
-# Barcode workflow: resolve target by location code, items by ref_code.
-# Items currently in the virtual checked-out location are checked back in;
-# everything else is a transfer.
 @bp.route('/locations/quick-move', methods=['POST'])
 @login_required
 @require_write
@@ -761,7 +678,6 @@ def quick_move():
     if len(ref_codes) > 200:
         return error('Too many items in one request (max 200)', 400)
 
-    # Location codes are only unique per parent — resolve and detect ambiguity
     matches = Location.query.filter_by(
         code=location_code, institution_id=institution_id
     ).all()
@@ -778,7 +694,6 @@ def quick_move():
     if target.capacity is not None:
         remaining = target.capacity - target.stored_nodes.count()
 
-    from app.models import Node
     results = []
     seen = set()
     for raw in ref_codes:
@@ -844,12 +759,6 @@ def quick_move():
     })
 
 
-# ---------------------------------------------------------------------------
-# Checkout categories & returns
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/locations/checkout-categories
-# The virtual root plus its admin-managed category children.
 @bp.route('/locations/checkout-categories', methods=['GET'])
 @login_required
 def get_checkout_categories():
@@ -867,8 +776,6 @@ def get_checkout_categories():
     })
 
 
-# POST /api/v1/nodes/<id>/return-to-previous
-# Check a checked-out item back in to wherever it was checked out from.
 @bp.route('/nodes/<int:node_id>/return-to-previous', methods=['POST'])
 @login_required
 @require_write
@@ -877,7 +784,6 @@ def return_to_previous(node_id):
     if not institution_id:
         return error('No active institution', 400)
 
-    from app.models import Node
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
     if not node:
         return error('Node not found', 404)

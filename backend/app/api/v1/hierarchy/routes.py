@@ -8,8 +8,6 @@ from app.models.hierarchy import hierarchy_level_relationships
 import sqlalchemy as sa
 
 
-# ── Serializers ───────────────────────────────────────────────────────
-
 def _serialize_type(ht: HierarchyType) -> dict:
     return {
         'id': ht.id,
@@ -44,9 +42,6 @@ def _serialize_level(level: HierarchyLevel) -> dict:
     }
 
 
-# ── Hierarchy Types ───────────────────────────────────────────────────
-
-# GET /api/v1/hierarchy/types
 @bp.route('/hierarchy/types', methods=['GET'])
 @login_required
 def list_hierarchy_types():
@@ -64,7 +59,6 @@ def list_hierarchy_types():
     return success([_serialize_type(ht) for ht in types])
 
 
-# POST /api/v1/hierarchy/types
 @bp.route('/hierarchy/types', methods=['POST'])
 @login_required
 @require_institution_admin
@@ -99,7 +93,6 @@ def create_hierarchy_type():
     return success(_serialize_type(ht), 201)
 
 
-# PATCH /api/v1/hierarchy/types/<id>
 @bp.route('/hierarchy/types/<int:type_id>', methods=['PATCH'])
 @login_required
 @require_institution_admin
@@ -122,7 +115,6 @@ def update_hierarchy_type(type_id):
     return success(_serialize_type(ht))
 
 
-# DELETE /api/v1/hierarchy/types/<id>
 @bp.route('/hierarchy/types/<int:type_id>', methods=['DELETE'])
 @login_required
 @require_institution_admin
@@ -145,9 +137,6 @@ def delete_hierarchy_type(type_id):
     return success({'message': 'Hierarchy type deleted'})
 
 
-# ── Hierarchy Levels ──────────────────────────────────────────────────
-
-# GET /api/v1/hierarchy/types/<id>/levels
 @bp.route('/hierarchy/types/<int:type_id>/levels', methods=['GET'])
 @login_required
 def list_levels(type_id):
@@ -161,7 +150,6 @@ def list_levels(type_id):
     return success([_serialize_level(l) for l in levels])
 
 
-# POST /api/v1/hierarchy/types/<id>/levels
 @bp.route('/hierarchy/types/<int:type_id>/levels', methods=['POST'])
 @login_required
 @require_institution_admin
@@ -200,7 +188,6 @@ def create_level(type_id):
     return success(_serialize_level(level), 201)
 
 
-# PATCH /api/v1/hierarchy/types/<id>/levels/<level_id>
 @bp.route('/hierarchy/types/<int:type_id>/levels/<int:level_id>', methods=['PATCH'])
 @login_required
 @require_institution_admin
@@ -229,7 +216,6 @@ def update_level(type_id, level_id):
     return success(_serialize_level(level))
 
 
-# DELETE /api/v1/hierarchy/types/<id>/levels/<level_id>
 @bp.route('/hierarchy/types/<int:type_id>/levels/<int:level_id>', methods=['DELETE'])
 @login_required
 @require_institution_admin
@@ -255,10 +241,6 @@ def delete_level(type_id, level_id):
     return success({'message': 'Level deleted'})
 
 
-# ── Level relationships ───────────────────────────────────────────────
-
-# PUT /api/v1/hierarchy/types/<id>/levels/<level_id>/parents
-# Replaces the full set of allowed parents for a level
 @bp.route('/hierarchy/types/<int:type_id>/levels/<int:level_id>/parents', methods=['PUT'])
 @login_required
 @require_institution_admin
@@ -284,7 +266,6 @@ def set_level_parents(type_id, level_id):
     if len(parents) != len(parent_ids):
         return error('One or more parent IDs are invalid', 422)
 
-    # Replace via direct SQL to avoid autoflush issues
     db.session.execute(
         hierarchy_level_relationships.delete().where(
             hierarchy_level_relationships.c.child_id == level_id
@@ -301,9 +282,7 @@ def set_level_parents(type_id, level_id):
     return success(_serialize_level(level))
 
 
-# ── Read-only helpers (used by NodeForm) ──────────────────────────────
-
-# GET /api/v1/hierarchy/valid-levels
+# used by NodeForm
 @bp.route('/hierarchy/valid-levels', methods=['GET'])
 @login_required
 def get_valid_levels():
@@ -327,7 +306,6 @@ def get_valid_levels():
     return success([_serialize_level(l) for l in levels])
 
 
-# GET /api/v1/hierarchy/level-schema
 @bp.route('/hierarchy/level-schema', methods=['GET'])
 @login_required
 def get_level_schema():

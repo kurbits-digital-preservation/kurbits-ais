@@ -16,7 +16,6 @@ def _serialize(t: MetadataTemplate) -> dict:
     }
 
 
-# GET /api/v1/templates?entity_type=resource
 @bp.route('/templates', methods=['GET'])
 @login_required
 def list_templates():
@@ -35,7 +34,6 @@ def list_templates():
     return success([_serialize(t) for t in templates])
 
 
-# POST /api/v1/templates
 @bp.route('/templates', methods=['POST'])
 @login_required
 @require_institution_admin
@@ -58,7 +56,6 @@ def create_template():
     return success(_serialize(t), 201)
 
 
-# PATCH /api/v1/templates/<id>
 @bp.route('/templates/<int:template_id>', methods=['PATCH'])
 @login_required
 @require_institution_admin
@@ -82,7 +79,6 @@ def update_template(template_id):
     return success(_serialize(t))
 
 
-# DELETE /api/v1/templates/<id>
 @bp.route('/templates/<int:template_id>', methods=['DELETE'])
 @login_required
 @require_institution_admin
@@ -99,8 +95,7 @@ def delete_template(template_id):
     return success({'message': 'Deleted'})
 
 
-# POST /api/v1/templates/import
-# Import one or more templates from Kurbits JSON format
+# Kurbits JSON format
 @bp.route('/templates/import', methods=['POST'])
 @login_required
 @require_write
@@ -128,7 +123,6 @@ def import_templates():
             skipped.append('Template missing name')
             continue
 
-        # Upsert by name+institution
         existing = MetadataTemplate.query.filter_by(
             institution_id=institution_id, name=name
         ).first()

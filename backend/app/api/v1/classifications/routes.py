@@ -1,6 +1,10 @@
 from datetime import datetime
+import json
+
 from flask import request
 from flask_login import login_required, current_user
+import sqlalchemy as sa
+
 from app.api.v1 import bp
 from app.api.v1.helpers import success, error, require_write
 from app.api.v1.classifications.serializers import (
@@ -12,7 +16,7 @@ from app.extensions import db
 from app.models import Classification, ClassificationChange
 from app.models.classification import BpmnTaskLink, RecordsVocabularyTerm, DEFAULT_RECORDS_VOCAB
 from app.models.classification import classification_node_association
-import sqlalchemy as sa
+from app.models.hierarchy import HierarchyLevel, HierarchyType
 
 
 def _get_classification_or_404(classification_id: int, institution_id: int):
@@ -21,11 +25,6 @@ def _get_classification_or_404(classification_id: int, institution_id: int):
     ).first()
 
 
-# ---------------------------------------------------------------------------
-# Tree
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/classifications/tree
 @bp.route('/classifications/tree', methods=['GET'])
 @login_required
 def get_classification_tree():
@@ -44,7 +43,6 @@ def get_classification_tree():
     return success([serialize_classification_stub(c) for c in roots])
 
 
-# GET /api/v1/classifications/<id>/children
 @bp.route('/classifications/<int:classification_id>/children', methods=['GET'])
 @login_required
 def get_classification_children(classification_id):
@@ -59,11 +57,6 @@ def get_classification_children(classification_id):
     return success([serialize_classification_stub(ch) for ch in children])
 
 
-# ---------------------------------------------------------------------------
-# CRUD
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/classifications/<id>
 @bp.route('/classifications/<int:classification_id>', methods=['GET'])
 @login_required
 def get_classification(classification_id):
@@ -75,7 +68,6 @@ def get_classification(classification_id):
     return success(serialize_classification_detail(c))
 
 
-# POST /api/v1/classifications
 @bp.route('/classifications', methods=['POST'])
 @login_required
 @require_write
@@ -136,7 +128,6 @@ def create_classification():
     return success(serialize_classification_detail(c), 201)
 
 
-# PATCH /api/v1/classifications/<id>
 @bp.route('/classifications/<int:classification_id>', methods=['PATCH'])
 @login_required
 @require_write
@@ -174,7 +165,6 @@ def update_classification(classification_id):
     return success(serialize_classification_detail(c))
 
 
-# DELETE /api/v1/classifications/<id>
 @bp.route('/classifications/<int:classification_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -211,11 +201,6 @@ def delete_classification(classification_id):
     return success({'message': f'Deleted {len(all_nodes)} classification(s)'})
 
 
-# ---------------------------------------------------------------------------
-# Node associations
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/classifications/<id>/nodes
 @bp.route('/classifications/<int:classification_id>/nodes', methods=['GET'])
 @login_required
 def get_classification_nodes(classification_id):
@@ -227,7 +212,6 @@ def get_classification_nodes(classification_id):
     return success([serialize_node_stub(n) for n in c.nodes])
 
 
-# POST /api/v1/classifications/<id>/nodes
 @bp.route('/classifications/<int:classification_id>/nodes', methods=['POST'])
 @login_required
 @require_write
@@ -265,7 +249,6 @@ def add_classification_node(classification_id):
     return success({'message': 'Node associated'}, 201)
 
 
-# DELETE /api/v1/classifications/<id>/nodes/<node_id>
 @bp.route('/classifications/<int:classification_id>/nodes/<int:node_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -285,11 +268,6 @@ def remove_classification_node(classification_id, node_id):
     return success({'message': 'Association removed'})
 
 
-# ---------------------------------------------------------------------------
-# Version history
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/classifications/<id>/history
 @bp.route('/classifications/<int:classification_id>/history', methods=['GET'])
 @login_required
 def get_classification_history(classification_id):
@@ -306,7 +284,6 @@ def get_classification_history(classification_id):
     return success([serialize_classification_change(ch) for ch in changes])
 
 
-# GET /api/v1/classifications/search?q=...&scheme_id=<id>&published_only=true
 @bp.route('/classifications/search', methods=['GET'])
 @login_required
 def search_classifications():
@@ -315,13 +292,10 @@ def search_classifications():
         return error('No active institution', 400)
 
     q = request.args.get('q', '').strip()
-    scheme_id = request.args.get('scheme_id', type=int)   # was root_id in old frontend
+    scheme_id = request.args.get('scheme_id', type=int)
     root_id = request.args.get('root_id', type=int) or scheme_id
     published_only = request.args.get('published_only', 'false').lower() == 'true'
 
-    import sqlalchemy as sa
-
-    # Build one clean query — no rebuilding mid-way
     stmt = sa.select(Classification).where(
         Classification.institution_id == institution_id,
     ).distinct()
@@ -330,7 +304,6 @@ def search_classifications():
         stmt = stmt.where(Classification.status == 'published')
 
     if root_id:
-        # Get all descendant ids once, cleanly
         all_ids = _get_descendant_ids(root_id)
         if not all_ids:
             return success([])
@@ -359,7 +332,6 @@ def search_classifications():
 
 
 def _get_descendant_ids(parent_id: int) -> list[int]:
-    """Recursively get all descendant IDs including the parent itself."""
     result = [parent_id]
     children = Classification.query.filter_by(parent_id=parent_id).with_entities(Classification.id).all()
     for (child_id,) in children:
@@ -367,8 +339,6 @@ def _get_descendant_ids(parent_id: int) -> list[int]:
     return result
 
 
-# GET /api/v1/classifications/roots
-# Returns root-level classifications (the "schemes") for scheme picker
 @bp.route('/classifications/roots', methods=['GET'])
 @login_required
 def get_classification_roots():
@@ -392,8 +362,6 @@ def get_classification_roots():
     } for c in roots])
 
 
-# GET /api/v1/classifications/schemes
-# Returns root-level classifications (the "schemes" or top-level containers)
 @bp.route('/classifications/schemes', methods=['GET'])
 @login_required
 def list_classification_schemes():
@@ -403,7 +371,6 @@ def list_classification_schemes():
 
     published_only = request.args.get('published_only', 'false').lower() == 'true'
 
-    import sqlalchemy as sa
     q = sa.select(Classification).where(
         Classification.institution_id == institution_id,
         Classification.parent_id == None,  # noqa: E711
@@ -421,8 +388,6 @@ def list_classification_schemes():
     } for c in schemes])
 
 
-# GET /api/v1/classifications/valid-levels?hierarchy_type_id=1&parent_id=5
-# Returns levels valid under a given parent, for the form level picker
 @bp.route('/classifications/valid-levels', methods=['GET'])
 @login_required
 def get_classification_valid_levels():
@@ -433,9 +398,6 @@ def get_classification_valid_levels():
     if not hierarchy_type_id:
         return error('hierarchy_type_id is required', 400)
 
-    from app.models.hierarchy import HierarchyLevel
-    from app.models.classification import Classification
-
     if parent_id:
         parent = Classification.query.filter_by(
             id=parent_id, institution_id=institution_id
@@ -443,7 +405,6 @@ def get_classification_valid_levels():
         if not parent:
             return error('Parent classification not found', 404)
 
-        # Find the parent's level and return its allowed children
         parent_level = db.session.execute(
             sa.select(HierarchyLevel).where(
                 HierarchyLevel.hierarchy_type_id == hierarchy_type_id,
@@ -454,7 +415,6 @@ def get_classification_valid_levels():
         if not parent_level:
             return success([])
 
-        # Levels that list this parent level as an allowed parent
         all_levels = HierarchyLevel.query.filter_by(
             hierarchy_type_id=hierarchy_type_id
         ).all()
@@ -464,7 +424,6 @@ def get_classification_valid_levels():
             if parent_level in l.allowed_parents
         ]
     else:
-        # Root level — levels with no allowed parents
         all_levels = HierarchyLevel.query.filter_by(
             hierarchy_type_id=hierarchy_type_id
         ).all()
@@ -477,7 +436,6 @@ def get_classification_valid_levels():
     return success(sorted(valid, key=lambda x: x['sort_order']))
 
 
-# POST /api/v1/classifications/<id>/publish
 @bp.route('/classifications/<int:classification_id>/publish', methods=['POST'])
 @login_required
 @require_write
@@ -493,7 +451,6 @@ def publish_classification(classification_id):
     version_label = data.get('version_label', '').strip() or None
 
     def collect_subtree(node):
-        """Collect node and all descendants in breadth-first order."""
         result = [node]
         for child in node.children.order_by(Classification.id).all():
             result.extend(collect_subtree(child))
@@ -509,7 +466,6 @@ def publish_classification(classification_id):
                 node.version += 1
             node.status = 'published'
 
-    # Record changes after all status updates are done
     for node in all_nodes:
         node.record_change(
             'publish',
@@ -523,7 +479,6 @@ def publish_classification(classification_id):
     return success(serialize_classification_detail(c))
 
 
-# POST /api/v1/classifications/<id>/retire
 @bp.route('/classifications/<int:classification_id>/retire', methods=['POST'])
 @login_required
 @require_write
@@ -561,8 +516,6 @@ def retire_classification(classification_id):
     return success(serialize_classification_detail(c))
 
 
-# GET /api/v1/classifications/<id>/bpmn
-# Returns the raw BPMN 2.0 XML for this classification (or null).
 @bp.route('/classifications/<int:classification_id>/bpmn', methods=['GET'])
 @login_required
 def get_classification_bpmn(classification_id):
@@ -575,8 +528,6 @@ def get_classification_bpmn(classification_id):
     return success({'bpmn_xml': c.bpmn_xml})
 
 
-# PATCH /api/v1/classifications/<id>/bpmn
-# Save (or clear) the BPMN 2.0 XML for this classification.
 @bp.route('/classifications/<int:classification_id>/bpmn', methods=['PATCH'])
 @login_required
 @require_write
@@ -592,9 +543,6 @@ def update_classification_bpmn(classification_id):
     xml = data.get('bpmn_xml')
     c.bpmn_xml = xml.strip() if xml and xml.strip() else None
 
-    # Rebuild the task→classification link projection. The frontend extracts
-    # links from the diagram's extensionElements and sends them here; the XML
-    # itself remains the source of truth.
     BpmnTaskLink.query.filter_by(diagram_classification_id=c.id).delete()
     if c.bpmn_xml:
         records = data.get('task_links') or []
@@ -605,7 +553,6 @@ def update_classification_bpmn(classification_id):
                 continue
             seen.add(task_id)
 
-            # Classification link is OPTIONAL — a record exists by being drawn.
             linked_id = rec.get('linked_classification_id')
             if linked_id:
                 target = Classification.query.filter_by(
@@ -633,8 +580,6 @@ def update_classification_bpmn(classification_id):
     return success({'bpmn_xml': c.bpmn_xml, 'has_bpmn': bool(c.bpmn_xml)})
 
 
-# GET /api/v1/classifications/<id>/produced-by
-# Reverse lookup: which process diagrams have a task linking to THIS class.
 @bp.route('/classifications/<int:classification_id>/produced-by', methods=['GET'])
 @login_required
 def get_classification_produced_by(classification_id):
@@ -667,8 +612,6 @@ def get_classification_produced_by(classification_id):
     return success(result)
 
 
-# POST /api/v1/classifications/import
-# Import a classification scheme from Kurbits JSON format
 @bp.route('/classifications/import', methods=['POST'])
 @login_required
 @require_write
@@ -683,13 +626,11 @@ def import_classification():
     if not hierarchy_type_id:
         return error('hierarchy_type_id is required', 400)
 
-    import json
     try:
         data = json.loads(f.read().decode('utf-8'))
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         return error(f'Invalid JSON: {e}', 400)
 
-    from app.models.hierarchy import HierarchyType
     ht = HierarchyType.query.filter_by(
         id=hierarchy_type_id, institution_id=institution_id
     ).first()
@@ -699,8 +640,8 @@ def import_classification():
     result = {'created': 0, 'errors': []}
 
     def import_node(node_data: dict, parent: Classification | None) -> Classification | None:
-        code  = str(node_data.get('code', '')).strip()
-        name  = str(node_data.get('name', '')).strip()
+        code = str(node_data.get('code', '')).strip()
+        name = str(node_data.get('name', '')).strip()
         level = str(node_data.get('level', '')).strip()
 
         if not code or not name or not level:
@@ -709,7 +650,6 @@ def import_classification():
             )
             return None
 
-        # Upsert — update if already exists
         existing = Classification.query.filter_by(
             institution_id=institution_id,
             code=code,
@@ -726,12 +666,12 @@ def import_classification():
             )
             db.session.add(obj)
 
-        obj.name       = name
-        obj.code       = code
+        obj.name = name
+        obj.code = code
         obj.level_name = level
         obj.description = node_data.get('description') or None
-        obj.scope_note  = node_data.get('scope_note') or None
-        obj.status      = node_data.get('status', 'draft')
+        obj.scope_note = node_data.get('scope_note') or None
+        obj.status = node_data.get('status', 'draft')
         obj.version_label = node_data.get('version_label') or None
         obj.created_by_id = obj.created_by_id or current_user.id
 
@@ -744,7 +684,6 @@ def import_classification():
         return obj
 
     try:
-        # Top-level: either a single scheme object or a list
         schemes = data if isinstance(data, list) else [data]
         for scheme in schemes:
             import_node(scheme, None)
@@ -756,8 +695,6 @@ def import_classification():
     return success(result, 201)
 
 
-# POST /api/v1/classifications/<id>/major-version
-# Deep-copies the entire tree as a new draft with incremented version
 @bp.route('/classifications/<int:classification_id>/major-version', methods=['POST'])
 @login_required
 @require_write
@@ -800,8 +737,6 @@ def create_major_version(classification_id):
     return success(serialize_classification_detail(new_root), 201)
 
 
-# GET /api/v1/classifications/<id>/records
-# List every record (data object) declared in this diagram, with its metadata.
 @bp.route('/classifications/<int:classification_id>/records', methods=['GET'])
 @login_required
 def list_classification_records(classification_id):
@@ -824,8 +759,6 @@ def list_classification_records(classification_id):
     return success(result)
 
 
-# ── Records-management vocabularies (admin-managed dropdown values) ──
-
 def _seed_records_vocab(institution_id):
     existing = RecordsVocabularyTerm.query.filter_by(institution_id=institution_id).count()
     if existing:
@@ -837,7 +770,6 @@ def _seed_records_vocab(institution_id):
     db.session.flush()
 
 
-# GET /api/v1/records-vocabulary
 @bp.route('/records-vocabulary', methods=['GET'])
 @login_required
 def get_records_vocabulary():
@@ -856,7 +788,6 @@ def get_records_vocabulary():
     return success(grouped)
 
 
-# POST /api/v1/records-vocabulary
 @bp.route('/records-vocabulary', methods=['POST'])
 @login_required
 @require_write
@@ -883,7 +814,6 @@ def add_records_vocabulary_term():
     return success(term.to_dict(), 201)
 
 
-# DELETE /api/v1/records-vocabulary/<id>
 @bp.route('/records-vocabulary/<int:term_id>', methods=['DELETE'])
 @login_required
 @require_write

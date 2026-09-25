@@ -22,7 +22,6 @@ def _serialize(t: BackgroundTask) -> dict:
     }
 
 
-# GET /api/v1/tasks/<id>
 @bp.route('/tasks/<string:task_id>', methods=['GET'])
 @login_required
 def get_task(task_id):
@@ -35,7 +34,6 @@ def get_task(task_id):
     return success(_serialize(task))
 
 
-# GET /api/v1/tasks?entity_type=node_attachment&entity_id=42
 @bp.route('/tasks', methods=['GET'])
 @login_required
 def list_tasks():

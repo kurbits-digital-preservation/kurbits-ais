@@ -5,9 +5,6 @@ from app.api.v1.helpers import success, error, require_write
 from app.models.node import Node
 
 
-# ── Export formats ────────────────────────────────────────────────────
-
-# GET /api/v1/export/formats
 @bp.route('/export/formats', methods=['GET'])
 @login_required
 def list_export_formats():
@@ -15,7 +12,6 @@ def list_export_formats():
     return success(list_formats())
 
 
-# GET /api/v1/nodes/<id>/export?format=ead2002&include_children=true
 @bp.route('/nodes/<int:node_id>/export', methods=['GET'])
 @login_required
 def export_node(node_id):
@@ -46,10 +42,6 @@ def export_node(node_id):
     )
 
 
-# ── OAI-PMH harvesting ────────────────────────────────────────────────
-
-# POST /api/v1/oai/identify
-# Verify an OAI-PMH endpoint and return repository info
 @bp.route('/oai/identify', methods=['POST'])
 @login_required
 def oai_identify():
@@ -66,8 +58,7 @@ def oai_identify():
         return error(str(e), 422)
 
 
-# POST /api/v1/oai/formats
-# List metadata formats available from a repository
+
 @bp.route('/oai/formats', methods=['POST'])
 @login_required
 def oai_list_formats():
@@ -84,8 +75,6 @@ def oai_list_formats():
         return error(str(e), 422)
 
 
-# POST /api/v1/oai/harvest
-# Harvest records and import them as nodes
 @bp.route('/oai/harvest', methods=['POST'])
 @login_required
 @require_write

@@ -1,9 +1,11 @@
 import os
 import uuid
-from datetime import datetime
-from flask import request, current_app, send_from_directory
+from datetime import datetime, date
+
+from flask import request, current_app, send_from_directory, make_response
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
+import sqlalchemy as sa
 
 from app.api.v1 import bp
 from app.api.v1.helpers import success, error, require_write
@@ -12,9 +14,20 @@ from app.api.v1.nodes.serializers import (
     serialize_attachment, serialize_note, compute_has_children
 )
 from app.extensions import db
-from app.models import Node, NodeStatus, NodeChange, NodeAttachment, NodeNote
-from app.models.node import node_association
-import sqlalchemy as sa
+from app.models import (
+    Node, NodeStatus, NodeChange, NodeAttachment, NodeNote,
+    Agent, Location, LocationMovement, Classification, Institution,
+    NodeRelationType,
+)
+from app.models.node import node_association, NodeIdentifier, IdentifierScheme
+from app.models.agent import agent_node_association
+from app.models.location import location_node_association
+from app.models.classification import classification_node_association
+from app.models.geo import NodePlace, Tag, PlaceType, TagCategory
+from app.models.flag import NodeFlag
+from app.models.representation import NodeRepresentation
+from app.models.background_task import BackgroundTask
+from app.models.label_template import LabelTemplate
 
 
 def _get_node_or_404(node_id: int, institution_id: int):
@@ -24,12 +37,6 @@ def _get_node_or_404(node_id: int, institution_id: int):
     return node
 
 
-# ---------------------------------------------------------------------------
-# Tree
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/nodes/tree
-# Returns root nodes with stub data. Frontend fetches children on expand.
 @bp.route('/nodes/tree', methods=['GET'])
 @login_required
 def get_tree():
@@ -53,7 +60,6 @@ def get_tree():
     ])
 
 
-# GET /api/v1/nodes/<id>/children
 @bp.route('/nodes/<int:node_id>/children', methods=['GET'])
 @login_required
 def get_children(node_id):
@@ -89,11 +95,6 @@ def get_children(node_id):
     )
 
 
-# ---------------------------------------------------------------------------
-# CRUD
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/nodes
 @bp.route('/nodes', methods=['GET'])
 @login_required
 def list_nodes():
@@ -139,12 +140,11 @@ def list_nodes():
     if has_description == 'false':
         query = query.where(sa.or_(Node.description.is_(None), Node.description == ''))
     if has_agents == 'true':
-        from app.models.agent import agent_node_association as ana
         query = query.where(
-            sa.exists(sa.select(ana.c.node_id).where(ana.c.node_id == Node.id))
+            sa.exists(sa.select(agent_node_association.c.node_id).where(
+                agent_node_association.c.node_id == Node.id))
         )
     if has_attachments == 'true':
-        from app.models.node import NodeAttachment
         query = query.where(
             sa.exists(sa.select(NodeAttachment.id).where(NodeAttachment.node_id == Node.id))
         )
@@ -171,7 +171,6 @@ def list_nodes():
     )
 
 
-# GET /api/v1/nodes/<id>
 @bp.route('/nodes/<int:node_id>', methods=['GET'])
 @login_required
 def get_node(node_id):
@@ -185,7 +184,6 @@ def get_node(node_id):
     return success(serialize_node_detail(node))
 
 
-# POST /api/v1/nodes
 @bp.route('/nodes', methods=['POST'])
 @login_required
 @require_write
@@ -238,9 +236,6 @@ def create_node():
         except ValueError:
             return error('Invalid date_end format. Use YYYY-MM-DD', 400)
 
-    # Compute ref_code before flush — load institution explicitly since
-    # the relationship isn't populated until after a flush
-    from app.models import Institution
     institution = Institution.query.get(institution_id)
     if parent:
         node.ref_code = f'{parent.ref_code}/{data["local_ref"]}'
@@ -268,7 +263,6 @@ def create_node():
     return success(serialize_node_detail(node), 201)
 
 
-# PATCH /api/v1/nodes/<id>
 @bp.route('/nodes/<int:node_id>', methods=['PATCH'])
 @login_required
 @require_write
@@ -336,8 +330,6 @@ def update_node(node_id):
     return success(serialize_node_detail(node))
 
 
-# DELETE /api/v1/nodes/<id>
-# GET /api/v1/nodes/<id>/descendant-count
 @bp.route('/nodes/<int:node_id>/descendant-count', methods=['GET'])
 @login_required
 def get_descendant_count(node_id):
@@ -392,7 +384,6 @@ def delete_node(node_id):
     return success({'message': 'Node and descendants deleted', 'deleted_count': len(ids)})
 
 
-# POST /api/v1/nodes/bulk-move
 @bp.route('/nodes/bulk-move', methods=['POST'])
 @login_required
 @require_write
@@ -438,7 +429,6 @@ def bulk_move_nodes():
     return success({'moved': moved, 'errors': errors})
 
 
-# POST /api/v1/nodes/bulk-delete
 @bp.route('/nodes/bulk-delete', methods=['POST'])
 @login_required
 @require_write
@@ -471,11 +461,6 @@ def bulk_delete_nodes():
     return success({'deleted': deleted, 'errors': errors})
 
 
-# ---------------------------------------------------------------------------
-# Status
-# ---------------------------------------------------------------------------
-
-# PATCH /api/v1/nodes/<id>/status
 @bp.route('/nodes/<int:node_id>/status', methods=['PATCH'])
 @login_required
 @require_write
@@ -506,7 +491,6 @@ def update_status(node_id):
     )
     db.session.commit()
 
-    # ── Portal sync ───────────────────────────────────────────────────
     from app.portal.publisher import publish_node, unpublish_node
     if node.status == NodeStatus.PUBLISHED:
         publish_node(node)
@@ -516,11 +500,6 @@ def update_status(node_id):
     return success({'status': node.status.value})
 
 
-# ---------------------------------------------------------------------------
-# Move
-# ---------------------------------------------------------------------------
-
-# PATCH /api/v1/nodes/<id>/move
 @bp.route('/nodes/<int:node_id>/move', methods=['PATCH'])
 @login_required
 @require_write
@@ -531,7 +510,7 @@ def move_node(node_id):
         return error('Node not found', 404)
 
     data = request.get_json(silent=True) or {}
-    new_parent_id = data.get('parent_id')  # None = move to root
+    new_parent_id = data.get('parent_id')
 
     before_data = node.to_dict()
     old_parent_title = node.parent.title if node.parent else 'root'
@@ -541,19 +520,13 @@ def move_node(node_id):
         if not new_parent:
             return error('Target parent node not found', 404)
 
-        # Prevent moving into own descendant
         if new_parent.is_descendant_of(node):
             return error('Cannot move a node into its own descendant', 422)
 
-        # Prevent moving into a different hierarchy type
         if new_parent.hierarchy_type_id != node.hierarchy_type_id:
             return error('Cannot move a node into a different hierarchy type', 422)
 
-        # Prevent fonds-level nodes from being placed under other fonds
-        # (a root-level node should stay root-level or go under a non-root)
         if node.parent_id is None:
-            # Node is currently a root — only allow if target parent is also root
-            # i.e. don't allow moving a fonds under another fonds
             if new_parent.parent_id is None:
                 return error(
                     f'Cannot move "{node.title}" under another top-level node. '
@@ -565,9 +538,6 @@ def move_node(node_id):
     else:
         node.parent = None
 
-    # Validate hierarchy rules at new position.
-    # Use no_autoflush to prevent SQLAlchemy flushing the parent change
-    # before validate_hierarchy finishes (which would trigger the unique constraint).
     with db.session.no_autoflush:
         valid = node.validate_hierarchy()
     if not valid:
@@ -578,7 +548,6 @@ def move_node(node_id):
             422
         )
 
-    # Cascade ref_code updates to the whole subtree
     node.refresh_ref_code()
 
     node.updated_by_id = current_user.id
@@ -596,11 +565,6 @@ def move_node(node_id):
                     'parent_id': node.parent_id})
 
 
-# ---------------------------------------------------------------------------
-# Version history
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/nodes/<id>/history
 @bp.route('/nodes/<int:node_id>/history', methods=['GET'])
 @login_required
 def get_history(node_id):
@@ -615,7 +579,6 @@ def get_history(node_id):
     return success([serialize_change(c) for c in changes])
 
 
-# POST /api/v1/nodes/<id>/revert/<change_id>
 @bp.route('/nodes/<int:node_id>/revert/<int:change_id>', methods=['POST'])
 @login_required
 @require_write
@@ -633,11 +596,6 @@ def revert_node(node_id, change_id):
     return success(serialize_node_detail(node))
 
 
-# ---------------------------------------------------------------------------
-# Node-to-node relations
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/nodes/<id>/relations
 @bp.route('/nodes/<int:node_id>/relations', methods=['GET'])
 @login_required
 def get_relations(node_id):
@@ -676,7 +634,6 @@ def get_relations(node_id):
     return success(result)
 
 
-# POST /api/v1/nodes/<id>/relations
 @bp.route('/nodes/<int:node_id>/relations', methods=['POST'])
 @login_required
 @require_write
@@ -720,7 +677,6 @@ def add_relation(node_id):
     return success({'message': 'Relation added'}, 201)
 
 
-# DELETE /api/v1/nodes/<id>/relations/<target_id>
 @bp.route('/nodes/<int:node_id>/relations/<int:target_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -742,11 +698,6 @@ def remove_relation(node_id, target_id):
     return success({'message': 'Relation removed'})
 
 
-# ---------------------------------------------------------------------------
-# Notes
-# ---------------------------------------------------------------------------
-
-# POST /api/v1/nodes/<id>/notes
 @bp.route('/nodes/<int:node_id>/notes', methods=['POST'])
 @login_required
 @require_write
@@ -772,7 +723,6 @@ def add_note(node_id):
     return success(serialize_note(note), 201)
 
 
-# PATCH /api/v1/nodes/<id>/notes/<note_id>
 @bp.route('/nodes/<int:node_id>/notes/<int:note_id>', methods=['PATCH'])
 @login_required
 @require_write
@@ -798,7 +748,6 @@ def update_note(node_id, note_id):
     return success(serialize_note(note))
 
 
-# DELETE /api/v1/nodes/<id>/notes/<note_id>
 @bp.route('/nodes/<int:node_id>/notes/<int:note_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -816,10 +765,6 @@ def delete_note(node_id, note_id):
     db.session.commit()
     return success({'message': 'Note deleted'})
 
-
-# ---------------------------------------------------------------------------
-# Attachments (PDF finding aids)
-# ---------------------------------------------------------------------------
 
 MIME_MAP = {
     'pdf': 'application/pdf',
@@ -839,7 +784,6 @@ def _allowed_file(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed
 
 
-# POST /api/v1/nodes/<id>/attachments
 @bp.route('/nodes/<int:node_id>/attachments', methods=['POST'])
 @login_required
 @require_write
@@ -884,7 +828,6 @@ def upload_attachment(node_id):
 
     rep_id = request.args.get('representation_id', type=int) or request.form.get('representation_id', type=int)
     if rep_id:
-        from app.models.representation import NodeRepresentation
         rep = NodeRepresentation.query.filter_by(id=rep_id, node_id=node_id).first()
         if rep:
             attachment.representation_id = rep.id
@@ -893,15 +836,8 @@ def upload_attachment(node_id):
 
     db.session.commit()
 
-    # Technical metadata is extracted in the background. Doing it inline made
-    # the upload request as slow as the heaviest file in the batch — on a large
-    # TIFF, checksums + image probing + thumbnailing could exceed the gunicorn
-    # worker timeout and kill an upload whose bytes had already arrived safely.
-    # The request now only saves the file and writes the row; extraction
-    # follows and the client can poll the returned task_id.
     task_id = None
     try:
-        from app.models.background_task import BackgroundTask
         from app.tasks.runner import run_in_background
         from app.tasks.tech_metadata_task import run_tech_metadata
 
@@ -917,8 +853,6 @@ def upload_attachment(node_id):
         task_id = task.id
         run_in_background(current_app._get_current_object(), task.id, run_tech_metadata)
     except Exception as e:
-        # Never fail an upload because metadata couldn't be queued — the file
-        # is already stored and can be re-extracted from the Files tab.
         current_app.logger.warning(
             f'Could not queue metadata extraction for {original_filename}: {e}'
         )
@@ -928,7 +862,6 @@ def upload_attachment(node_id):
     return success(payload, 201)
 
 
-# GET /api/v1/nodes/<id>/attachments/<attachment_id>/download
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/download', methods=['GET'])
 @login_required
 def download_attachment(node_id, attachment_id):
@@ -953,7 +886,6 @@ def download_attachment(node_id, attachment_id):
     )
 
 
-# GET /api/v1/nodes/<id>/attachments/<attachment_id>/thumbnail
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/thumbnail', methods=['GET'])
 @login_required
 def get_attachment_thumbnail(node_id, attachment_id):
@@ -970,12 +902,10 @@ def get_attachment_thumbnail(node_id, attachment_id):
     return send_from_directory(thumb_dir, thumb_filename, mimetype='image/jpeg')
 
 
-# POST /api/v1/nodes/<id>/attachments/<attachment_id>/extract
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/extract', methods=['POST'])
 @login_required
 @require_write
 def reextract_attachment_metadata(node_id, attachment_id):
-    """Re-run technical metadata extraction on an existing attachment."""
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
     if not node:
@@ -1000,7 +930,6 @@ def reextract_attachment_metadata(node_id, attachment_id):
         return error(f'Extraction failed: {e}', 500)
 
 
-# DELETE /api/v1/nodes/<id>/attachments/<attachment_id>
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -1023,11 +952,7 @@ def delete_attachment(node_id, attachment_id):
     db.session.commit()
     return success({'message': 'Attachment deleted'})
 
-# ---------------------------------------------------------------------------
-# Node → Agent associations
-# ---------------------------------------------------------------------------
 
-# GET /api/v1/nodes/<id>/agents
 @bp.route('/nodes/<int:node_id>/agents', methods=['GET'])
 @login_required
 def get_node_agents(node_id):
@@ -1038,14 +963,12 @@ def get_node_agents(node_id):
     if not node:
         return error('Node not found', 404)
 
-    from app.models.agent import agent_node_association
     rows = db.session.execute(
         sa.select(agent_node_association).where(
             agent_node_association.c.node_id == node_id
         )
     ).all()
 
-    from app.models import Agent
     result = []
     for row in rows:
         agent = Agent.query.get(row.agent_id)
@@ -1061,7 +984,6 @@ def get_node_agents(node_id):
     return success(result)
 
 
-# POST /api/v1/nodes/<id>/agents
 @bp.route('/nodes/<int:node_id>/agents', methods=['POST'])
 @login_required
 @require_write
@@ -1078,8 +1000,6 @@ def add_node_agent(node_id):
     if not agent_id or not relation_type:
         return error('agent_id and relation_type are required', 400)
 
-    from app.models import Agent
-    from app.models.agent import agent_node_association
     agent = Agent.query.filter_by(id=agent_id, institution_id=institution_id).first()
     if not agent:
         return error('Agent not found', 404)
@@ -1104,7 +1024,6 @@ def add_node_agent(node_id):
     return success({'message': 'Agent linked'}, 201)
 
 
-# DELETE /api/v1/nodes/<id>/agents/<agent_id>
 @bp.route('/nodes/<int:node_id>/agents/<int:agent_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -1114,7 +1033,6 @@ def remove_node_agent(node_id, agent_id):
     if not node:
         return error('Node not found', 404)
 
-    from app.models.agent import agent_node_association
     db.session.execute(
         agent_node_association.delete().where(
             agent_node_association.c.agent_id == agent_id,
@@ -1125,11 +1043,6 @@ def remove_node_agent(node_id, agent_id):
     return success({'message': 'Agent unlinked'})
 
 
-# ---------------------------------------------------------------------------
-# Node → Location associations
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/nodes/<id>/locations
 @bp.route('/nodes/<int:node_id>/locations', methods=['GET'])
 @login_required
 def get_node_locations(node_id):
@@ -1140,14 +1053,12 @@ def get_node_locations(node_id):
     if not node:
         return error('Node not found', 404)
 
-    from app.models.location import location_node_association
     rows = db.session.execute(
         sa.select(location_node_association).where(
             location_node_association.c.node_id == node_id
         )
     ).all()
 
-    from app.models import Location
     result = []
     for row in rows:
         loc = Location.query.get(row.location_id)
@@ -1164,7 +1075,6 @@ def get_node_locations(node_id):
     return success(result)
 
 
-# POST /api/v1/nodes/<id>/locations
 @bp.route('/nodes/<int:node_id>/locations', methods=['POST'])
 @login_required
 @require_write
@@ -1179,8 +1089,6 @@ def add_node_location(node_id):
     if not location_id:
         return error('location_id is required', 400)
 
-    from app.models import Location, LocationMovement
-    from app.models.location import location_node_association
     location = Location.query.filter_by(id=location_id, institution_id=institution_id).first()
     if not location:
         return error('Location not found', 404)
@@ -1217,7 +1125,6 @@ def add_node_location(node_id):
     return success({'message': 'Location assigned'}, 201)
 
 
-# DELETE /api/v1/nodes/<id>/locations/<location_id>
 @bp.route('/nodes/<int:node_id>/locations/<int:location_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -1227,8 +1134,6 @@ def remove_node_location(node_id, location_id):
     if not node:
         return error('Node not found', 404)
 
-    from app.models import LocationMovement
-    from app.models.location import location_node_association
     db.session.execute(
         location_node_association.delete().where(
             location_node_association.c.location_id == location_id,
@@ -1246,11 +1151,6 @@ def remove_node_location(node_id, location_id):
     return success({'message': 'Location removed'})
 
 
-# ---------------------------------------------------------------------------
-# Node → Classification associations
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/nodes/<id>/classifications
 @bp.route('/nodes/<int:node_id>/classifications', methods=['GET'])
 @login_required
 def get_node_classifications(node_id):
@@ -1261,14 +1161,12 @@ def get_node_classifications(node_id):
     if not node:
         return error('Node not found', 404)
 
-    from app.models.classification import classification_node_association
     rows = db.session.execute(
         sa.select(classification_node_association).where(
             classification_node_association.c.node_id == node_id
         )
     ).all()
 
-    from app.models import Classification
     result = []
     for row in rows:
         c = Classification.query.get(row.classification_id)
@@ -1284,7 +1182,6 @@ def get_node_classifications(node_id):
     return success(result)
 
 
-# POST /api/v1/nodes/<id>/classifications
 @bp.route('/nodes/<int:node_id>/classifications', methods=['POST'])
 @login_required
 @require_write
@@ -1299,8 +1196,6 @@ def add_node_classification(node_id):
     if not classification_id:
         return error('classification_id is required', 400)
 
-    from app.models import Classification
-    from app.models.classification import classification_node_association
     c = Classification.query.filter_by(id=classification_id, institution_id=institution_id).first()
     if not c:
         return error('Classification not found', 404)
@@ -1323,7 +1218,6 @@ def add_node_classification(node_id):
     return success({'message': 'Classification assigned'}, 201)
 
 
-# DELETE /api/v1/nodes/<id>/classifications/<classification_id>
 @bp.route('/nodes/<int:node_id>/classifications/<int:classification_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -1333,7 +1227,6 @@ def remove_node_classification(node_id, classification_id):
     if not node:
         return error('Node not found', 404)
 
-    from app.models.classification import classification_node_association
     db.session.execute(
         classification_node_association.delete().where(
             classification_node_association.c.classification_id == classification_id,
@@ -1343,10 +1236,6 @@ def remove_node_classification(node_id, classification_id):
     db.session.commit()
     return success({'message': 'Classification removed'})
 
-
-# ---------------------------------------------------------------------------
-# Node-to-node relation types (vocabulary management)
-# ---------------------------------------------------------------------------
 
 def _serialize_node_relation_type(rt) -> dict:
     return {
@@ -1359,20 +1248,17 @@ def _serialize_node_relation_type(rt) -> dict:
     }
 
 
-# GET /api/v1/nodes/relation-types
 @bp.route('/nodes/relation-types', methods=['GET'])
 @login_required
 def list_node_to_node_relation_types():
     if not current_user.active_institution_id:
         return error('No active institution', 400)
-    from app.models import NodeRelationType
     types = NodeRelationType.query.filter_by(
         institution_id=current_user.active_institution_id
     ).order_by(NodeRelationType.name).all()
     return success([_serialize_node_relation_type(t) for t in types])
 
 
-# POST /api/v1/nodes/relation-types
 @bp.route('/nodes/relation-types', methods=['POST'])
 @login_required
 @require_write
@@ -1382,7 +1268,6 @@ def create_node_to_node_relation_type():
     if not data.get('name'):
         return error('name is required', 400)
 
-    from app.models import NodeRelationType
     is_symmetric = data.get('is_symmetric', True)
 
     rt = NodeRelationType(
@@ -1410,13 +1295,11 @@ def create_node_to_node_relation_type():
     return success(_serialize_node_relation_type(rt), 201)
 
 
-# PATCH /api/v1/nodes/relation-types/<id>
 @bp.route('/nodes/relation-types/<int:type_id>', methods=['PATCH'])
 @login_required
 @require_write
 def update_node_to_node_relation_type(type_id):
     institution_id = current_user.active_institution_id
-    from app.models import NodeRelationType
     rt = NodeRelationType.query.filter_by(id=type_id, institution_id=institution_id).first()
     if not rt:
         return error('Relation type not found', 404)
@@ -1444,13 +1327,11 @@ def update_node_to_node_relation_type(type_id):
     return success(_serialize_node_relation_type(rt))
 
 
-# DELETE /api/v1/nodes/relation-types/<id>
 @bp.route('/nodes/relation-types/<int:type_id>', methods=['DELETE'])
 @login_required
 @require_write
 def delete_node_to_node_relation_type(type_id):
     institution_id = current_user.active_institution_id
-    from app.models import NodeRelationType
     rt = NodeRelationType.query.filter_by(id=type_id, institution_id=institution_id).first()
     if not rt:
         return error('Relation type not found', 404)
@@ -1461,8 +1342,6 @@ def delete_node_to_node_relation_type(type_id):
     return success({'message': 'Deleted'})
 
 
-# POST /api/v1/nodes/<id>/locations/move
-# Move a node from one location to another
 @bp.route('/nodes/<int:node_id>/locations/move', methods=['POST'])
 @login_required
 @require_write
@@ -1482,10 +1361,6 @@ def move_node_location(node_id):
     if from_location_id == to_location_id:
         return error('Source and destination are the same', 422)
 
-    from app.models import Location, LocationMovement
-    from app.models.location import location_node_association
-    import sqlalchemy as sa
-
     from_loc = Location.query.filter_by(id=from_location_id, institution_id=institution_id).first()
     to_loc = Location.query.filter_by(id=to_location_id, institution_id=institution_id).first()
 
@@ -1496,7 +1371,6 @@ def move_node_location(node_id):
     if not to_loc.can_store_nodes:
         return error('Destination cannot store archival materials', 422)
 
-    # Verify node is actually at the source location
     existing = db.session.execute(
         sa.select(location_node_association).where(
             location_node_association.c.location_id == from_location_id,
@@ -1510,7 +1384,6 @@ def move_node_location(node_id):
         if to_loc.stored_nodes.count() >= to_loc.capacity:
             return error('Destination location is at full capacity', 409)
 
-    # Remove from source, add to destination
     db.session.execute(
         location_node_association.delete().where(
             location_node_association.c.location_id == from_location_id,
@@ -1541,16 +1414,6 @@ def move_node_location(node_id):
 
 
 def _clean_metadata_spec(raw) -> dict:
-    """Accept only a flat dict of JSON-safe values for metadata_spec.
-
-    The rapid-entry UI already constrains keys to the level's template, but a
-    batch endpoint must not trust that: nested objects, huge blobs or non-dict
-    payloads are rejected here rather than written into the record.
-
-    NOTE: this does not yet verify that each key exists in the level's metadata
-    template — that needs the hierarchy template lookup. Worth adding so a
-    client-side mapping bug can't introduce keys the node form will never show.
-    """
     if not isinstance(raw, dict):
         return {}
     out = {}
@@ -1564,15 +1427,12 @@ def _clean_metadata_spec(raw) -> dict:
                 value = value[:10000]
             out[key] = value
         elif isinstance(value, list):
-            # multiselect — list of scalars only
             items = [v for v in value if isinstance(v, (str, int, float, bool))]
             if items:
                 out[key] = items[:100]
-        # anything else (nested dicts, objects) is dropped deliberately
     return out
 
 
-# POST /api/v1/nodes/batch
 @bp.route('/nodes/batch', methods=['POST'])
 @login_required
 @require_write
@@ -1580,10 +1440,10 @@ def batch_create_nodes():
     institution_id = current_user.active_institution_id
     data = request.get_json(silent=True) or {}
 
-    parent_id       = data.get('parent_id')
+    parent_id = data.get('parent_id')
     hierarchy_type_id = data.get('hierarchy_type_id')
     level_of_description = data.get('level_of_description')
-    entries         = data.get('entries', [])   # [{title, local_ref, date_start, date_end, description, metadata_spec}]
+    entries = data.get('entries', [])
 
     if not parent_id:
         return error('parent_id is required — rapid entry only creates children under an existing node', 400)
@@ -1596,7 +1456,6 @@ def batch_create_nodes():
     if len(entries) > 200:
         return error('Maximum 200 entries per batch', 400)
 
-    from app.models import Institution
     institution = Institution.query.get(institution_id)
 
     parent = None
@@ -1606,7 +1465,7 @@ def batch_create_nodes():
             return error('Parent node not found', 404)
 
     created = []
-    errors  = []
+    errors = []
 
     for i, entry in enumerate(entries):
         title = (entry.get('title') or '').strip()
@@ -1618,7 +1477,6 @@ def batch_create_nodes():
             errors.append({'row': i + 1, 'error': 'Reference code is required'})
             continue
 
-        # Check for duplicate local_ref under same parent
         existing = Node.query.filter_by(
             institution_id=institution_id,
             parent_id=parent_id,
@@ -1642,13 +1500,11 @@ def batch_create_nodes():
             metadata_spec=_clean_metadata_spec(entry.get('metadata_spec')),
         )
 
-        # Parse dates
         for field in ('date_start', 'date_end'):
             val = (entry.get(field) or '').strip()
             if val:
                 try:
-                    from datetime import date as _date
-                    setattr(node, field, _date.fromisoformat(val))
+                    setattr(node, field, date.fromisoformat(val))
                 except ValueError:
                     pass
 
@@ -1660,16 +1516,11 @@ def batch_create_nodes():
         db.session.add(node)
         db.session.flush()
 
-        # This endpoint builds ref_code directly rather than going through
-        # refresh_ref_code(), so top_node_id has to be set explicitly or these
-        # nodes stay invisible to tree-scoped search.
         if parent is None:
             node.top_node_id = node.id
         elif parent.top_node_id:
             node.top_node_id = parent.top_node_id
         else:
-            # Parent predates the backfill — walk to the real root rather than
-            # assuming the immediate parent is it.
             node.top_node_id = parent.get_top_node().id
 
         node.record_change(
@@ -1690,21 +1541,16 @@ def batch_create_nodes():
     return success({'created': created, 'errors': errors, 'total_created': len(created)}, 201)
 
 
-# ── Places ─────────────────────────────────────────────────────────────
-
-# GET /api/v1/nodes/<id>/places
 @bp.route('/nodes/<int:node_id>/places', methods=['GET'])
 @login_required
 def get_node_places(node_id):
     node = _get_node_or_404(node_id, current_user.active_institution_id)
     if not node:
         return error('Node not found', 404)
-    from app.models.geo import NodePlace
     places = NodePlace.query.filter_by(node_id=node_id).order_by(NodePlace.sort_order).all()
     return success([p.to_dict() for p in places])
 
 
-# POST /api/v1/nodes/<id>/places
 @bp.route('/nodes/<int:node_id>/places', methods=['POST'])
 @login_required
 @require_write
@@ -1715,7 +1561,6 @@ def add_node_place(node_id):
     data = request.get_json(silent=True) or {}
     if not data.get('name') or not data.get('place_type'):
         return error('name and place_type are required', 400)
-    from app.models.geo import NodePlace
     place = NodePlace(
         node_id=node_id,
         place_type=data['place_type'],
@@ -1733,12 +1578,10 @@ def add_node_place(node_id):
     return success(place.to_dict(), 201)
 
 
-# PATCH /api/v1/nodes/<id>/places/<place_id>
 @bp.route('/nodes/<int:node_id>/places/<int:place_id>', methods=['PATCH'])
 @login_required
 @require_write
 def update_node_place(node_id, place_id):
-    from app.models.geo import NodePlace
     place = NodePlace.query.filter_by(id=place_id, node_id=node_id).first()
     if not place:
         return error('Place not found', 404)
@@ -1750,12 +1593,10 @@ def update_node_place(node_id, place_id):
     return success(place.to_dict())
 
 
-# DELETE /api/v1/nodes/<id>/places/<place_id>
 @bp.route('/nodes/<int:node_id>/places/<int:place_id>', methods=['DELETE'])
 @login_required
 @require_write
 def delete_node_place(node_id, place_id):
-    from app.models.geo import NodePlace
     place = NodePlace.query.filter_by(id=place_id, node_id=node_id).first()
     if not place:
         return error('Place not found', 404)
@@ -1764,9 +1605,6 @@ def delete_node_place(node_id, place_id):
     return success({'message': 'Deleted'})
 
 
-# ── Tags ───────────────────────────────────────────────────────────────
-
-# GET /api/v1/nodes/<id>/tags
 @bp.route('/nodes/<int:node_id>/tags', methods=['GET'])
 @login_required
 def get_node_tags(node_id):
@@ -1776,7 +1614,6 @@ def get_node_tags(node_id):
     return success([t.to_dict() for t in node.tags])
 
 
-# POST /api/v1/nodes/<id>/tags
 @bp.route('/nodes/<int:node_id>/tags', methods=['POST'])
 @login_required
 @require_write
@@ -1789,8 +1626,6 @@ def add_node_tag(node_id):
     name = (data.get('name') or '').strip()
     if not name:
         return error('name is required', 400)
-    from app.models.geo import Tag
-    import sqlalchemy as sa
     tag = Tag.query.filter(
         Tag.institution_id == institution_id,
         sa.func.lower(Tag.name) == name.lower()
@@ -1805,7 +1640,6 @@ def add_node_tag(node_id):
     return success(tag.to_dict(), 201)
 
 
-# DELETE /api/v1/nodes/<id>/tags/<tag_id>
 @bp.route('/nodes/<int:node_id>/tags/<int:tag_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -1814,7 +1648,6 @@ def remove_node_tag(node_id, tag_id):
     node = _get_node_or_404(node_id, institution_id)
     if not node:
         return error('Node not found', 404)
-    from app.models.geo import Tag
     tag = Tag.query.filter_by(id=tag_id, institution_id=institution_id).first()
     if tag and tag in node.tags:
         node.tags.remove(tag)
@@ -1822,17 +1655,14 @@ def remove_node_tag(node_id, tag_id):
     return success({'message': 'Removed'})
 
 
-# GET /api/v1/tags/search?q=photo&category=occupation
 @bp.route('/tags/search', methods=['GET'])
 @login_required
 def search_tags():
-    from app.models.geo import Tag
     institution_id = current_user.active_institution_id
     if not institution_id:
         return error('No active institution', 400)
     q = request.args.get('q', '').strip()
     category = request.args.get('category', '').strip() or None
-    import sqlalchemy as sa
     query = sa.select(Tag).where(Tag.institution_id == institution_id)
     if q:
         query = query.where(Tag.name.ilike(f'%{q}%'))
@@ -1842,15 +1672,11 @@ def search_tags():
     return success([t.to_dict() for t in tags])
 
 
-# ── Place type vocab ───────────────────────────────────────────────────
-
 @bp.route('/vocab/place-types', methods=['GET'])
 @login_required
 def list_place_types():
-    from app.models.geo import PlaceType
     institution_id = current_user.active_institution_id
-    applicable = request.args.get('applicable_to')  # agent | node | both
-    import sqlalchemy as sa
+    applicable = request.args.get('applicable_to')
     q = sa.select(PlaceType).where(PlaceType.institution_id == institution_id)
     if applicable:
         q = q.where(
@@ -1864,7 +1690,6 @@ def list_place_types():
 @login_required
 @require_write
 def create_place_type():
-    from app.models.geo import PlaceType
     institution_id = current_user.active_institution_id
     data = request.get_json(silent=True) or {}
     if not data.get('name') or not data.get('label'):
@@ -1885,7 +1710,6 @@ def create_place_type():
 @login_required
 @require_write
 def update_place_type(type_id):
-    from app.models.geo import PlaceType
     pt = PlaceType.query.filter_by(id=type_id, institution_id=current_user.active_institution_id).first()
     if not pt:
         return error('Not found', 404)
@@ -1901,7 +1725,6 @@ def update_place_type(type_id):
 @login_required
 @require_write
 def delete_place_type(type_id):
-    from app.models.geo import PlaceType
     pt = PlaceType.query.filter_by(id=type_id, institution_id=current_user.active_institution_id).first()
     if not pt:
         return error('Not found', 404)
@@ -1910,13 +1733,9 @@ def delete_place_type(type_id):
     return success({'message': 'Deleted'})
 
 
-# ── Tag category vocab ─────────────────────────────────────────────────
-
 @bp.route('/vocab/tag-categories', methods=['GET'])
 @login_required
 def list_tag_categories():
-    from app.models.geo import TagCategory
-    import sqlalchemy as sa
     institution_id = current_user.active_institution_id
     applicable = request.args.get('applicable_to')
     q = sa.select(TagCategory).where(TagCategory.institution_id == institution_id)
@@ -1932,7 +1751,6 @@ def list_tag_categories():
 @login_required
 @require_write
 def create_tag_category():
-    from app.models.geo import TagCategory
     institution_id = current_user.active_institution_id
     data = request.get_json(silent=True) or {}
     if not data.get('name') or not data.get('label'):
@@ -1953,7 +1771,6 @@ def create_tag_category():
 @login_required
 @require_write
 def update_tag_category(cat_id):
-    from app.models.geo import TagCategory
     cat = TagCategory.query.filter_by(id=cat_id, institution_id=current_user.active_institution_id).first()
     if not cat:
         return error('Not found', 404)
@@ -1969,7 +1786,6 @@ def update_tag_category(cat_id):
 @login_required
 @require_write
 def delete_tag_category(cat_id):
-    from app.models.geo import TagCategory
     cat = TagCategory.query.filter_by(id=cat_id, institution_id=current_user.active_institution_id).first()
     if not cat:
         return error('Not found', 404)
@@ -1978,17 +1794,12 @@ def delete_tag_category(cat_id):
     return success({'message': 'Deleted'})
 
 
-# ── Flags ──────────────────────────────────────────────────────────────
-
-# GET /api/v1/nodes/<id>/flags
 @bp.route('/nodes/<int:node_id>/flags', methods=['GET'])
 @login_required
 def get_node_flags(node_id):
     node = _get_node_or_404(node_id, current_user.active_institution_id)
     if not node:
         return error('Node not found', 404)
-    from app.models.flag import NodeFlag
-    import sqlalchemy as sa
     flags = db.session.execute(
         sa.select(NodeFlag)
         .where(NodeFlag.node_id == node_id)
@@ -1997,7 +1808,6 @@ def get_node_flags(node_id):
     return success([f.to_dict() for f in flags])
 
 
-# POST /api/v1/nodes/<id>/flags
 @bp.route('/nodes/<int:node_id>/flags', methods=['POST'])
 @login_required
 @require_write
@@ -2008,7 +1818,6 @@ def create_node_flag(node_id):
     data = request.get_json(silent=True) or {}
     if not data.get('title') or not data.get('flag_type'):
         return error('title and flag_type are required', 400)
-    from app.models.flag import NodeFlag
     flag = NodeFlag(
         institution_id=current_user.active_institution_id,
         node_id=node_id,
@@ -2025,13 +1834,10 @@ def create_node_flag(node_id):
     return success(flag.to_dict(), 201)
 
 
-# PATCH /api/v1/nodes/<id>/flags/<flag_id>
 @bp.route('/nodes/<int:node_id>/flags/<int:flag_id>', methods=['PATCH'])
 @login_required
 @require_write
 def update_node_flag(node_id, flag_id):
-    from app.models.flag import NodeFlag
-    from datetime import datetime
     flag = NodeFlag.query.filter_by(
         id=flag_id, node_id=node_id,
         institution_id=current_user.active_institution_id
@@ -2056,12 +1862,10 @@ def update_node_flag(node_id, flag_id):
     return success(flag.to_dict())
 
 
-# DELETE /api/v1/nodes/<id>/flags/<flag_id>
 @bp.route('/nodes/<int:node_id>/flags/<int:flag_id>', methods=['DELETE'])
 @login_required
 @require_write
 def delete_node_flag(node_id, flag_id):
-    from app.models.flag import NodeFlag
     flag = NodeFlag.query.filter_by(
         id=flag_id, node_id=node_id,
         institution_id=current_user.active_institution_id
@@ -2073,15 +1877,10 @@ def delete_node_flag(node_id, flag_id):
     return success({'message': 'Deleted'})
 
 
-# ── Institution-wide flags overview ───────────────────────────────────
-
-# GET /api/v1/flags?status=open&flag_type=conservation&severity=high&assigned_to_me=true&page=1
 @bp.route('/flags', methods=['GET'])
 @login_required
 def list_all_flags():
     institution_id = current_user.active_institution_id
-    from app.models.flag import NodeFlag
-    import sqlalchemy as sa
 
     stmt = sa.select(NodeFlag).where(NodeFlag.institution_id == institution_id)
 
@@ -2089,7 +1888,6 @@ def list_all_flags():
     if status:
         stmt = stmt.where(NodeFlag.status == status)
     else:
-        # Default: exclude resolved
         stmt = stmt.where(NodeFlag.status != 'resolved')
 
     flag_type = request.args.get('flag_type')
@@ -2105,7 +1903,6 @@ def list_all_flags():
     elif request.args.get('unassigned') == 'true':
         stmt = stmt.where(NodeFlag.assigned_to_id == None)  # noqa: E711
 
-    # Severity order: high → medium → low
     sev_order = sa.case(
         (NodeFlag.severity == 'high', 1),
         (NodeFlag.severity == 'medium', 2),
@@ -2131,17 +1928,10 @@ def list_all_flags():
     })
 
 
-# ── Label printing ────────────────────────────────────────────────────
-
-# POST /api/v1/nodes/labels
-# Body: { node_ids: [1,2,3], format: "avery_l7163", copies: 1 }
 @bp.route('/nodes/labels', methods=['POST'])
 @login_required
 def print_labels():
-    """Generate a label PDF for one or more nodes."""
-    from flask import make_response
     from app.labels import generate_label_pdf, LabelData
-    from app.models.location import Location
 
     institution_id = current_user.active_institution_id
     data = request.get_json(silent=True) or {}
@@ -2156,11 +1946,8 @@ def print_labels():
     if len(node_ids) > 200:
         return error('Maximum 200 labels per request', 400)
 
-    # Optional saved WYSIWYG template. When present it dictates both the
-    # element layout and the physical format.
     template_elements = None
     if template_id:
-        from app.models.label_template import LabelTemplate
         tmpl = LabelTemplate.query.filter_by(
             id=template_id, institution_id=institution_id).first()
         if not tmpl:
@@ -2180,7 +1967,6 @@ def print_labels():
     if not nodes:
         return error('No nodes found', 404)
 
-    from app.models import Institution
     institution = db.session.get(Institution, institution_id)
     inst_name = institution.name if institution else ''
 
@@ -2221,14 +2007,9 @@ def print_labels():
     return response
 
 
-# ── Finding aid ───────────────────────────────────────────────────────
-
-# GET /api/v1/nodes/<id>/finding-aid
 @bp.route('/nodes/<int:node_id>/finding-aid', methods=['GET'])
 @login_required
 def print_finding_aid(node_id):
-    """Generate a finding aid PDF for a node and all its descendants."""
-    from flask import make_response
     from app.reports import generate_finding_aid
 
     institution_id = current_user.active_institution_id
@@ -2248,15 +2029,11 @@ def print_finding_aid(node_id):
     response.headers['Content-Disposition'] = f'inline; filename="{safe_title}_finding_aid.pdf"'
     return response
 
-# POST /api/v1/nodes/<id>/duplicate
+
 @bp.route('/nodes/<int:node_id>/duplicate', methods=['POST'])
 @login_required
 @require_write
 def duplicate_node(node_id):
-    from app.models.node import Node, NodeNote, NodeStatus
-    from app.models.geo import Tag
-    import sqlalchemy as sa
-
     institution_id = current_user.active_institution_id
     if not institution_id:
         return error('No active institution', 400)
@@ -2265,7 +2042,6 @@ def duplicate_node(node_id):
     if not source:
         return error('Node not found', 404)
 
-    # ── Build a unique local_ref ──────────────────────────────────────
     base_ref = f'{source.local_ref}-copy'
     existing_refs = {
         r[0] for r in Node.query
@@ -2279,13 +2055,11 @@ def duplicate_node(node_id):
         i += 1
     local_ref = candidate
 
-    # ── Compute ref_code ──────────────────────────────────────────────
     if source.parent:
         ref_code = f'{source.parent.ref_code}/{local_ref}'
     else:
         ref_code = f'{source.institution.ref_prefix}/{local_ref}'
 
-    # ── Create the duplicate ──────────────────────────────────────────
     duplicate = Node(
         institution_id=institution_id,
         parent_id=source.parent_id,
@@ -2313,7 +2087,6 @@ def duplicate_node(node_id):
     db.session.add(duplicate)
     db.session.flush()
 
-    # ── Copy notes ────────────────────────────────────────────────────
     for note in source.notes:
         db.session.add(NodeNote(
             node_id=duplicate.id,
@@ -2323,7 +2096,6 @@ def duplicate_node(node_id):
             created_by_id=current_user.id,
         ))
 
-    # Provenance note
     db.session.add(NodeNote(
         node_id=duplicate.id,
         note_type='general',
@@ -2332,23 +2104,19 @@ def duplicate_node(node_id):
         created_by_id=current_user.id,
     ))
 
-    # ── Copy tags ─────────────────────────────────────────────────────
     for tag in source.tags.all():
         duplicate.tags.append(tag)
 
     db.session.commit()
-
-    from app.api.v1.nodes.serializers import serialize_node_detail
     return success(serialize_node_detail(duplicate), 201)
+
 
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/ocr', methods=['POST'])
 @login_required
 @require_write
 def ocr_attachment(node_id, attachment_id):
-    from app.models.background_task import BackgroundTask
     from app.tasks.runner import run_in_background
-    from app.tasks.ocr import can_ocr
-    from flask import current_app
+    from app.tasks.ocr import can_ocr, run_ocr
 
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
@@ -2383,25 +2151,22 @@ def ocr_attachment(node_id, attachment_id):
         task_type='ocr',
         entity_type='node_attachment',
         entity_id=attachment_id,
-        result={'force_ocr': force_ocr},   # passes options to worker
+        result={'force_ocr': force_ocr},
     )
     db.session.add(task)
     db.session.commit()
 
-    from app.tasks.ocr import run_ocr
     run_in_background(current_app._get_current_object(), task.id, run_ocr)
 
     return success({'task_id': task.id, 'status': 'pending'}, 201)
 
-# POST /api/v1/nodes/<id>/attachments/<attachment_id>/transcribe
+
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/transcribe', methods=['POST'])
 @login_required
 @require_write
 def transcribe_attachment(node_id, attachment_id):
-    from app.models.background_task import BackgroundTask
     from app.tasks.runner import run_in_background
-    from app.tasks.whisper_ import can_transcribe
-    from flask import current_app
+    from app.tasks.whisper_ import can_transcribe, run_whisper
 
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
@@ -2443,16 +2208,11 @@ def transcribe_attachment(node_id, attachment_id):
     db.session.add(task)
     db.session.commit()
 
-    from app.tasks.whisper_ import run_whisper
     run_in_background(current_app._get_current_object(), task.id, run_whisper)
 
     return success({'task_id': task.id, 'status': 'pending', 'model_size': model_size}, 201)
 
-# ---------------------------------------------------------------------------
-# Identifiers
-# ---------------------------------------------------------------------------
 
-# GET /api/v1/nodes/<id>/identifiers
 @bp.route('/nodes/<int:node_id>/identifiers', methods=['GET'])
 @login_required
 def list_node_identifiers(node_id):
@@ -2463,12 +2223,10 @@ def list_node_identifiers(node_id):
     return success([i.to_dict() for i in node.identifiers])
 
 
-# POST /api/v1/nodes/<id>/identifiers
 @bp.route('/nodes/<int:node_id>/identifiers', methods=['POST'])
 @login_required
 @require_write
 def add_node_identifier(node_id):
-    from app.models.node import NodeIdentifier, IdentifierScheme
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
     if not node:
@@ -2487,7 +2245,6 @@ def add_node_identifier(node_id):
     if not scheme:
         return error('Identifier scheme not found', 404)
 
-    # Global uniqueness per scheme
     clash = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
     if clash:
         return error(
@@ -2512,12 +2269,10 @@ def add_node_identifier(node_id):
     return success(ident.to_dict(), 201)
 
 
-# PATCH /api/v1/nodes/<id>/identifiers/<ident_id>
 @bp.route('/nodes/<int:node_id>/identifiers/<int:ident_id>', methods=['PATCH'])
 @login_required
 @require_write
 def update_node_identifier(node_id, ident_id):
-    from app.models.node import NodeIdentifier
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
     if not node:
@@ -2555,12 +2310,10 @@ def update_node_identifier(node_id, ident_id):
     return success(ident.to_dict())
 
 
-# DELETE /api/v1/nodes/<id>/identifiers/<ident_id>
 @bp.route('/nodes/<int:node_id>/identifiers/<int:ident_id>', methods=['DELETE'])
 @login_required
 @require_write
 def delete_node_identifier(node_id, ident_id):
-    from app.models.node import NodeIdentifier
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
     if not node:
@@ -2575,13 +2328,10 @@ def delete_node_identifier(node_id, ident_id):
     return success({'message': 'Identifier deleted'})
 
 
-# POST /api/v1/nodes/<id>/identifiers/generate
-# Mint an identifier by calling the scheme's configured external service.
 @bp.route('/nodes/<int:node_id>/identifiers/generate', methods=['POST'])
 @login_required
 @require_write
 def generate_node_identifier(node_id):
-    from app.models.node import NodeIdentifier, IdentifierScheme
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
     if not node:
@@ -2599,7 +2349,6 @@ def generate_node_identifier(node_id):
     if not scheme.generator_url:
         return error(f'{scheme.name} has no generator service configured.', 422)
 
-    # Build the substitution context
     target_url = ''
     if scheme.target_url_template:
         target_url = (scheme.target_url_template
@@ -2614,7 +2363,6 @@ def generate_node_identifier(node_id):
     }
 
     def _subst(obj):
-        """Recursively substitute {placeholders} in a JSON-ish body template."""
         if isinstance(obj, str):
             out = obj
             for k, v in ctx.items():
@@ -2626,7 +2374,6 @@ def generate_node_identifier(node_id):
             return [_subst(v) for v in obj]
         return obj
 
-    # Default body mirrors the simple contract; a template overrides it entirely
     if scheme.generator_body_template:
         body = _subst(scheme.generator_body_template)
     else:
@@ -2656,7 +2403,6 @@ def generate_node_identifier(node_id):
     except Exception as e:
         return error(f'Generator service error: {str(e)}', 502)
 
-    # Extract the value via the configured response path
     def _resolve(obj, path):
         if not path:
             return obj
@@ -2694,15 +2440,9 @@ def generate_node_identifier(node_id):
     return success(ident.to_dict(), 201)
 
 
-# ---------------------------------------------------------------------------
-# Identifier schemes (admin-managed vocabulary)
-# ---------------------------------------------------------------------------
-
-# GET /api/v1/identifier-schemes
 @bp.route('/identifier-schemes', methods=['GET'])
 @login_required
 def list_identifier_schemes():
-    from app.models.node import IdentifierScheme
     institution_id = current_user.active_institution_id
     if not institution_id:
         return error('No active institution', 400)
@@ -2715,12 +2455,10 @@ def list_identifier_schemes():
     return success([s.to_dict() for s in schemes])
 
 
-# POST /api/v1/identifier-schemes
 @bp.route('/identifier-schemes', methods=['POST'])
 @login_required
 @require_write
 def create_identifier_scheme():
-    from app.models.node import IdentifierScheme
     institution_id = current_user.active_institution_id
     if not institution_id:
         return error('No active institution', 400)
@@ -2754,12 +2492,10 @@ def create_identifier_scheme():
     return success(scheme.to_dict(), 201)
 
 
-# PATCH /api/v1/identifier-schemes/<id>
 @bp.route('/identifier-schemes/<int:scheme_id>', methods=['PATCH'])
 @login_required
 @require_write
 def update_identifier_scheme(scheme_id):
-    from app.models.node import IdentifierScheme
     institution_id = current_user.active_institution_id
     scheme = IdentifierScheme.query.filter_by(
         id=scheme_id, institution_id=institution_id).first()
@@ -2802,12 +2538,10 @@ def update_identifier_scheme(scheme_id):
     return success(scheme.to_dict())
 
 
-# DELETE /api/v1/identifier-schemes/<id>
 @bp.route('/identifier-schemes/<int:scheme_id>', methods=['DELETE'])
 @login_required
 @require_write
 def delete_identifier_scheme(scheme_id):
-    from app.models.node import IdentifierScheme, NodeIdentifier
     institution_id = current_user.active_institution_id
     scheme = IdentifierScheme.query.filter_by(
         id=scheme_id, institution_id=institution_id).first()
@@ -2824,27 +2558,21 @@ def delete_identifier_scheme(scheme_id):
     return success({'message': 'Scheme deleted'})
 
 
-# ── Label templates (WYSIWYG designer) ────────────────────────────────
-
-# GET /api/v1/label-templates
 @bp.route('/label-templates', methods=['GET'])
 @login_required
 def list_label_templates():
     institution_id = current_user.active_institution_id
     if not institution_id:
         return error('No active institution', 400)
-    from app.models.label_template import LabelTemplate
     templates = LabelTemplate.query.filter_by(
         institution_id=institution_id).order_by(LabelTemplate.name).all()
     return success([t.to_dict() for t in templates])
 
 
-# GET /api/v1/label-templates/<id>
 @bp.route('/label-templates/<int:template_id>', methods=['GET'])
 @login_required
 def get_label_template(template_id):
     institution_id = current_user.active_institution_id
-    from app.models.label_template import LabelTemplate
     t = LabelTemplate.query.filter_by(
         id=template_id, institution_id=institution_id).first()
     if not t:
@@ -2852,7 +2580,6 @@ def get_label_template(template_id):
     return success(t.to_dict())
 
 
-# POST /api/v1/label-templates
 @bp.route('/label-templates', methods=['POST'])
 @login_required
 @require_write
@@ -2860,7 +2587,6 @@ def create_label_template():
     institution_id = current_user.active_institution_id
     if not institution_id:
         return error('No active institution', 400)
-    from app.models.label_template import LabelTemplate
     data = request.get_json(silent=True) or {}
     name = (data.get('name') or '').strip()
     format_key = (data.get('format_key') or '').strip()
@@ -2889,13 +2615,11 @@ def create_label_template():
     return success(t.to_dict(), 201)
 
 
-# PUT /api/v1/label-templates/<id>
 @bp.route('/label-templates/<int:template_id>', methods=['PUT'])
 @login_required
 @require_write
 def update_label_template(template_id):
     institution_id = current_user.active_institution_id
-    from app.models.label_template import LabelTemplate
     t = LabelTemplate.query.filter_by(
         id=template_id, institution_id=institution_id).first()
     if not t:
@@ -2928,13 +2652,11 @@ def update_label_template(template_id):
     return success(t.to_dict())
 
 
-# DELETE /api/v1/label-templates/<id>
 @bp.route('/label-templates/<int:template_id>', methods=['DELETE'])
 @login_required
 @require_write
 def delete_label_template(template_id):
     institution_id = current_user.active_institution_id
-    from app.models.label_template import LabelTemplate
     t = LabelTemplate.query.filter_by(
         id=template_id, institution_id=institution_id).first()
     if not t:

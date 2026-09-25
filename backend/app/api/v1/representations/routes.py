@@ -59,13 +59,6 @@ def _serialize_rep_file(attachment: NodeAttachment) -> dict:
     }
 
 
-# ── Require institution admin helper (reuse pattern from hierarchy routes) ──
-
-# ══════════════════════════════════════════════════════════════════════
-# REPRESENTATION TYPE VOCABULARY (institution admin)
-# ══════════════════════════════════════════════════════════════════════
-
-# GET /api/v1/representation-types
 @bp.route('/representation-types', methods=['GET'])
 @login_required
 def list_representation_types():
@@ -80,7 +73,6 @@ def list_representation_types():
     return success([_serialize_rep_type(rt) for rt in types])
 
 
-# POST /api/v1/representation-types
 @bp.route('/representation-types', methods=['POST'])
 @login_required
 @require_institution_admin
@@ -116,7 +108,6 @@ def create_representation_type():
     return success(_serialize_rep_type(rt), 201)
 
 
-# PATCH /api/v1/representation-types/<id>
 @bp.route('/representation-types/<int:rt_id>', methods=['PATCH'])
 @login_required
 @require_institution_admin
@@ -139,7 +130,6 @@ def update_representation_type(rt_id):
     return success(_serialize_rep_type(rt))
 
 
-# DELETE /api/v1/representation-types/<id>
 @bp.route('/representation-types/<int:rt_id>', methods=['DELETE'])
 @login_required
 @require_institution_admin
@@ -161,16 +151,11 @@ def delete_representation_type(rt_id):
     return success({'message': 'Deleted'})
 
 
-# ══════════════════════════════════════════════════════════════════════
-# NODE REPRESENTATIONS (archivist)
-# ══════════════════════════════════════════════════════════════════════
-
 def _get_node_or_404(node_id, institution_id):
     from app.models.node import Node
     return Node.query.filter_by(id=node_id, institution_id=institution_id).first()
 
 
-# GET /api/v1/nodes/<id>/representations
 @bp.route('/nodes/<int:node_id>/representations', methods=['GET'])
 @login_required
 def list_representations(node_id):
@@ -187,7 +172,6 @@ def list_representations(node_id):
     return success([_serialize_representation(r) for r in reps])
 
 
-# POST /api/v1/nodes/<id>/representations
 @bp.route('/nodes/<int:node_id>/representations', methods=['POST'])
 @login_required
 @require_write
@@ -222,7 +206,6 @@ def create_representation(node_id):
     return success(_serialize_representation(rep), 201)
 
 
-# PATCH /api/v1/nodes/<id>/representations/<rep_id>
 @bp.route('/nodes/<int:node_id>/representations/<int:rep_id>', methods=['PATCH'])
 @login_required
 @require_write
@@ -253,7 +236,6 @@ def update_representation(node_id, rep_id):
     return success(_serialize_representation(rep))
 
 
-# DELETE /api/v1/nodes/<id>/representations/<rep_id>
 @bp.route('/nodes/<int:node_id>/representations/<int:rep_id>', methods=['DELETE'])
 @login_required
 @require_write
@@ -273,11 +255,6 @@ def delete_representation(node_id, rep_id):
     return success({'message': 'Representation deleted'})
 
 
-# ══════════════════════════════════════════════════════════════════════
-# ASSIGN EXISTING ATTACHMENT TO A REPRESENTATION
-# ══════════════════════════════════════════════════════════════════════
-
-# PATCH /api/v1/nodes/<id>/attachments/<attachment_id>/assign-representation
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/assign-representation', methods=['PATCH'])
 @login_required
 @require_write
@@ -303,7 +280,7 @@ def assign_attachment_to_representation(node_id, attachment_id):
     db.session.commit()
     return success({'id': attachment.id, 'representation_id': attachment.representation_id})
 
-# GET /api/v1/nodes/<id>/attachments/<attachment_id>/text
+
 @bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/text', methods=['GET'])
 @login_required
 def get_attachment_text(node_id, attachment_id):

@@ -3,7 +3,6 @@ from flask_login import login_required, current_user
 from app.api.v1 import bp
 from app.api.v1.helpers import success, error, require_institution_admin
 
-# ── GET /api/v1/portal/config ─────────────────────────────────────────
 
 @bp.route('/portal/config', methods=['GET'])
 @login_required
@@ -12,15 +11,12 @@ def get_portal_config():
     from app.models import Institution
     inst = Institution.query.get(current_user.active_institution_id)
     portal = (inst.settings or {}).get('portal', {})
-    # Never return the secret to the client
     return success({
         'enabled': portal.get('enabled', False),
         'webhook_url': portal.get('webhook_url', ''),
         'has_secret': bool(portal.get('webhook_secret')),
     })
 
-
-# ── PUT /api/v1/portal/config ─────────────────────────────────────────
 
 @bp.route('/portal/config', methods=['PUT'])
 @login_required
@@ -54,7 +50,6 @@ def save_portal_config():
     })
 
 
-# ── POST /api/v1/portal/sync ──────────────────────────────────────────
 
 @bp.route('/portal/sync', methods=['POST'])
 @login_required
@@ -87,7 +82,6 @@ def portal_bulk_sync():
     return success({'queued': queued, 'total': len(published)})
 
 
-# ── POST /api/v1/portal/test ──────────────────────────────────────────
 
 @bp.route('/portal/test', methods=['POST'])
 @login_required

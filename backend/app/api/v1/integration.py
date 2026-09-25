@@ -13,8 +13,6 @@ from app.extensions import db
 from app.models.integration import ExternalIntegration
 
 
-# ─── helpers ─────────────────────────────────────────────────────────
-
 def _require_admin():
     from app.models import Institution
     inst = Institution.query.get(current_user.active_institution_id)
@@ -68,8 +66,6 @@ def _parse_json_field(value):
             return {}
     return {}
 
-
-# ─── CRUD ─────────────────────────────────────────────────────────────
 
 @bp.route('/integrations', methods=['GET'])
 @login_required
@@ -158,91 +154,6 @@ def delete_integration(intg_id):
     db.session.commit()
     return success({'deleted': intg_id})
 
-
-# ─── Diagnostic endpoint ──────────────────────────────────────────────
-# GET /api/v1/integrations/<id>/debug?q=segerberg
-# Returns every intermediate step so you can see exactly what's happening.
-
-@bp.route('/integrations/<int:intg_id>/debug', methods=['GET'])
-@login_required
-def debug_integration(intg_id):
-    if not current_user.active_institution_id:
-        return error('No active institution', 400)
-
-    intg = ExternalIntegration.query.filter_by(
-        id=intg_id,
-        institution_id=current_user.active_institution_id,
-    ).first_or_404()
-
-    query = request.args.get('q', 'test').strip()
-    encoded = urllib.parse.quote(query, safe='')
-    path = intg.search_path.replace('{query}', encoded)
-    url = f'{intg.base_url}/{path}'
-
-    headers = {'User-Agent': 'Kurbits/1.0'}
-    if intg.headers:
-        headers.update(intg.headers)
-
-    # Step 1 — fetch
-    fetch_error = None
-    raw = None
-    try:
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            raw = json.loads(resp.read().decode('utf-8'))
-    except Exception as e:
-        fetch_error = str(e)
-
-    if fetch_error:
-        return success({
-            'step': 'fetch_failed',
-            'url': url,
-            'error': fetch_error,
-        })
-
-    # Step 2 — resolve result_path
-    result_path = (intg.result_path or '').strip()
-    if result_path:
-        items = _resolve_path(raw, result_path)
-    else:
-        items = raw
-
-    # Step 3 — parse mappings
-    mappings = _parse_json_field(intg.field_mappings)
-
-    # Step 4 — map first item only (for brevity)
-    first_mapped = None
-    if isinstance(items, list) and items:
-        item = items[0]
-        mapped = {'_integration_id': intg.id, '_integration_name': intg.name}
-        for target_field, source_path in mappings.items():
-            val = _resolve_path(item, str(source_path).strip())
-            if val is not None:
-                mapped[target_field] = val
-        first_mapped = mapped
-
-    return success({
-        'config': {
-            'base_url':     intg.base_url,
-            'search_path':  intg.search_path,
-            'result_path':  result_path,
-            'field_mappings': mappings,
-            'field_mappings_raw_type': type(intg.field_mappings).__name__,
-        },
-        'url_called': url,
-        'raw_response_type': type(raw).__name__,
-        'raw_response_keys': list(raw.keys()) if isinstance(raw, dict) else f'list of {len(raw)}',
-        'items_after_result_path': {
-            'type': type(items).__name__,
-            'count': len(items) if isinstance(items, list) else 'n/a',
-            'first_item_keys': list(items[0].keys()) if isinstance(items, list) and items else None,
-        },
-        'first_item_raw': items[0] if isinstance(items, list) and items else items,
-        'first_item_mapped': first_mapped,
-    })
-
-
-# ─── Proxy search ─────────────────────────────────────────────────────
 
 @bp.route('/integrations/<int:intg_id>/search', methods=['GET'])
 @login_required

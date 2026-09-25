@@ -33,7 +33,6 @@ def _int(val) -> 'int | None':
     except (ValueError, TypeError):
         return None
 
-# ── Numbering helpers ─────────────────────────────────────────────────
 
 def _next_ref(model, institution_id: int, prefix: str) -> str:
     """Generate next running number: SA-1, SA-2, DEL-1 etc."""
@@ -42,10 +41,6 @@ def _next_ref(model, institution_id: int, prefix: str) -> str:
     ).scalar() or 0
     return f'{prefix}-{count + 1}'
 
-
-# ══════════════════════════════════════════════════════════════════════
-# SUBMISSION AGREEMENTS
-# ══════════════════════════════════════════════════════════════════════
 
 @bp.route('/submission-agreements', methods=['GET'])
 @login_required
@@ -156,7 +151,6 @@ def delete_submission_agreement(sa_id):
     return success({'message': 'Deleted'})
 
 
-# SA file attachments
 @bp.route('/submission-agreements/<int:sa_id>/attachments', methods=['POST'])
 @login_required
 @require_write
@@ -237,9 +231,6 @@ def delete_sa_attachment(sa_id, att_id):
     return success({'message': 'Deleted'})
 
 
-# ══════════════════════════════════════════════════════════════════════
-# DELIVERIES
-# ══════════════════════════════════════════════════════════════════════
 def _template_items_to_checklist(items: list) -> list:
     return [{'key': i.get('key') or i['label'].lower().replace(' ', '_'),
              'label': i['label'], 'checked': False, 'note': ''}
@@ -391,8 +382,6 @@ def delete_delivery(delivery_id):
     return success({'message': 'Deleted'})
 
 
-# ── Checklist shortcut ────────────────────────────────────────────────
-
 @bp.route('/deliveries/<int:delivery_id>/checklist', methods=['PATCH'])
 @login_required
 @require_write
@@ -408,10 +397,6 @@ def update_checklist(delivery_id):
     db.session.commit()
     return success(delivery.to_dict())
 
-
-# ══════════════════════════════════════════════════════════════════════
-# ACCESSIONS
-# ══════════════════════════════════════════════════════════════════════
 
 @bp.route('/accessions', methods=['GET'])
 @login_required
@@ -521,7 +506,6 @@ def delete_accession(accession_id):
     return success({'message': 'Deleted'})
 
 
-# ── Linked nodes ───────────────────────────────────────────────────────
 
 @bp.route('/accessions/<int:accession_id>/nodes', methods=['GET'])
 @login_required
@@ -578,10 +562,6 @@ def unlink_accession_node(accession_id, node_id):
     db.session.commit()
     return success({'message': 'Unlinked'})
 
-
-# ══════════════════════════════════════════════════════════════════════
-# DELIVERY CHECKLIST TEMPLATES
-# ══════════════════════════════════════════════════════════════════════
 
 @bp.route('/vocab/checklist-templates', methods=['GET'])
 @login_required

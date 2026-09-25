@@ -16,7 +16,6 @@ def _serialize(s: SavedSearch) -> dict:
     }
 
 
-# GET /api/v1/saved-searches
 @bp.route('/saved-searches', methods=['GET'])
 @login_required
 def list_saved_searches():
@@ -36,7 +35,6 @@ def list_saved_searches():
     return success([_serialize(s) for s in searches])
 
 
-# POST /api/v1/saved-searches
 @bp.route('/saved-searches', methods=['POST'])
 @login_required
 def create_saved_search():
@@ -75,7 +73,6 @@ def create_saved_search():
     return success(_serialize(s), 201)
 
 
-# DELETE /api/v1/saved-searches/<id>
 @bp.route('/saved-searches/<int:search_id>', methods=['DELETE'])
 @login_required
 def delete_saved_search(search_id):

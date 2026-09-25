@@ -1,10 +1,6 @@
 """
 Whisper transcription configuration endpoints.
 
-This file replaces the former AI routes module. All LLM endpoints
-(smart-search, parse-search, draft notes, suggest-tags, analyse-attachment,
-generate-agent, fetch-sources, tasks, provider config/test/status) have been
-removed. Only the Whisper microservice configuration remains.
 """
 from flask import request
 from flask_login import login_required, current_user
@@ -23,9 +19,6 @@ def _serialize(config: InstitutionAIConfig) -> dict:
         'updated_at':  config.updated_at.isoformat() if config.updated_at else None,
     }
 
-
-# ── GET /api/v1/ai/whisper-config ─────────────────────────────────────
-
 @bp.route('/ai/whisper-config', methods=['GET'])
 @login_required
 @require_institution_admin
@@ -39,8 +32,6 @@ def get_whisper_config():
 
     return success(_serialize(config))
 
-
-# ── PUT /api/v1/ai/whisper-config ─────────────────────────────────────
 
 @bp.route('/ai/whisper-config', methods=['PUT'])
 @login_required
@@ -75,10 +66,6 @@ def save_whisper_config():
     db.session.commit()
     return success(_serialize(config))
 
-
-# ── GET /api/v1/ai/whisper-models ─────────────────────────────────────
-# Any logged-in user may list models — the OCR/transcribe button in the
-# archivist UI uses this to populate its model dropdown.
 
 @bp.route('/ai/whisper-models', methods=['GET'])
 @login_required

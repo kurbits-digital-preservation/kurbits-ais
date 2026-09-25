@@ -4,9 +4,6 @@ from app.api.v1 import bp
 from app.api.v1.helpers import success, error
 
 
-# GET /api/v1/search?q=...&types=nodes,agents&status=draft&level=Series
-#   &hierarchy_type_id=1&date_from=1900-01-01&date_to=2000-12-31
-#   &agent_type=person&page=1&per_page=25
 @bp.route('/search', methods=['GET'])
 @login_required
 def global_search():

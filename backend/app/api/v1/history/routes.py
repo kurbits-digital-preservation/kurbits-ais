@@ -32,9 +32,6 @@ def _serialize_bookmark(b: Bookmark) -> dict:
     }
 
 
-# ── Recent ─────────────────────────────────────────────────────────────
-
-# GET /api/v1/recent
 @bp.route('/recent', methods=['GET'])
 @login_required
 def list_recent():
@@ -55,7 +52,6 @@ def list_recent():
     return success([_serialize_recent(r) for r in items])
 
 
-# POST /api/v1/recent
 @bp.route('/recent', methods=['POST'])
 @login_required
 def track_recent():
@@ -98,7 +94,6 @@ def track_recent():
         db.session.add(item)
         db.session.flush()
 
-        # Enforce cap: delete oldest beyond limit
         oldest_ids = db.session.execute(
             sa.select(RecentItem.id)
             .where(
@@ -118,9 +113,6 @@ def track_recent():
     return success({'tracked': True})
 
 
-# ── Bookmarks ──────────────────────────────────────────────────────────
-
-# GET /api/v1/bookmarks
 @bp.route('/bookmarks', methods=['GET'])
 @login_required
 def list_bookmarks():
@@ -140,7 +132,6 @@ def list_bookmarks():
     return success([_serialize_bookmark(b) for b in items])
 
 
-# POST /api/v1/bookmarks
 @bp.route('/bookmarks', methods=['POST'])
 @login_required
 def add_bookmark():
@@ -183,7 +174,6 @@ def add_bookmark():
     return success(_serialize_bookmark(b), 201)
 
 
-# DELETE /api/v1/bookmarks  (by entity, not by bookmark id — easier to call from detail views)
 @bp.route('/bookmarks', methods=['DELETE'])
 @login_required
 def remove_bookmark():
@@ -204,7 +194,6 @@ def remove_bookmark():
     return success({'removed': True})
 
 
-# GET /api/v1/bookmarks/check?entity_type=node&entity_id=42
 @bp.route('/bookmarks/check', methods=['GET'])
 @login_required
 def check_bookmark():
