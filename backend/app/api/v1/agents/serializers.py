@@ -9,7 +9,6 @@ def serialize_agent_stub(agent: Agent) -> dict:
         'authorized_form': agent.authorized_form,
         'date_from': agent.date_from,
         'date_to': agent.date_to,
-        'identifier': agent.identifier,
     }
 
 
@@ -23,7 +22,6 @@ def serialize_agent_detail(agent: Agent) -> dict:
         'description': agent.description,
         'date_from': agent.date_from,
         'date_to': agent.date_to,
-        'identifier': agent.identifier,
         'website': agent.website,
         'created_at': agent.created_at.isoformat(),
         'updated_at': agent.updated_at.isoformat(),

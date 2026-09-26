@@ -148,13 +148,9 @@ def export_agent_eac(agent, institution=None) -> bytes:
         else:
             pass
 
-    ids = []
-    for attr, label in (('isni', 'ISNI'), ('viaf', 'VIAF'),
-                        ('wikidata', 'Wikidata'), ('orcid', 'ORCID'),
-                        ('identifier', 'Identifier')):
-        val = getattr(agent, attr, None)
-        if val:
-            ids.append((label, val))
+    ids = [(ident.scheme.name, ident.value)
+           for ident in (getattr(agent, 'identifiers', None) or [])
+           if ident.scheme]
     source_notes = [n for n in notes
                     if (getattr(n, 'note_type', '') or '') == 'sources'
                     and (getattr(n, 'content', '') or '').strip()]

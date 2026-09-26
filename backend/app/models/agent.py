@@ -105,7 +105,6 @@ class Agent(db.Model):
     date_to: so.Mapped[Optional[str]] = so.mapped_column(sa.String(50), nullable=True)
 
     # Contact / identity
-    identifier: so.Mapped[Optional[str]] = so.mapped_column(sa.String(200), nullable=True)  # external ID, ISNI, VIAF etc.
     website: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
 
     created_at: so.Mapped[datetime] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
