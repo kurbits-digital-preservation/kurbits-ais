@@ -7,8 +7,8 @@
   Archival Information System for archives, special collections, and museums.
 </p>
 <p align="center">
-  <a href="docs/index.md">Documentation</a> ·
-  <a href="docs/visual-arkiv-import.md">Visual Arkiv import (sv)</a>
+  <a href="https://docs.kurbits.net/">Documentation</a> ·
+  <a href="https://docs.kurbits.net/user/visual-arkiv-import/">Visual Arkiv import (sv)</a>
 </p>
 ---
  
