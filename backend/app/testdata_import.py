@@ -153,7 +153,8 @@ def _import_agents(agents_data: list, institution_id: int, system_user_id: int,
     """
     Import agents from fixture. Returns dict mapping _id → Agent.
     """
-    from app.models.agent import Agent, AgentType, AgentNote
+    from app.models.agent import Agent, AgentType, AgentNote, AgentIdentifier
+    from app.models.node import IdentifierScheme
     import sqlalchemy as sa
 
     id_map: dict = {}
@@ -206,11 +207,26 @@ def _import_agents(agents_data: list, institution_id: int, system_user_id: int,
             date_from=data.get('date_from'),
             date_to=data.get('date_to'),
             description=data.get('description'),
-            identifier=' | '.join(identifiers) if identifiers else None,
             created_by_id=system_user_id,
         )
         db.session.add(agent)
         db.session.flush()
+
+        _IDENTIFIER_SOURCES = (
+            ('wikidata_id', 'Wikidata', 'https://www.wikidata.org/wiki/{value}'),
+            ('viaf_id',     'VIAF',     'https://viaf.org/viaf/{value}'),
+            ('isni',        'ISNI',     'https://isni.org/isni/{value}'),
+        )
+        for field, scheme_name, url_template in _IDENTIFIER_SOURCES:
+            value = data.get(field)
+            if not value:
+                continue
+            scheme = IdentifierScheme.get_or_create(institution_id, scheme_name, url_template=url_template)
+            if not AgentIdentifier.query.filter_by(scheme_id=scheme.id, value=value).first():
+                db.session.add(AgentIdentifier(
+                    agent_id=agent.id, scheme_id=scheme.id, value=value,
+                    created_by_id=system_user_id,
+                ))
 
         for note in data.get('notes', []):
             db.session.add(AgentNote(
