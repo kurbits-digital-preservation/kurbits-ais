@@ -1,0 +1,70 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+}
+
+.panel {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-10) var(--space-8);
+}
+
+.header {
+  margin-bottom: var(--space-8);
+  text-align: center;
+}
+
+.logo {
+  width: 100px;
+  height: auto;
+  margin: 0 auto var(--space-4);
+  display: block;
+}
+
+.wordmark {
+  font-family: var(--font-sans);
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.03em;
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.tagline {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.error {
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  font-size: var(--text-sm);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-error-border);
+}
+
+.submitBtn {
+  width: 100%;
+  justify-content: center;
+  padding: 9px 14px;
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 480px) {
+  .panel { border-radius: 0; border: none; padding: var(--space-8) var(--space-6); }
+}

@@ -1,0 +1,133 @@
+[
+  {
+    "name": "Dublin Core",
+    "description": "The 15 core elements of Dublin Core (ISO 15836). Suitable for general resource description.",
+    "entity_type": "resource",
+    "fields": [
+      {
+        "name": "dc_title",
+        "label": "Title",
+        "type": "text",
+        "required": false,
+        "placeholder": "A name given to the resource",
+        "help_text": "DC: title — a name given to the resource"
+      },
+      {
+        "name": "dc_creator",
+        "label": "Creator",
+        "type": "text",
+        "required": false,
+        "placeholder": "An entity primarily responsible for making the resource",
+        "help_text": "DC: creator — use Agents tab for structured creator links"
+      },
+      {
+        "name": "dc_subject",
+        "label": "Subject",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "The topic of the resource",
+        "help_text": "DC: subject — topic, keywords, or classification codes"
+      },
+      {
+        "name": "dc_description",
+        "label": "Description",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "An account of the resource",
+        "help_text": "DC: description — may include abstract, table of contents, or free-text account"
+      },
+      {
+        "name": "dc_publisher",
+        "label": "Publisher",
+        "type": "text",
+        "required": false,
+        "placeholder": "An entity responsible for making the resource available",
+        "help_text": "DC: publisher"
+      },
+      {
+        "name": "dc_contributor",
+        "label": "Contributor",
+        "type": "text",
+        "required": false,
+        "placeholder": "An entity responsible for making contributions to the resource",
+        "help_text": "DC: contributor"
+      },
+      {
+        "name": "dc_date",
+        "label": "Date",
+        "type": "text",
+        "required": false,
+        "placeholder": "YYYY-MM-DD or YYYY",
+        "help_text": "DC: date — a point or period of time associated with the resource lifecycle"
+      },
+      {
+        "name": "dc_type",
+        "label": "Type",
+        "type": "select",
+        "required": false,
+        "options": [
+          "Collection", "Dataset", "Event", "Image", "InteractiveResource",
+          "MovingImage", "PhysicalObject", "Service", "Software", "Sound",
+          "StillImage", "Text"
+        ],
+        "help_text": "DC: type — DCMI Type Vocabulary"
+      },
+      {
+        "name": "dc_format",
+        "label": "Format",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. application/pdf, image/tiff",
+        "help_text": "DC: format — file format, physical medium, or dimensions"
+      },
+      {
+        "name": "dc_identifier",
+        "label": "Identifier",
+        "type": "text",
+        "required": false,
+        "placeholder": "An unambiguous reference to the resource",
+        "help_text": "DC: identifier — URI, ISBN, DOI etc."
+      },
+      {
+        "name": "dc_source",
+        "label": "Source",
+        "type": "text",
+        "required": false,
+        "placeholder": "A related resource from which the described resource is derived",
+        "help_text": "DC: source"
+      },
+      {
+        "name": "dc_language",
+        "label": "Language",
+        "type": "text",
+        "required": false,
+        "placeholder": "e.g. sv, en, ISO 639",
+        "help_text": "DC: language — ISO 639-1 or BCP 47 language tag"
+      },
+      {
+        "name": "dc_relation",
+        "label": "Relation",
+        "type": "text",
+        "required": false,
+        "placeholder": "A related resource",
+        "help_text": "DC: relation — use Relations tab for structured links"
+      },
+      {
+        "name": "dc_coverage",
+        "label": "Coverage",
+        "type": "text",
+        "required": false,
+        "placeholder": "Spatial or temporal coverage",
+        "help_text": "DC: coverage — jurisdiction, place name, period, or coordinates"
+      },
+      {
+        "name": "dc_rights",
+        "label": "Rights",
+        "type": "textarea",
+        "required": false,
+        "placeholder": "Information about rights held in or over the resource",
+        "help_text": "DC: rights — rights statement, license URI, or copyright notice"
+      }
+    ]
+  }
+]

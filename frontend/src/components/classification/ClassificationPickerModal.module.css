@@ -1,0 +1,120 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in srgb, #000 45%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-4);
+}
+
+.modal {
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 520px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  margin: 0;
+}
+
+.body {
+  padding: var(--space-4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.searchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  position: relative;
+}
+.searchRow input {
+  flex: 1;
+  padding-left: 30px;
+}
+.searchIcon {
+  position: absolute;
+  left: 9px;
+  color: var(--color-ink-faint);
+  pointer-events: none;
+}
+
+.results {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 120px;
+}
+
+.hint {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  padding: var(--space-3);
+  text-align: center;
+}
+
+.result {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  border-radius: var(--radius-md);
+  width: 100%;
+}
+.result:hover { background: var(--color-bg-subtle); }
+.result:disabled { opacity: 0.4; cursor: default; }
+
+.resultCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  flex-shrink: 0;
+}
+.resultName {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resultLevel {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  flex-shrink: 0;
+}
+
+.schemeSelect {
+  width: 100%;
+  font-size: var(--text-sm);
+}

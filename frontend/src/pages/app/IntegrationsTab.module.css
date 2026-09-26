@@ -1,0 +1,196 @@
+.tab {
+  padding: var(--space-6);
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.intro {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  line-height: 1.6;
+  padding: var(--space-4);
+  background: var(--color-bg-subtle);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+/* ─── Section card (matches vocabSection) ────────────────────────── */
+.section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+}
+
+.sectionTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-ink);
+  margin-bottom: 3px;
+}
+
+.sectionDesc {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  line-height: 1.5;
+  max-width: 480px;
+}
+
+/* ─── Integration rows ───────────────────────────────────────────── */
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.08s;
+}
+.row:last-child { border-bottom: none; }
+.row:hover { background: var(--color-bg-subtle); }
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.rowName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.rowMeta {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.rowBadge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-faint);
+  border: 1px solid var(--color-border);
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  flex-shrink: 0;
+}
+
+.rowActions {
+  display: flex;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+/* ─── Add / edit form (inside section, like addForm in vocabs) ────── */
+.form {
+  padding: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-4);
+}
+
+.formGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.formGroup label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.02em;
+}
+
+.hint {
+  font-weight: 400;
+  color: var(--color-ink-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.monoArea {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  resize: vertical;
+  min-height: 80px;
+}
+
+.mappingHelp {
+  font-size: 10px;
+  color: var(--color-ink-faint);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  line-height: 1.6;
+}
+
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.jsonError {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border: 1px solid var(--color-error-border);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+}
+
+/* ─── Empty state ────────────────────────────────────────────────── */
+.empty {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  padding: var(--space-4) var(--space-5);
+  font-style: italic;
+}

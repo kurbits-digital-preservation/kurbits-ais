@@ -1,0 +1,50 @@
+# ─── Kurbits AIS — Kubernetes overlay ───────────────────────────────
+# Usage:
+#   helm install kurbits ./helm/kurbits \
+#     -f helm/kurbits/values-kubernetes.yaml \
+#     --set app.secretKey="$(openssl rand -hex 32)" \
+#     --set postgresql.auth.password="$(openssl rand -hex 16)" \
+#     --set image.repository=ghcr.io/your-org/kurbits \
+#     --set image.tag=0.1.0 \
+#     --set ingress.hosts[0].host=kurbits.example.com
+
+# ── Routing: standard Kubernetes Ingress ──────────────────────────────
+route:
+  enabled: false
+
+ingress:
+  enabled: true
+  className: nginx     # change to your ingress class (nginx, traefik, etc.)
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"   # allow large file uploads
+  hosts:
+    - host: kurbits.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: kurbits-tls
+      hosts:
+        - kurbits.example.com
+
+# ── Security: standard Kubernetes pod security ─────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1001
+  capabilities:
+    drop:
+      - ALL
+
+# ── Storage: explicit storageClass recommended ─────────────────────────
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""     # set to your cluster's StorageClass if needed
+  accessMode: ReadWriteOnce

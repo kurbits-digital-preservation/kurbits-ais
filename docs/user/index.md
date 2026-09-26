@@ -16,5 +16,5 @@ Kurbits is an archival information and collection management system for archives
 10. [Authority lookups, import and export](10-lookups-import-export.md)
 11. [Process descriptions](11-process-descriptions.md)
 12. [Labels](12-labels.md)
-13. [Running with Docker](13-docker.md)
+13. [Running with Docker](../installation/13-docker.md)
 14. [Visual-Arkiv import](visual-arkiv-import.md)

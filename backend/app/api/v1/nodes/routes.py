@@ -1,0 +1,2666 @@
+import os
+import uuid
+from datetime import datetime, date
+
+from flask import request, current_app, send_from_directory, make_response
+from flask_login import login_required, current_user
+from werkzeug.utils import secure_filename
+import sqlalchemy as sa
+
+from app.api.v1 import bp
+from app.api.v1.helpers import success, error, require_write
+from app.api.v1.nodes.serializers import (
+    serialize_node_stub, serialize_node_detail, serialize_change,
+    serialize_attachment, serialize_note, compute_has_children
+)
+from app.extensions import db
+from app.models import (
+    Node, NodeStatus, NodeChange, NodeAttachment, NodeNote,
+    Agent, Location, LocationMovement, Classification, Institution,
+    NodeRelationType,
+)
+from app.models.node import node_association, NodeIdentifier, IdentifierScheme
+from app.models.agent import agent_node_association
+from app.models.location import location_node_association
+from app.models.classification import classification_node_association
+from app.models.geo import NodePlace, Tag, PlaceType, TagCategory
+from app.models.flag import NodeFlag
+from app.models.representation import NodeRepresentation
+from app.models.background_task import BackgroundTask
+from app.models.label_template import LabelTemplate
+
+
+def _get_node_or_404(node_id: int, institution_id: int):
+    node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
+    if not node:
+        return None
+    return node
+
+
+@bp.route('/nodes/tree', methods=['GET'])
+@login_required
+def get_tree():
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+
+    institution_id = current_user.active_institution_id
+    include_drafts = request.args.get('include_drafts', 'true').lower() == 'true'
+
+    query = sa.select(Node).where(
+        Node.institution_id == institution_id,
+        Node.parent_id.is_(None)
+    )
+    if not include_drafts:
+        query = query.where(Node.status == NodeStatus.PUBLISHED)
+
+    roots = db.session.execute(query.order_by(Node.ref_code)).scalars().all()
+    with_children = compute_has_children(roots)
+    return success([
+        serialize_node_stub(n, has_children=n.id in with_children) for n in roots
+    ])
+
+
+@bp.route('/nodes/<int:node_id>/children', methods=['GET'])
+@login_required
+def get_children(node_id):
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    include_drafts = request.args.get('include_drafts', 'true').lower() == 'true'
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 200, type=int), 500)
+
+    children_q = sa.select(Node).where(Node.parent_id == node.id)
+    if not include_drafts:
+        children_q = children_q.where(Node.status == NodeStatus.PUBLISHED)
+    children_q = children_q.order_by(Node.local_ref)
+
+    paginated = db.paginate(children_q, page=page, per_page=per_page, error_out=False)
+    with_children = compute_has_children(paginated.items)
+
+    return success(
+        [serialize_node_stub(c, has_children=c.id in with_children)
+         for c in paginated.items],
+        meta={
+            'page': paginated.page,
+            'per_page': per_page,
+            'total': paginated.total,
+            'pages': paginated.pages,
+        }
+    )
+
+
+@bp.route('/nodes', methods=['GET'])
+@login_required
+def list_nodes():
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+
+    institution_id = current_user.active_institution_id
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 25, type=int), 100)
+    search = request.args.get('q', '').strip()
+    status_filter = request.args.get('status')
+    level_filter = request.args.get('level')
+    hierarchy_type_id = request.args.get('hierarchy_type_id', type=int)
+    has_scope_note = request.args.get('has_scope_note')
+    has_agents = request.args.get('has_agents')
+    has_attachments = request.args.get('has_attachments')
+    has_description = request.args.get('has_description')
+    no_date = request.args.get('no_date')
+
+    query = sa.select(Node).where(Node.institution_id == institution_id)
+
+    if search:
+        query = query.where(
+            sa.or_(
+                Node.title.ilike(f'%{search}%'),
+                Node.ref_code.ilike(f'%{search}%'),
+                Node.description.ilike(f'%{search}%'),
+            )
+        )
+    if status_filter:
+        query = query.where(Node.status == status_filter)
+    if level_filter:
+        query = query.where(sa.func.lower(Node.level_of_description) == level_filter.lower())
+    if hierarchy_type_id:
+        query = query.where(Node.hierarchy_type_id == hierarchy_type_id)
+
+    if has_scope_note == 'true':
+        query = query.where(Node.scope_and_content.isnot(None), Node.scope_and_content != '')
+    if has_scope_note == 'false':
+        query = query.where(sa.or_(Node.scope_and_content.is_(None), Node.scope_and_content == ''))
+    if has_description == 'true':
+        query = query.where(Node.description.isnot(None), Node.description != '')
+    if has_description == 'false':
+        query = query.where(sa.or_(Node.description.is_(None), Node.description == ''))
+    if has_agents == 'true':
+        query = query.where(
+            sa.exists(sa.select(agent_node_association.c.node_id).where(
+                agent_node_association.c.node_id == Node.id))
+        )
+    if has_attachments == 'true':
+        query = query.where(
+            sa.exists(sa.select(NodeAttachment.id).where(NodeAttachment.node_id == Node.id))
+        )
+    if no_date == 'true':
+        query = query.where(Node.date_start.is_(None), Node.date_end.is_(None))
+
+    parent_id_filter = request.args.get('parent_id', type=int)
+    if parent_id_filter is not None:
+        query = query.where(Node.parent_id == parent_id_filter)
+
+    query = query.order_by(Node.ref_code)
+    paginated = db.paginate(query, page=page, per_page=per_page, error_out=False)
+    with_children = compute_has_children(paginated.items)
+
+    return success(
+        [serialize_node_stub(n, has_children=n.id in with_children)
+         for n in paginated.items],
+        meta={
+            'page': paginated.page,
+            'per_page': per_page,
+            'total': paginated.total,
+            'pages': paginated.pages,
+        }
+    )
+
+
+@bp.route('/nodes/<int:node_id>', methods=['GET'])
+@login_required
+def get_node(node_id):
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    return success(serialize_node_detail(node))
+
+
+@bp.route('/nodes', methods=['POST'])
+@login_required
+@require_write
+def create_node():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+
+    required = ['title', 'local_ref', 'level_of_description', 'hierarchy_type_id']
+    missing = [f for f in required if not data.get(f)]
+    if missing:
+        return error(f'Missing required fields: {", ".join(missing)}', 400)
+
+    parent = None
+    if data.get('parent_id'):
+        parent = _get_node_or_404(data['parent_id'], institution_id)
+        if not parent:
+            return error('Parent node not found', 404)
+
+    node = Node(
+        institution_id=institution_id,
+        title=data['title'],
+        local_ref=data['local_ref'],
+        level_of_description=data['level_of_description'],
+        hierarchy_type_id=data['hierarchy_type_id'],
+        parent=parent,
+        description=data.get('description'),
+        scope_and_content=data.get('scope_and_content'),
+        arrangement=data.get('arrangement'),
+        access_conditions=data.get('access_conditions'),
+        reproduction_conditions=data.get('reproduction_conditions'),
+        language=data.get('language'),
+        finding_aids=data.get('finding_aids'),
+        extent=data.get('extent'),
+        date_certainty=data.get('date_certainty'),
+        metadata_spec=data.get('metadata_spec', {}),
+        status=NodeStatus.DRAFT,
+        created_by_id=current_user.id,
+        updated_by_id=current_user.id,
+    )
+
+    if data.get('date_start'):
+        try:
+            node.date_start = datetime.strptime(data['date_start'], '%Y-%m-%d').date()
+        except ValueError:
+            return error('Invalid date_start format. Use YYYY-MM-DD', 400)
+
+    if data.get('date_end'):
+        try:
+            node.date_end = datetime.strptime(data['date_end'], '%Y-%m-%d').date()
+        except ValueError:
+            return error('Invalid date_end format. Use YYYY-MM-DD', 400)
+
+    institution = Institution.query.get(institution_id)
+    if parent:
+        node.ref_code = f'{parent.ref_code}/{data["local_ref"]}'
+    else:
+        node.ref_code = f'{institution.ref_prefix}/{data["local_ref"]}'
+
+    db.session.add(node)
+    db.session.flush()
+
+    if not node.validate_hierarchy():
+        db.session.rollback()
+        return error(
+            f'Invalid hierarchy: "{node.level_of_description}" is not allowed at this position', 422
+        )
+
+    node.record_change(
+        change_type='create',
+        description=f'Created node "{node.title}"',
+        created_by_id=current_user.id,
+        before_data={},
+        after_data=node.to_dict(),
+    )
+
+    db.session.commit()
+    return success(serialize_node_detail(node), 201)
+
+
+@bp.route('/nodes/<int:node_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_node(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    before_data = node.to_dict()
+
+    updatable_fields = [
+        'title', 'description', 'scope_and_content', 'arrangement',
+        'access_conditions', 'reproduction_conditions', 'language',
+        'finding_aids', 'extent', 'date_certainty', 'metadata_spec',
+    ]
+    for field in updatable_fields:
+        if field in data:
+            setattr(node, field, data[field])
+
+    if 'date_start' in data:
+        if data['date_start']:
+            try:
+                node.date_start = datetime.strptime(data['date_start'], '%Y-%m-%d').date()
+            except ValueError:
+                return error('Invalid date_start format. Use YYYY-MM-DD', 400)
+        else:
+            node.date_start = None
+
+    if 'date_end' in data:
+        if data['date_end']:
+            try:
+                node.date_end = datetime.strptime(data['date_end'], '%Y-%m-%d').date()
+            except ValueError:
+                return error('Invalid date_end format. Use YYYY-MM-DD', 400)
+        else:
+            node.date_end = None
+
+    if 'level_of_description' in data and data['level_of_description'] != node.level_of_description:
+        old_level = node.level_of_description
+        node.level_of_description = data['level_of_description']
+        if not node.validate_hierarchy():
+            node.level_of_description = old_level
+            return error(f'Invalid hierarchy: cannot change level to "{data["level_of_description"]}"', 422)
+
+    if 'local_ref' in data and data['local_ref'] != node.local_ref:
+        node.local_ref = data['local_ref']
+        node.refresh_ref_code()
+
+    node.updated_by_id = current_user.id
+    after_data = node.to_dict()
+
+    if before_data != after_data:
+        changed_fields = [k for k in after_data if after_data[k] != before_data.get(k)]
+        node.record_change(
+            change_type='edit',
+            description=f'Updated: {", ".join(changed_fields)}',
+            created_by_id=current_user.id,
+            before_data=before_data,
+            after_data=after_data,
+        )
+
+    db.session.commit()
+    return success(serialize_node_detail(node))
+
+
+@bp.route('/nodes/<int:node_id>/descendant-count', methods=['GET'])
+@login_required
+def get_descendant_count(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+    ids = _collect_subtree_ids(node.id)
+    return success({'descendant_count': len(ids) - 1})
+
+
+def _collect_subtree_ids(root_id: int) -> list:
+    all_ids = [root_id]
+    frontier = [root_id]
+    while frontier:
+        rows = db.session.execute(
+            sa.select(Node.id).where(Node.parent_id.in_(frontier))
+        ).scalars().all()
+        if not rows:
+            break
+        all_ids.extend(rows)
+        frontier = rows
+    return all_ids
+
+
+@bp.route('/nodes/<int:node_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_node(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    force = request.args.get('force', 'false').lower() == 'true'
+
+    has_kids = db.session.execute(
+        sa.select(sa.exists().where(Node.parent_id == node.id))
+    ).scalar()
+
+    if has_kids and not force:
+        return error('Cannot delete a node that has children. Delete or move children first.', 409)
+
+    if not has_kids:
+        db.session.delete(node)
+        db.session.commit()
+        return success({'message': 'Node deleted', 'deleted_count': 1})
+
+    ids = _collect_subtree_ids(node.id)
+    db.session.execute(sa.delete(Node).where(Node.id.in_(ids)))
+    db.session.commit()
+    return success({'message': 'Node and descendants deleted', 'deleted_count': len(ids)})
+
+
+@bp.route('/nodes/bulk-move', methods=['POST'])
+@login_required
+@require_write
+def bulk_move_nodes():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+    node_ids = data.get('node_ids', [])
+    parent_id = data.get('parent_id', None)
+
+    if not node_ids:
+        return error('node_ids is required', 400)
+
+    target = None
+    if parent_id is not None:
+        target = _get_node_or_404(parent_id, institution_id)
+        if not target:
+            return error('Target node not found', 404)
+
+    moved = []
+    errors = []
+    for nid in node_ids:
+        node = _get_node_or_404(nid, institution_id)
+        if not node:
+            errors.append({'id': nid, 'error': 'Not found'})
+            continue
+        if parent_id is not None:
+            ancestor = target
+            while ancestor:
+                if ancestor.id == nid:
+                    errors.append({'id': nid, 'error': 'Cannot move node into itself or a descendant'})
+                    break
+                ancestor = ancestor.parent
+            else:
+                node.parent_id = parent_id
+                node.refresh_ref_code()
+                moved.append(nid)
+        else:
+            node.parent_id = None
+            node.refresh_ref_code()
+            moved.append(nid)
+
+    db.session.commit()
+    return success({'moved': moved, 'errors': errors})
+
+
+@bp.route('/nodes/bulk-delete', methods=['POST'])
+@login_required
+@require_write
+def bulk_delete_nodes():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+    node_ids = data.get('node_ids', [])
+    force = bool(data.get('force', False))
+
+    if not node_ids:
+        return error('node_ids is required', 400)
+
+    deleted = []
+    errors = []
+    for nid in node_ids:
+        node = _get_node_or_404(nid, institution_id)
+        if not node:
+            errors.append({'id': nid, 'error': 'Not found'})
+            continue
+        has_kids = db.session.execute(
+            sa.select(sa.exists().where(Node.parent_id == node.id))
+        ).scalar()
+        if not force and has_kids:
+            errors.append({'id': nid, 'error': f'"{node.title or node.ref_code}" has children — use force delete to remove with all descendants'})
+            continue
+        db.session.delete(node)
+        deleted.append(nid)
+
+    db.session.commit()
+    return success({'deleted': deleted, 'errors': errors})
+
+
+@bp.route('/nodes/<int:node_id>/status', methods=['PATCH'])
+@login_required
+@require_write
+def update_status(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    new_status = data.get('status')
+
+    valid = [s.value for s in NodeStatus]
+    if new_status not in valid:
+        return error(f'Invalid status. Must be one of: {", ".join(valid)}', 400)
+
+    before_data = node.to_dict()
+    old_status = node.status
+    node.status = NodeStatus(new_status)
+    node.updated_by_id = current_user.id
+
+    node.record_change(
+        change_type='status_change',
+        description=f'Status changed to {new_status}',
+        created_by_id=current_user.id,
+        before_data=before_data,
+        after_data=node.to_dict(),
+    )
+    db.session.commit()
+
+    from app.portal.publisher import publish_node, unpublish_node
+    if node.status == NodeStatus.PUBLISHED:
+        publish_node(node)
+    elif old_status == NodeStatus.PUBLISHED:
+        unpublish_node(node)
+
+    return success({'status': node.status.value})
+
+
+@bp.route('/nodes/<int:node_id>/move', methods=['PATCH'])
+@login_required
+@require_write
+def move_node(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    new_parent_id = data.get('parent_id')
+
+    before_data = node.to_dict()
+    old_parent_title = node.parent.title if node.parent else 'root'
+
+    if new_parent_id:
+        new_parent = _get_node_or_404(new_parent_id, institution_id)
+        if not new_parent:
+            return error('Target parent node not found', 404)
+
+        if new_parent.is_descendant_of(node):
+            return error('Cannot move a node into its own descendant', 422)
+
+        if new_parent.hierarchy_type_id != node.hierarchy_type_id:
+            return error('Cannot move a node into a different hierarchy type', 422)
+
+        if node.parent_id is None:
+            if new_parent.parent_id is None:
+                return error(
+                    f'Cannot move "{node.title}" under another top-level node. '
+                    f'Top-level records must remain at the root or be moved under a sub-level.',
+                    422
+                )
+
+        node.parent = new_parent
+    else:
+        node.parent = None
+
+    with db.session.no_autoflush:
+        valid = node.validate_hierarchy()
+    if not valid:
+        db.session.rollback()
+        return error(
+            f'Move not allowed: "{node.level_of_description}" cannot be placed here '
+            f'according to hierarchy rules.',
+            422
+        )
+
+    node.refresh_ref_code()
+
+    node.updated_by_id = current_user.id
+    new_parent_title = node.parent.title if node.parent else 'root'
+    node.record_change(
+        change_type='move',
+        description=f'Moved from "{old_parent_title}" to "{new_parent_title}"',
+        created_by_id=current_user.id,
+        before_data=before_data,
+        after_data=node.to_dict(),
+    )
+    db.session.commit()
+    return success({'message': f'Moved to "{new_parent_title}"',
+                    'ref_code': node.ref_code,
+                    'parent_id': node.parent_id})
+
+
+@bp.route('/nodes/<int:node_id>/history', methods=['GET'])
+@login_required
+def get_history(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    changes = NodeChange.query.filter_by(node_id=node_id).order_by(
+        NodeChange.created_at.desc()
+    ).all()
+    return success([serialize_change(c) for c in changes])
+
+
+@bp.route('/nodes/<int:node_id>/revert/<int:change_id>', methods=['POST'])
+@login_required
+@require_write
+def revert_node(node_id, change_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    try:
+        node.revert_to(change_id, current_user.id)
+    except ValueError as e:
+        return error(str(e), 422)
+
+    return success(serialize_node_detail(node))
+
+
+@bp.route('/nodes/<int:node_id>/relations', methods=['GET'])
+@login_required
+def get_relations(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    outgoing = db.session.execute(
+        sa.select(Node, node_association.c.relation_type)
+        .join(node_association, Node.id == node_association.c.target_id)
+        .where(node_association.c.source_id == node_id)
+    ).all()
+
+    incoming = db.session.execute(
+        sa.select(Node, node_association.c.relation_type)
+        .join(node_association, Node.id == node_association.c.source_id)
+        .where(node_association.c.target_id == node_id)
+    ).all()
+
+    result = []
+    seen = set()
+
+    for related, rel_type in outgoing:
+        key = (min(node_id, related.id), max(node_id, related.id))
+        if key not in seen:
+            seen.add(key)
+            result.append({**serialize_node_stub(related), 'relation_type': rel_type, 'direction': 'outgoing'})
+
+    for related, rel_type in incoming:
+        key = (min(node_id, related.id), max(node_id, related.id))
+        if key not in seen:
+            seen.add(key)
+            result.append({**serialize_node_stub(related), 'relation_type': rel_type, 'direction': 'incoming'})
+
+    return success(result)
+
+
+@bp.route('/nodes/<int:node_id>/relations', methods=['POST'])
+@login_required
+@require_write
+def add_relation(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    target_id = data.get('target_id')
+    relation_type = data.get('relation_type')
+
+    if not target_id or not relation_type:
+        return error('target_id and relation_type are required', 400)
+
+    if target_id == node_id:
+        return error('Cannot relate a node to itself', 422)
+
+    target = _get_node_or_404(target_id, institution_id)
+    if not target:
+        return error('Target node not found', 404)
+
+    existing = db.session.execute(
+        sa.select(node_association).where(
+            node_association.c.source_id == node_id,
+            node_association.c.target_id == target_id,
+        )
+    ).first()
+    if existing:
+        return error('Relation already exists', 409)
+
+    db.session.execute(
+        node_association.insert().values(
+            source_id=node_id,
+            target_id=target_id,
+            relation_type=relation_type,
+        )
+    )
+    db.session.commit()
+    return success({'message': 'Relation added'}, 201)
+
+
+@bp.route('/nodes/<int:node_id>/relations/<int:target_id>', methods=['DELETE'])
+@login_required
+@require_write
+def remove_relation(node_id, target_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    db.session.execute(
+        node_association.delete().where(
+            sa.or_(
+                sa.and_(node_association.c.source_id == node_id, node_association.c.target_id == target_id),
+                sa.and_(node_association.c.source_id == target_id, node_association.c.target_id == node_id),
+            )
+        )
+    )
+    db.session.commit()
+    return success({'message': 'Relation removed'})
+
+
+@bp.route('/nodes/<int:node_id>/notes', methods=['POST'])
+@login_required
+@require_write
+def add_note(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    if not data.get('content'):
+        return error('content is required', 400)
+
+    note = NodeNote(
+        node_id=node_id,
+        note_type=data.get('note_type', 'general'),
+        content=data['content'],
+        is_public=data.get('is_public', False),
+        created_by_id=current_user.id,
+    )
+    db.session.add(note)
+    db.session.commit()
+    return success(serialize_note(note), 201)
+
+
+@bp.route('/nodes/<int:node_id>/notes/<int:note_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_note(node_id, note_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    note = NodeNote.query.filter_by(id=note_id, node_id=node_id).first()
+    if not note:
+        return error('Note not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    if 'content' in data:
+        note.content = data['content']
+    if 'note_type' in data:
+        note.note_type = data['note_type']
+    if 'is_public' in data:
+        note.is_public = data['is_public']
+
+    db.session.commit()
+    return success(serialize_note(note))
+
+
+@bp.route('/nodes/<int:node_id>/notes/<int:note_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_note(node_id, note_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    note = NodeNote.query.filter_by(id=note_id, node_id=node_id).first()
+    if not note:
+        return error('Note not found', 404)
+
+    db.session.delete(note)
+    db.session.commit()
+    return success({'message': 'Note deleted'})
+
+
+MIME_MAP = {
+    'pdf': 'application/pdf',
+    'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+    'gif': 'image/gif', 'webp': 'image/webp',
+    'tiff': 'image/tiff', 'tif': 'image/tiff',
+    'txt': 'text/plain', 'md': 'text/markdown', 'csv': 'text/csv',
+    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'odt': 'application/vnd.oasis.opendocument.text',
+    'ods': 'application/vnd.oasis.opendocument.spreadsheet',
+}
+
+
+def _allowed_file(filename: str) -> bool:
+    allowed = current_app.config.get('ALLOWED_UPLOAD_EXTENSIONS', set(MIME_MAP.keys()))
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed
+
+
+@bp.route('/nodes/<int:node_id>/attachments', methods=['POST'])
+@login_required
+@require_write
+def upload_attachment(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    if 'file' not in request.files:
+        return error('No file provided', 400)
+
+    file = request.files['file']
+    if not file.filename:
+        return error('No file selected', 400)
+
+    if not _allowed_file(file.filename):
+        return error('File type not allowed. Supported: ' + ', '.join(sorted(MIME_MAP.keys())), 400)
+
+    original_filename = secure_filename(file.filename)
+    stored_filename = f'{uuid.uuid4().hex}_{original_filename}'
+
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], str(institution_id), str(node_id))
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_path = os.path.join(upload_dir, stored_filename)
+    file.save(file_path)
+    file_size = os.path.getsize(file_path)
+
+    ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+    mime_type = MIME_MAP.get(ext, 'application/octet-stream')
+
+    attachment = NodeAttachment(
+        node_id=node_id,
+        filename=stored_filename,
+        original_filename=original_filename,
+        file_size=file_size,
+        mime_type=mime_type,
+        description=request.form.get('description'),
+        uploaded_by_id=current_user.id,
+    )
+
+    rep_id = request.args.get('representation_id', type=int) or request.form.get('representation_id', type=int)
+    if rep_id:
+        rep = NodeRepresentation.query.filter_by(id=rep_id, node_id=node_id).first()
+        if rep:
+            attachment.representation_id = rep.id
+    db.session.add(attachment)
+    db.session.flush()
+
+    db.session.commit()
+
+    task_id = None
+    try:
+        from app.tasks.runner import run_in_background
+        from app.tasks.tech_metadata_task import run_tech_metadata
+
+        task = BackgroundTask(
+            institution_id=institution_id,
+            created_by_id=current_user.id,
+            task_type='tech_metadata',
+            entity_type='node_attachment',
+            entity_id=attachment.id,
+        )
+        db.session.add(task)
+        db.session.commit()
+        task_id = task.id
+        run_in_background(current_app._get_current_object(), task.id, run_tech_metadata)
+    except Exception as e:
+        current_app.logger.warning(
+            f'Could not queue metadata extraction for {original_filename}: {e}'
+        )
+
+    payload = serialize_attachment(attachment)
+    payload['tech_metadata_task_id'] = task_id
+    return success(payload, 201)
+
+
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/download', methods=['GET'])
+@login_required
+def download_attachment(node_id, attachment_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], str(institution_id), str(node_id))
+    INLINE_TYPES = {'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+                    'image/tiff', 'application/pdf', 'text/plain', 'text/markdown', 'text/csv'}
+    as_attachment = attachment.mime_type not in INLINE_TYPES
+    return send_from_directory(
+        upload_dir, attachment.filename,
+        download_name=attachment.original_filename,
+        as_attachment=as_attachment,
+        mimetype=attachment.mime_type,
+    )
+
+
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/thumbnail', methods=['GET'])
+@login_required
+def get_attachment_thumbnail(node_id, attachment_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment or not attachment.thumbnail_path:
+        return error('No thumbnail available', 404)
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], str(institution_id), str(node_id))
+    thumb_dir = os.path.join(upload_dir, 'thumbnails')
+    thumb_filename = os.path.basename(attachment.thumbnail_path)
+    return send_from_directory(thumb_dir, thumb_filename, mimetype='image/jpeg')
+
+
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/extract', methods=['POST'])
+@login_required
+@require_write
+def reextract_attachment_metadata(node_id, attachment_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], str(institution_id), str(node_id))
+    file_path = os.path.join(upload_dir, attachment.filename)
+    if not os.path.exists(file_path):
+        return error('File not found on disk', 404)
+    try:
+        from app.tech_metadata import extract_all
+        thumb_dir = os.path.join(upload_dir, 'thumbnails')
+        tech = extract_all(file_path, attachment.mime_type, thumb_dir, attachment.filename)
+        for field, value in tech.items():
+            if hasattr(attachment, field):
+                setattr(attachment, field, value)
+        db.session.commit()
+        return success(serialize_attachment(attachment))
+    except Exception as e:
+        return error(f'Extraction failed: {e}', 500)
+
+
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_attachment(node_id, attachment_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+
+    upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], str(institution_id), str(node_id))
+    file_path = os.path.join(upload_dir, attachment.filename)
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+    db.session.delete(attachment)
+    db.session.commit()
+    return success({'message': 'Attachment deleted'})
+
+
+@bp.route('/nodes/<int:node_id>/agents', methods=['GET'])
+@login_required
+def get_node_agents(node_id):
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    rows = db.session.execute(
+        sa.select(agent_node_association).where(
+            agent_node_association.c.node_id == node_id
+        )
+    ).all()
+
+    result = []
+    for row in rows:
+        agent = Agent.query.get(row.agent_id)
+        if agent:
+            result.append({
+                'id': agent.id,
+                'name': agent.name,
+                'agent_type': agent.agent_type.value,
+                'authorized_form': agent.authorized_form,
+                'identifier': agent.identifier,
+                'relation_type': row.relation_type,
+            })
+    return success(result)
+
+
+@bp.route('/nodes/<int:node_id>/agents', methods=['POST'])
+@login_required
+@require_write
+def add_node_agent(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    agent_id = data.get('agent_id')
+    relation_type = data.get('relation_type')
+
+    if not agent_id or not relation_type:
+        return error('agent_id and relation_type are required', 400)
+
+    agent = Agent.query.filter_by(id=agent_id, institution_id=institution_id).first()
+    if not agent:
+        return error('Agent not found', 404)
+
+    existing = db.session.execute(
+        sa.select(agent_node_association).where(
+            agent_node_association.c.agent_id == agent_id,
+            agent_node_association.c.node_id == node_id,
+        )
+    ).first()
+    if existing:
+        return error('Association already exists', 409)
+
+    db.session.execute(
+        agent_node_association.insert().values(
+            agent_id=agent_id,
+            node_id=node_id,
+            relation_type=relation_type,
+        )
+    )
+    db.session.commit()
+    return success({'message': 'Agent linked'}, 201)
+
+
+@bp.route('/nodes/<int:node_id>/agents/<int:agent_id>', methods=['DELETE'])
+@login_required
+@require_write
+def remove_node_agent(node_id, agent_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    db.session.execute(
+        agent_node_association.delete().where(
+            agent_node_association.c.agent_id == agent_id,
+            agent_node_association.c.node_id == node_id,
+        )
+    )
+    db.session.commit()
+    return success({'message': 'Agent unlinked'})
+
+
+@bp.route('/nodes/<int:node_id>/locations', methods=['GET'])
+@login_required
+def get_node_locations(node_id):
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    rows = db.session.execute(
+        sa.select(location_node_association).where(
+            location_node_association.c.node_id == node_id
+        )
+    ).all()
+
+    result = []
+    for row in rows:
+        loc = Location.query.get(row.location_id)
+        if loc:
+            result.append({
+                'id': loc.id,
+                'name': loc.name,
+                'code': loc.code,
+                'level_name': loc.level_name,
+                'full_path': loc.get_full_path(),
+                'can_store_nodes': loc.can_store_nodes,
+                'is_checkout': loc.is_checkout_location(),
+            })
+    return success(result)
+
+
+@bp.route('/nodes/<int:node_id>/locations', methods=['POST'])
+@login_required
+@require_write
+def add_node_location(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    location_id = data.get('location_id')
+    if not location_id:
+        return error('location_id is required', 400)
+
+    location = Location.query.filter_by(id=location_id, institution_id=institution_id).first()
+    if not location:
+        return error('Location not found', 404)
+
+    if not location.can_store_nodes:
+        return error('This location cannot store archival materials', 422)
+
+    if location.capacity is not None and location.stored_nodes.count() >= location.capacity:
+        return error('Location is at full capacity', 409)
+
+    existing = db.session.execute(
+        sa.select(location_node_association).where(
+            location_node_association.c.location_id == location_id,
+            location_node_association.c.node_id == node_id,
+        )
+    ).first()
+    if existing:
+        return error('Node is already at this location', 409)
+
+    db.session.execute(
+        location_node_association.insert().values(
+            location_id=location_id, node_id=node_id
+        )
+    )
+    movement = LocationMovement(
+        node_id=node_id,
+        location_id=location_id,
+        movement_type='check_in',
+        notes=data.get('notes'),
+        moved_by_id=current_user.id,
+    )
+    db.session.add(movement)
+    db.session.commit()
+    return success({'message': 'Location assigned'}, 201)
+
+
+@bp.route('/nodes/<int:node_id>/locations/<int:location_id>', methods=['DELETE'])
+@login_required
+@require_write
+def remove_node_location(node_id, location_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    db.session.execute(
+        location_node_association.delete().where(
+            location_node_association.c.location_id == location_id,
+            location_node_association.c.node_id == node_id,
+        )
+    )
+    movement = LocationMovement(
+        node_id=node_id,
+        location_id=location_id,
+        movement_type='check_out',
+        moved_by_id=current_user.id,
+    )
+    db.session.add(movement)
+    db.session.commit()
+    return success({'message': 'Location removed'})
+
+
+@bp.route('/nodes/<int:node_id>/classifications', methods=['GET'])
+@login_required
+def get_node_classifications(node_id):
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    rows = db.session.execute(
+        sa.select(classification_node_association).where(
+            classification_node_association.c.node_id == node_id
+        )
+    ).all()
+
+    result = []
+    for row in rows:
+        c = Classification.query.get(row.classification_id)
+        if c:
+            result.append({
+                'id': c.id,
+                'name': c.name,
+                'code': c.code,
+                'full_code': c.get_full_code(),
+                'level_name': c.level_name,
+                'is_active': c.is_active,
+            })
+    return success(result)
+
+
+@bp.route('/nodes/<int:node_id>/classifications', methods=['POST'])
+@login_required
+@require_write
+def add_node_classification(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    classification_id = data.get('classification_id')
+    if not classification_id:
+        return error('classification_id is required', 400)
+
+    c = Classification.query.filter_by(id=classification_id, institution_id=institution_id).first()
+    if not c:
+        return error('Classification not found', 404)
+
+    existing = db.session.execute(
+        sa.select(classification_node_association).where(
+            classification_node_association.c.classification_id == classification_id,
+            classification_node_association.c.node_id == node_id,
+        )
+    ).first()
+    if existing:
+        return error('Already classified', 409)
+
+    db.session.execute(
+        classification_node_association.insert().values(
+            classification_id=classification_id, node_id=node_id
+        )
+    )
+    db.session.commit()
+    return success({'message': 'Classification assigned'}, 201)
+
+
+@bp.route('/nodes/<int:node_id>/classifications/<int:classification_id>', methods=['DELETE'])
+@login_required
+@require_write
+def remove_node_classification(node_id, classification_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    db.session.execute(
+        classification_node_association.delete().where(
+            classification_node_association.c.classification_id == classification_id,
+            classification_node_association.c.node_id == node_id,
+        )
+    )
+    db.session.commit()
+    return success({'message': 'Classification removed'})
+
+
+def _serialize_node_relation_type(rt) -> dict:
+    return {
+        'id': rt.id,
+        'name': rt.name,
+        'description': rt.description,
+        'is_symmetric': rt.is_symmetric,
+        'complementary_id': rt.complementary_id,
+        'complementary_name': rt.complementary.name if rt.complementary else None,
+    }
+
+
+@bp.route('/nodes/relation-types', methods=['GET'])
+@login_required
+def list_node_to_node_relation_types():
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+    types = NodeRelationType.query.filter_by(
+        institution_id=current_user.active_institution_id
+    ).order_by(NodeRelationType.name).all()
+    return success([_serialize_node_relation_type(t) for t in types])
+
+
+@bp.route('/nodes/relation-types', methods=['POST'])
+@login_required
+@require_write
+def create_node_to_node_relation_type():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+    if not data.get('name'):
+        return error('name is required', 400)
+
+    is_symmetric = data.get('is_symmetric', True)
+
+    rt = NodeRelationType(
+        institution_id=institution_id,
+        name=data['name'],
+        description=data.get('description'),
+        is_symmetric=is_symmetric,
+    )
+    db.session.add(rt)
+    db.session.flush()
+
+    if not is_symmetric and data.get('complementary_name'):
+        complement = NodeRelationType(
+            institution_id=institution_id,
+            name=data['complementary_name'],
+            description=data.get('complementary_description'),
+            is_symmetric=False,
+            complementary_id=rt.id,
+        )
+        db.session.add(complement)
+        db.session.flush()
+        rt.complementary_id = complement.id
+
+    db.session.commit()
+    return success(_serialize_node_relation_type(rt), 201)
+
+
+@bp.route('/nodes/relation-types/<int:type_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_node_to_node_relation_type(type_id):
+    institution_id = current_user.active_institution_id
+    rt = NodeRelationType.query.filter_by(id=type_id, institution_id=institution_id).first()
+    if not rt:
+        return error('Relation type not found', 404)
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        rt.name = data['name']
+    if 'description' in data:
+        rt.description = data['description']
+    if 'is_symmetric' in data:
+        rt.is_symmetric = data['is_symmetric']
+    if 'complementary_name' in data and data['complementary_name']:
+        if rt.complementary:
+            rt.complementary.name = data['complementary_name']
+        else:
+            comp = NodeRelationType(
+                institution_id=institution_id,
+                name=data['complementary_name'],
+                is_symmetric=False,
+                complementary_id=rt.id,
+            )
+            db.session.add(comp)
+            db.session.flush()
+            rt.complementary_id = comp.id
+    db.session.commit()
+    return success(_serialize_node_relation_type(rt))
+
+
+@bp.route('/nodes/relation-types/<int:type_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_node_to_node_relation_type(type_id):
+    institution_id = current_user.active_institution_id
+    rt = NodeRelationType.query.filter_by(id=type_id, institution_id=institution_id).first()
+    if not rt:
+        return error('Relation type not found', 404)
+    if rt.complementary:
+        db.session.delete(rt.complementary)
+    db.session.delete(rt)
+    db.session.commit()
+    return success({'message': 'Deleted'})
+
+
+@bp.route('/nodes/<int:node_id>/locations/move', methods=['POST'])
+@login_required
+@require_write
+def move_node_location(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    from_location_id = data.get('from_location_id')
+    to_location_id = data.get('to_location_id')
+    notes = data.get('notes')
+
+    if not from_location_id or not to_location_id:
+        return error('from_location_id and to_location_id are required', 400)
+    if from_location_id == to_location_id:
+        return error('Source and destination are the same', 422)
+
+    from_loc = Location.query.filter_by(id=from_location_id, institution_id=institution_id).first()
+    to_loc = Location.query.filter_by(id=to_location_id, institution_id=institution_id).first()
+
+    if not from_loc:
+        return error('Source location not found', 404)
+    if not to_loc:
+        return error('Destination location not found', 404)
+    if not to_loc.can_store_nodes:
+        return error('Destination cannot store archival materials', 422)
+
+    existing = db.session.execute(
+        sa.select(location_node_association).where(
+            location_node_association.c.location_id == from_location_id,
+            location_node_association.c.node_id == node_id,
+        )
+    ).first()
+    if not existing:
+        return error('Node is not at the source location', 422)
+
+    if to_loc.capacity is not None:
+        if to_loc.stored_nodes.count() >= to_loc.capacity:
+            return error('Destination location is at full capacity', 409)
+
+    db.session.execute(
+        location_node_association.delete().where(
+            location_node_association.c.location_id == from_location_id,
+            location_node_association.c.node_id == node_id,
+        )
+    )
+    db.session.execute(
+        location_node_association.insert().values(
+            location_id=to_location_id, node_id=node_id
+        )
+    )
+
+    movement = LocationMovement(
+        node_id=node_id,
+        location_id=to_location_id,
+        movement_type='transfer',
+        notes=notes or f'Moved from {from_loc.name} to {to_loc.name}',
+        moved_by_id=current_user.id,
+    )
+    db.session.add(movement)
+    db.session.commit()
+
+    return success({
+        'message': f'Moved from {from_loc.name} to {to_loc.name}',
+        'from_location': from_loc.name,
+        'to_location': to_loc.name,
+    })
+
+
+def _clean_metadata_spec(raw) -> dict:
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or len(key) > 100:
+            continue
+        if value is None or value == '':
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            if isinstance(value, str) and len(value) > 10000:
+                value = value[:10000]
+            out[key] = value
+        elif isinstance(value, list):
+            items = [v for v in value if isinstance(v, (str, int, float, bool))]
+            if items:
+                out[key] = items[:100]
+    return out
+
+
+@bp.route('/nodes/batch', methods=['POST'])
+@login_required
+@require_write
+def batch_create_nodes():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+
+    parent_id = data.get('parent_id')
+    hierarchy_type_id = data.get('hierarchy_type_id')
+    level_of_description = data.get('level_of_description')
+    entries = data.get('entries', [])
+
+    if not parent_id:
+        return error('parent_id is required — rapid entry only creates children under an existing node', 400)
+    if not hierarchy_type_id:
+        return error('hierarchy_type_id is required', 400)
+    if not level_of_description:
+        return error('level_of_description is required', 400)
+    if not entries:
+        return error('entries must not be empty', 400)
+    if len(entries) > 200:
+        return error('Maximum 200 entries per batch', 400)
+
+    institution = Institution.query.get(institution_id)
+
+    parent = None
+    if parent_id:
+        parent = Node.query.filter_by(id=parent_id, institution_id=institution_id).first()
+        if not parent:
+            return error('Parent node not found', 404)
+
+    created = []
+    errors = []
+
+    for i, entry in enumerate(entries):
+        title = (entry.get('title') or '').strip()
+        local_ref = (entry.get('local_ref') or '').strip()
+        if not title:
+            errors.append({'row': i + 1, 'error': 'Title is required'})
+            continue
+        if not local_ref:
+            errors.append({'row': i + 1, 'error': 'Reference code is required'})
+            continue
+
+        existing = Node.query.filter_by(
+            institution_id=institution_id,
+            parent_id=parent_id,
+            local_ref=local_ref,
+        ).first()
+        if existing:
+            errors.append({'row': i + 1, 'error': f'Ref "{local_ref}" already exists under this parent'})
+            continue
+
+        node = Node(
+            institution_id=institution_id,
+            title=title,
+            local_ref=local_ref,
+            level_of_description=level_of_description,
+            hierarchy_type_id=hierarchy_type_id,
+            parent=parent,
+            description=entry.get('description') or None,
+            status=NodeStatus.DRAFT,
+            created_by_id=current_user.id,
+            updated_by_id=current_user.id,
+            metadata_spec=_clean_metadata_spec(entry.get('metadata_spec')),
+        )
+
+        for field in ('date_start', 'date_end'):
+            val = (entry.get(field) or '').strip()
+            if val:
+                try:
+                    setattr(node, field, date.fromisoformat(val))
+                except ValueError:
+                    pass
+
+        if parent:
+            node.ref_code = f'{parent.ref_code}/{local_ref}'
+        else:
+            node.ref_code = f'{institution.ref_prefix}/{local_ref}'
+
+        db.session.add(node)
+        db.session.flush()
+
+        if parent is None:
+            node.top_node_id = node.id
+        elif parent.top_node_id:
+            node.top_node_id = parent.top_node_id
+        else:
+            node.top_node_id = parent.get_top_node().id
+
+        node.record_change(
+            change_type='create',
+            description='Created via rapid entry',
+            created_by_id=current_user.id,
+            before_data={},
+            after_data=node.to_dict(),
+        )
+
+        created.append({'row': i + 1, 'id': node.id, 'ref_code': node.ref_code, 'title': node.title})
+
+    if errors and not created:
+        db.session.rollback()
+        return error(f'All entries failed: {errors[0]["error"]}', 422)
+
+    db.session.commit()
+    return success({'created': created, 'errors': errors, 'total_created': len(created)}, 201)
+
+
+@bp.route('/nodes/<int:node_id>/places', methods=['GET'])
+@login_required
+def get_node_places(node_id):
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+    places = NodePlace.query.filter_by(node_id=node_id).order_by(NodePlace.sort_order).all()
+    return success([p.to_dict() for p in places])
+
+
+@bp.route('/nodes/<int:node_id>/places', methods=['POST'])
+@login_required
+@require_write
+def add_node_place(node_id):
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+    data = request.get_json(silent=True) or {}
+    if not data.get('name') or not data.get('place_type'):
+        return error('name and place_type are required', 400)
+    place = NodePlace(
+        node_id=node_id,
+        place_type=data['place_type'],
+        name=data['name'],
+        wikidata_id=data.get('wikidata_id'),
+        lat=data.get('lat'),
+        lon=data.get('lon'),
+        note=data.get('note'),
+        date_from=data.get('date_from'),
+        date_to=data.get('date_to'),
+        sort_order=data.get('sort_order', 0),
+    )
+    db.session.add(place)
+    db.session.commit()
+    return success(place.to_dict(), 201)
+
+
+@bp.route('/nodes/<int:node_id>/places/<int:place_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_node_place(node_id, place_id):
+    place = NodePlace.query.filter_by(id=place_id, node_id=node_id).first()
+    if not place:
+        return error('Place not found', 404)
+    data = request.get_json(silent=True) or {}
+    for field in ('place_type', 'name', 'wikidata_id', 'lat', 'lon', 'note', 'date_from', 'date_to', 'sort_order'):
+        if field in data:
+            setattr(place, field, data[field])
+    db.session.commit()
+    return success(place.to_dict())
+
+
+@bp.route('/nodes/<int:node_id>/places/<int:place_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_node_place(node_id, place_id):
+    place = NodePlace.query.filter_by(id=place_id, node_id=node_id).first()
+    if not place:
+        return error('Place not found', 404)
+    db.session.delete(place)
+    db.session.commit()
+    return success({'message': 'Deleted'})
+
+
+@bp.route('/nodes/<int:node_id>/tags', methods=['GET'])
+@login_required
+def get_node_tags(node_id):
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+    return success([t.to_dict() for t in node.tags])
+
+
+@bp.route('/nodes/<int:node_id>/tags', methods=['POST'])
+@login_required
+@require_write
+def add_node_tag(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return error('name is required', 400)
+    tag = Tag.query.filter(
+        Tag.institution_id == institution_id,
+        sa.func.lower(Tag.name) == name.lower()
+    ).first()
+    if not tag:
+        tag = Tag(institution_id=institution_id, name=name, category=data.get('category'))
+        db.session.add(tag)
+        db.session.flush()
+    if tag not in node.tags:
+        node.tags.append(tag)
+    db.session.commit()
+    return success(tag.to_dict(), 201)
+
+
+@bp.route('/nodes/<int:node_id>/tags/<int:tag_id>', methods=['DELETE'])
+@login_required
+@require_write
+def remove_node_tag(node_id, tag_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+    tag = Tag.query.filter_by(id=tag_id, institution_id=institution_id).first()
+    if tag and tag in node.tags:
+        node.tags.remove(tag)
+        db.session.commit()
+    return success({'message': 'Removed'})
+
+
+@bp.route('/tags/search', methods=['GET'])
+@login_required
+def search_tags():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    q = request.args.get('q', '').strip()
+    category = request.args.get('category', '').strip() or None
+    query = sa.select(Tag).where(Tag.institution_id == institution_id)
+    if q:
+        query = query.where(Tag.name.ilike(f'%{q}%'))
+    if category:
+        query = query.where(Tag.category == category)
+    tags = db.session.execute(query.order_by(Tag.name).limit(20)).scalars().all()
+    return success([t.to_dict() for t in tags])
+
+
+@bp.route('/vocab/place-types', methods=['GET'])
+@login_required
+def list_place_types():
+    institution_id = current_user.active_institution_id
+    applicable = request.args.get('applicable_to')
+    q = sa.select(PlaceType).where(PlaceType.institution_id == institution_id)
+    if applicable:
+        q = q.where(
+            sa.or_(PlaceType.applicable_to == applicable, PlaceType.applicable_to == 'both')
+        )
+    types = db.session.execute(q.order_by(PlaceType.sort_order, PlaceType.label)).scalars().all()
+    return success([t.to_dict() for t in types])
+
+
+@bp.route('/vocab/place-types', methods=['POST'])
+@login_required
+@require_write
+def create_place_type():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+    if not data.get('name') or not data.get('label'):
+        return error('name and label are required', 400)
+    pt = PlaceType(
+        institution_id=institution_id,
+        name=data['name'].strip().lower().replace(' ', '_'),
+        label=data['label'].strip(),
+        applicable_to=data.get('applicable_to', 'both'),
+        sort_order=data.get('sort_order', 0),
+    )
+    db.session.add(pt)
+    db.session.commit()
+    return success(pt.to_dict(), 201)
+
+
+@bp.route('/vocab/place-types/<int:type_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_place_type(type_id):
+    pt = PlaceType.query.filter_by(id=type_id, institution_id=current_user.active_institution_id).first()
+    if not pt:
+        return error('Not found', 404)
+    data = request.get_json(silent=True) or {}
+    for f in ('label', 'applicable_to', 'sort_order'):
+        if f in data:
+            setattr(pt, f, data[f])
+    db.session.commit()
+    return success(pt.to_dict())
+
+
+@bp.route('/vocab/place-types/<int:type_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_place_type(type_id):
+    pt = PlaceType.query.filter_by(id=type_id, institution_id=current_user.active_institution_id).first()
+    if not pt:
+        return error('Not found', 404)
+    db.session.delete(pt)
+    db.session.commit()
+    return success({'message': 'Deleted'})
+
+
+@bp.route('/vocab/tag-categories', methods=['GET'])
+@login_required
+def list_tag_categories():
+    institution_id = current_user.active_institution_id
+    applicable = request.args.get('applicable_to')
+    q = sa.select(TagCategory).where(TagCategory.institution_id == institution_id)
+    if applicable:
+        q = q.where(
+            sa.or_(TagCategory.applicable_to == applicable, TagCategory.applicable_to == 'both')
+        )
+    cats = db.session.execute(q.order_by(TagCategory.sort_order, TagCategory.label)).scalars().all()
+    return success([c.to_dict() for c in cats])
+
+
+@bp.route('/vocab/tag-categories', methods=['POST'])
+@login_required
+@require_write
+def create_tag_category():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+    if not data.get('name') or not data.get('label'):
+        return error('name and label are required', 400)
+    cat = TagCategory(
+        institution_id=institution_id,
+        name=data['name'].strip().lower().replace(' ', '_'),
+        label=data['label'].strip(),
+        applicable_to=data.get('applicable_to', 'both'),
+        sort_order=data.get('sort_order', 0),
+    )
+    db.session.add(cat)
+    db.session.commit()
+    return success(cat.to_dict(), 201)
+
+
+@bp.route('/vocab/tag-categories/<int:cat_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_tag_category(cat_id):
+    cat = TagCategory.query.filter_by(id=cat_id, institution_id=current_user.active_institution_id).first()
+    if not cat:
+        return error('Not found', 404)
+    data = request.get_json(silent=True) or {}
+    for f in ('label', 'applicable_to', 'sort_order'):
+        if f in data:
+            setattr(cat, f, data[f])
+    db.session.commit()
+    return success(cat.to_dict())
+
+
+@bp.route('/vocab/tag-categories/<int:cat_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_tag_category(cat_id):
+    cat = TagCategory.query.filter_by(id=cat_id, institution_id=current_user.active_institution_id).first()
+    if not cat:
+        return error('Not found', 404)
+    db.session.delete(cat)
+    db.session.commit()
+    return success({'message': 'Deleted'})
+
+
+@bp.route('/nodes/<int:node_id>/flags', methods=['GET'])
+@login_required
+def get_node_flags(node_id):
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+    flags = db.session.execute(
+        sa.select(NodeFlag)
+        .where(NodeFlag.node_id == node_id)
+        .order_by(NodeFlag.created_at.desc())
+    ).scalars().all()
+    return success([f.to_dict() for f in flags])
+
+
+@bp.route('/nodes/<int:node_id>/flags', methods=['POST'])
+@login_required
+@require_write
+def create_node_flag(node_id):
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+    data = request.get_json(silent=True) or {}
+    if not data.get('title') or not data.get('flag_type'):
+        return error('title and flag_type are required', 400)
+    flag = NodeFlag(
+        institution_id=current_user.active_institution_id,
+        node_id=node_id,
+        flag_type=data['flag_type'],
+        severity=data.get('severity', 'medium'),
+        status='open',
+        title=data['title'].strip(),
+        body=data.get('body', '').strip() or None,
+        assigned_to_id=data.get('assigned_to_id'),
+        created_by_id=current_user.id,
+    )
+    db.session.add(flag)
+    db.session.commit()
+    return success(flag.to_dict(), 201)
+
+
+@bp.route('/nodes/<int:node_id>/flags/<int:flag_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_node_flag(node_id, flag_id):
+    flag = NodeFlag.query.filter_by(
+        id=flag_id, node_id=node_id,
+        institution_id=current_user.active_institution_id
+    ).first()
+    if not flag:
+        return error('Flag not found', 404)
+    data = request.get_json(silent=True) or {}
+    for field in ('flag_type', 'severity', 'title', 'body', 'assigned_to_id'):
+        if field in data:
+            setattr(flag, field, data[field])
+    if 'status' in data:
+        new_status = data['status']
+        if new_status == 'resolved' and flag.status != 'resolved':
+            flag.resolved_at = datetime.utcnow()
+            flag.resolved_by_id = current_user.id
+        elif new_status != 'resolved':
+            flag.resolved_at = None
+            flag.resolved_by_id = None
+        flag.status = new_status
+    flag.updated_at = datetime.utcnow()
+    db.session.commit()
+    return success(flag.to_dict())
+
+
+@bp.route('/nodes/<int:node_id>/flags/<int:flag_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_node_flag(node_id, flag_id):
+    flag = NodeFlag.query.filter_by(
+        id=flag_id, node_id=node_id,
+        institution_id=current_user.active_institution_id
+    ).first()
+    if not flag:
+        return error('Flag not found', 404)
+    db.session.delete(flag)
+    db.session.commit()
+    return success({'message': 'Deleted'})
+
+
+@bp.route('/flags', methods=['GET'])
+@login_required
+def list_all_flags():
+    institution_id = current_user.active_institution_id
+
+    stmt = sa.select(NodeFlag).where(NodeFlag.institution_id == institution_id)
+
+    status = request.args.get('status')
+    if status:
+        stmt = stmt.where(NodeFlag.status == status)
+    else:
+        stmt = stmt.where(NodeFlag.status != 'resolved')
+
+    flag_type = request.args.get('flag_type')
+    if flag_type:
+        stmt = stmt.where(NodeFlag.flag_type == flag_type)
+
+    severity = request.args.get('severity')
+    if severity:
+        stmt = stmt.where(NodeFlag.severity == severity)
+
+    if request.args.get('assigned_to_me') == 'true':
+        stmt = stmt.where(NodeFlag.assigned_to_id == current_user.id)
+    elif request.args.get('unassigned') == 'true':
+        stmt = stmt.where(NodeFlag.assigned_to_id == None)  # noqa: E711
+
+    sev_order = sa.case(
+        (NodeFlag.severity == 'high', 1),
+        (NodeFlag.severity == 'medium', 2),
+        else_=3
+    )
+    stmt = stmt.order_by(sev_order, NodeFlag.created_at.desc())
+
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 25
+    total = db.session.execute(
+        sa.select(sa.func.count()).select_from(stmt.subquery())
+    ).scalar()
+    flags = db.session.execute(
+        stmt.limit(per_page).offset((page - 1) * per_page)
+    ).scalars().all()
+
+    return success({
+        'flags': [f.to_dict(include_node=True) for f in flags],
+        'total': total,
+        'page': page,
+        'pages': max(1, (total + per_page - 1) // per_page),
+        'per_page': per_page,
+    })
+
+
+@bp.route('/nodes/labels', methods=['POST'])
+@login_required
+def print_labels():
+    from app.labels import generate_label_pdf, LabelData
+
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+
+    node_ids = data.get('node_ids', [])
+    fmt = data.get('format', 'avery_l7163')
+    copies = max(1, min(int(data.get('copies', 1)), 10))
+    template_id = data.get('template_id')
+
+    if not node_ids:
+        return error('node_ids is required', 400)
+    if len(node_ids) > 200:
+        return error('Maximum 200 labels per request', 400)
+
+    template_elements = None
+    if template_id:
+        tmpl = LabelTemplate.query.filter_by(
+            id=template_id, institution_id=institution_id).first()
+        if not tmpl:
+            return error('Label template not found', 404)
+        template_elements = tmpl.elements or []
+        fmt = tmpl.format_key or fmt
+
+    nodes = db.session.execute(
+        sa.select(Node)
+        .where(
+            Node.id.in_(node_ids),
+            Node.institution_id == institution_id,
+        )
+        .order_by(Node.ref_code)
+    ).scalars().all()
+
+    if not nodes:
+        return error('No nodes found', 404)
+
+    institution = db.session.get(Institution, institution_id)
+    inst_name = institution.name if institution else ''
+
+    labels = []
+    for node in nodes:
+        location_path = None
+        if node.current_location_id:
+            loc = db.session.get(Location, node.current_location_id)
+            if loc:
+                location_path = loc.get_full_path()
+
+        parent = node.parent if node.parent_id else None
+        labels.append(LabelData(
+            ref_code=node.ref_code or node.local_ref,
+            title=node.title,
+            level=node.level_of_description or '',
+            local_ref=node.local_ref or '',
+            date_from=node.date_start.strftime('%Y') if node.date_start else None,
+            date_to=node.date_end.strftime('%Y') if node.date_end else None,
+            institution_name=inst_name,
+            location_path=location_path,
+            parent_ref_code=(parent.ref_code or parent.local_ref) if parent else None,
+            parent_title=parent.title if parent else None,
+            parent_date_from=parent.date_start.strftime('%Y') if parent and parent.date_start else None,
+            parent_date_to=parent.date_end.strftime('%Y') if parent and parent.date_end else None,
+            copies=copies,
+        ))
+
+    try:
+        pdf_bytes = generate_label_pdf(labels, format_key=fmt, template_elements=template_elements)
+    except Exception as e:
+        current_app.logger.error(f'Label generation failed: {e}')
+        return error(f'Label generation failed: {e}', 500)
+
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = 'inline; filename="labels.pdf"'
+    return response
+
+
+@bp.route('/nodes/<int:node_id>/finding-aid', methods=['GET'])
+@login_required
+def print_finding_aid(node_id):
+    from app.reports import generate_finding_aid
+
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    try:
+        pdf_bytes = generate_finding_aid(node_id, institution_id, db)
+    except Exception as e:
+        current_app.logger.error(f'Finding aid generation failed: {e}')
+        return error(f'Failed to generate finding aid: {e}', 500)
+
+    safe_title = (node.title or 'finding_aid').replace(' ', '_')[:40]
+    response = make_response(pdf_bytes)
+    response.headers['Content-Type'] = 'application/pdf'
+    response.headers['Content-Disposition'] = f'inline; filename="{safe_title}_finding_aid.pdf"'
+    return response
+
+
+@bp.route('/nodes/<int:node_id>/duplicate', methods=['POST'])
+@login_required
+@require_write
+def duplicate_node(node_id):
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    source = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
+    if not source:
+        return error('Node not found', 404)
+
+    base_ref = f'{source.local_ref}-copy'
+    existing_refs = {
+        r[0] for r in Node.query
+        .filter_by(institution_id=institution_id, parent_id=source.parent_id)
+        .with_entities(Node.local_ref).all()
+    }
+    candidate = base_ref
+    i = 1
+    while candidate in existing_refs:
+        candidate = f'{base_ref}-{i}'
+        i += 1
+    local_ref = candidate
+
+    if source.parent:
+        ref_code = f'{source.parent.ref_code}/{local_ref}'
+    else:
+        ref_code = f'{source.institution.ref_prefix}/{local_ref}'
+
+    duplicate = Node(
+        institution_id=institution_id,
+        parent_id=source.parent_id,
+        local_ref=local_ref,
+        ref_code=ref_code,
+        title=source.title,
+        level_of_description=source.level_of_description,
+        hierarchy_type_id=source.hierarchy_type_id,
+        description=source.description,
+        date_start=source.date_start,
+        date_end=source.date_end,
+        date_certainty=source.date_certainty,
+        extent=source.extent,
+        scope_and_content=source.scope_and_content,
+        arrangement=source.arrangement,
+        access_conditions=source.access_conditions,
+        reproduction_conditions=source.reproduction_conditions,
+        language=source.language,
+        finding_aids=source.finding_aids,
+        metadata_spec=dict(source.metadata_spec) if source.metadata_spec else {},
+        status=NodeStatus.DRAFT,
+        created_by_id=current_user.id,
+        updated_by_id=current_user.id,
+    )
+    db.session.add(duplicate)
+    db.session.flush()
+
+    for note in source.notes:
+        db.session.add(NodeNote(
+            node_id=duplicate.id,
+            note_type=note.note_type,
+            content=note.content,
+            is_public=note.is_public,
+            created_by_id=current_user.id,
+        ))
+
+    db.session.add(NodeNote(
+        node_id=duplicate.id,
+        note_type='general',
+        content=f'Duplicated from {source.ref_code} ("{source.title}").',
+        is_public=False,
+        created_by_id=current_user.id,
+    ))
+
+    for tag in source.tags.all():
+        duplicate.tags.append(tag)
+
+    db.session.commit()
+    return success(serialize_node_detail(duplicate), 201)
+
+
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/ocr', methods=['POST'])
+@login_required
+@require_write
+def ocr_attachment(node_id, attachment_id):
+    from app.tasks.runner import run_in_background
+    from app.tasks.ocr import can_ocr, run_ocr
+
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+
+    if not can_ocr(attachment.mime_type):
+        return error(
+            f'Text extraction not supported for {attachment.mime_type}. '
+            'Supported: images (JPEG, PNG, TIFF) and PDF.', 400
+        )
+
+    data = request.get_json(silent=True) or {}
+    force_ocr = data.get('force_ocr', False)
+
+    existing = BackgroundTask.query.filter_by(
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        task_type='ocr',
+        status='running',
+    ).first()
+    if existing:
+        return error('Text extraction already running for this attachment', 409)
+
+    task = BackgroundTask(
+        institution_id=institution_id,
+        created_by_id=current_user.id,
+        task_type='ocr',
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        result={'force_ocr': force_ocr},
+    )
+    db.session.add(task)
+    db.session.commit()
+
+    run_in_background(current_app._get_current_object(), task.id, run_ocr)
+
+    return success({'task_id': task.id, 'status': 'pending'}, 201)
+
+
+@bp.route('/nodes/<int:node_id>/attachments/<int:attachment_id>/transcribe', methods=['POST'])
+@login_required
+@require_write
+def transcribe_attachment(node_id, attachment_id):
+    from app.tasks.runner import run_in_background
+    from app.tasks.whisper_ import can_transcribe, run_whisper
+
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    attachment = NodeAttachment.query.filter_by(id=attachment_id, node_id=node_id).first()
+    if not attachment:
+        return error('Attachment not found', 404)
+
+    if not can_transcribe(attachment.mime_type, attachment.original_filename):
+        return error(
+            f'Transcription not supported for {attachment.mime_type}. '
+            'Supported: audio (MP3, WAV, FLAC, AAC, OGG) and video (MP4, MOV, AVI, MKV).', 400
+        )
+
+    data = request.get_json(silent=True) or {}
+    model_size = data.get('model_size', 'medium')
+    if model_size not in ('tiny', 'base', 'small', 'medium', 'large'):
+        model_size = 'medium'
+
+    existing = BackgroundTask.query.filter_by(
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        task_type='whisper',
+        status='running',
+    ).first()
+    if existing:
+        return error('Transcription already running for this attachment', 409)
+
+    task = BackgroundTask(
+        institution_id=institution_id,
+        created_by_id=current_user.id,
+        task_type='whisper',
+        entity_type='node_attachment',
+        entity_id=attachment_id,
+        result={'model_size': model_size},
+    )
+    db.session.add(task)
+    db.session.commit()
+
+    run_in_background(current_app._get_current_object(), task.id, run_whisper)
+
+    return success({'task_id': task.id, 'status': 'pending', 'model_size': model_size}, 201)
+
+
+@bp.route('/nodes/<int:node_id>/identifiers', methods=['GET'])
+@login_required
+def list_node_identifiers(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+    return success([i.to_dict() for i in node.identifiers])
+
+
+@bp.route('/nodes/<int:node_id>/identifiers', methods=['POST'])
+@login_required
+@require_write
+def add_node_identifier(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    scheme_id = data.get('scheme_id')
+    value = (data.get('value') or '').strip()
+    if not scheme_id:
+        return error('scheme_id is required', 400)
+    if not value:
+        return error('value is required', 400)
+
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Identifier scheme not found', 404)
+
+    clash = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
+    if clash:
+        return error(
+            f'That {scheme.name} identifier is already used by another record.', 409)
+
+    make_primary = data.get('is_primary', False)
+    if make_primary:
+        for existing in node.identifiers:
+            if existing.scheme_id == scheme_id:
+                existing.is_primary = False
+
+    ident = NodeIdentifier(
+        node_id=node_id,
+        scheme_id=scheme_id,
+        value=value,
+        is_primary=make_primary,
+        note=data.get('note'),
+        created_by_id=current_user.id,
+    )
+    db.session.add(ident)
+    db.session.commit()
+    return success(ident.to_dict(), 201)
+
+
+@bp.route('/nodes/<int:node_id>/identifiers/<int:ident_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_node_identifier(node_id, ident_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    ident = NodeIdentifier.query.filter_by(id=ident_id, node_id=node_id).first()
+    if not ident:
+        return error('Identifier not found', 404)
+
+    data = request.get_json(silent=True) or {}
+
+    if 'value' in data:
+        new_value = (data['value'] or '').strip()
+        if not new_value:
+            return error('value cannot be empty', 400)
+        if new_value != ident.value:
+            clash = NodeIdentifier.query.filter_by(
+                scheme_id=ident.scheme_id, value=new_value).first()
+            if clash:
+                return error('That identifier value is already in use.', 409)
+        ident.value = new_value
+
+    if 'note' in data:
+        ident.note = data['note']
+
+    if data.get('is_primary'):
+        for existing in node.identifiers:
+            if existing.scheme_id == ident.scheme_id and existing.id != ident.id:
+                existing.is_primary = False
+        ident.is_primary = True
+    elif 'is_primary' in data and not data['is_primary']:
+        ident.is_primary = False
+
+    db.session.commit()
+    return success(ident.to_dict())
+
+
+@bp.route('/nodes/<int:node_id>/identifiers/<int:ident_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_node_identifier(node_id, ident_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    ident = NodeIdentifier.query.filter_by(id=ident_id, node_id=node_id).first()
+    if not ident:
+        return error('Identifier not found', 404)
+
+    db.session.delete(ident)
+    db.session.commit()
+    return success({'message': 'Identifier deleted'})
+
+
+@bp.route('/nodes/<int:node_id>/identifiers/generate', methods=['POST'])
+@login_required
+@require_write
+def generate_node_identifier(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    scheme_id = data.get('scheme_id')
+    if not scheme_id:
+        return error('scheme_id is required', 400)
+
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Identifier scheme not found', 404)
+    if not scheme.generator_url:
+        return error(f'{scheme.name} has no generator service configured.', 422)
+
+    target_url = ''
+    if scheme.target_url_template:
+        target_url = (scheme.target_url_template
+                      .replace('{ref_code}', node.ref_code or '')
+                      .replace('{node_id}', str(node.id)))
+    ctx = {
+        'node_id': str(node.id),
+        'ref_code': node.ref_code or '',
+        'title': node.title or '',
+        'target_url': target_url,
+        'shoulder': scheme.generator_shoulder or '',
+    }
+
+    def _subst(obj):
+        if isinstance(obj, str):
+            out = obj
+            for k, v in ctx.items():
+                out = out.replace('{' + k + '}', v)
+            return out
+        if isinstance(obj, dict):
+            return {k: _subst(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_subst(v) for v in obj]
+        return obj
+
+    if scheme.generator_body_template:
+        body = _subst(scheme.generator_body_template)
+    else:
+        body = {'node_id': node.id, 'ref_code': node.ref_code, 'title': node.title}
+
+    headers = {'Content-Type': 'application/json'}
+    if scheme.generator_headers:
+        headers.update(scheme.generator_headers)
+
+    import requests
+    try:
+        resp = requests.post(
+            scheme.generator_url,
+            json=body,
+            headers=headers,
+            timeout=15,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except requests.HTTPError as e:
+        detail = ''
+        try:
+            detail = f' — {e.response.text[:200]}'
+        except Exception:
+            pass
+        return error(f'Generator service returned {e.response.status_code}{detail}', 502)
+    except Exception as e:
+        return error(f'Generator service error: {str(e)}', 502)
+
+    def _resolve(obj, path):
+        if not path:
+            return obj
+        for key in path.split('.'):
+            if isinstance(obj, dict):
+                obj = obj.get(key)
+            elif isinstance(obj, list) and key.isdigit():
+                obj = obj[int(key)] if int(key) < len(obj) else None
+            else:
+                return None
+        return obj
+
+    raw = _resolve(payload, scheme.generator_response_path or 'value')
+    value = (str(raw).strip() if raw is not None else '')
+    if not value:
+        path_hint = scheme.generator_response_path or 'value'
+        return error(
+            f'Could not find the identifier at "{path_hint}" in the service response.', 502)
+
+    clash = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
+    if clash:
+        return error(
+            f'Generator returned a {scheme.name} value that is already in use.', 409)
+
+    ident = NodeIdentifier(
+        node_id=node_id,
+        scheme_id=scheme_id,
+        value=value,
+        is_primary=data.get('is_primary', False),
+        note=data.get('note'),
+        created_by_id=current_user.id,
+    )
+    db.session.add(ident)
+    db.session.commit()
+    return success(ident.to_dict(), 201)
+
+
+@bp.route('/identifier-schemes', methods=['GET'])
+@login_required
+def list_identifier_schemes():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    include_inactive = request.args.get('include_inactive', 'false').lower() == 'true'
+
+    q = IdentifierScheme.query.filter_by(institution_id=institution_id)
+    if not include_inactive:
+        q = q.filter_by(is_active=True)
+    schemes = q.order_by(IdentifierScheme.sort_order, IdentifierScheme.name).all()
+    return success([s.to_dict() for s in schemes])
+
+
+@bp.route('/identifier-schemes', methods=['POST'])
+@login_required
+@require_write
+def create_identifier_scheme():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return error('name is required', 400)
+
+    exists = IdentifierScheme.query.filter_by(
+        institution_id=institution_id, name=name).first()
+    if exists:
+        return error(f'A scheme named "{name}" already exists.', 409)
+
+    scheme = IdentifierScheme(
+        institution_id=institution_id,
+        name=name,
+        description=data.get('description'),
+        url_template=(data.get('url_template') or '').strip() or None,
+        generator_url=(data.get('generator_url') or '').strip() or None,
+        generator_headers=data.get('generator_headers') or None,
+        generator_body_template=data.get('generator_body_template') or None,
+        generator_response_path=(data.get('generator_response_path') or '').strip() or None,
+        generator_shoulder=(data.get('generator_shoulder') or '').strip() or None,
+        target_url_template=(data.get('target_url_template') or '').strip() or None,
+        is_active=data.get('is_active', True),
+        sort_order=data.get('sort_order', 0),
+    )
+    db.session.add(scheme)
+    db.session.commit()
+    return success(scheme.to_dict(), 201)
+
+
+@bp.route('/identifier-schemes/<int:scheme_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_identifier_scheme(scheme_id):
+    institution_id = current_user.active_institution_id
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Scheme not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        new_name = (data['name'] or '').strip()
+        if not new_name:
+            return error('name cannot be empty', 400)
+        clash = IdentifierScheme.query.filter_by(
+            institution_id=institution_id, name=new_name).filter(
+            IdentifierScheme.id != scheme_id).first()
+        if clash:
+            return error(f'A scheme named "{new_name}" already exists.', 409)
+        scheme.name = new_name
+    if 'description' in data:
+        scheme.description = data['description']
+    if 'url_template' in data:
+        scheme.url_template = (data['url_template'] or '').strip() or None
+    if 'generator_url' in data:
+        scheme.generator_url = (data['generator_url'] or '').strip() or None
+    if 'generator_headers' in data:
+        scheme.generator_headers = data['generator_headers'] or None
+    if 'generator_body_template' in data:
+        scheme.generator_body_template = data['generator_body_template'] or None
+    if 'generator_response_path' in data:
+        scheme.generator_response_path = (data['generator_response_path'] or '').strip() or None
+    if 'generator_shoulder' in data:
+        scheme.generator_shoulder = (data['generator_shoulder'] or '').strip() or None
+    if 'target_url_template' in data:
+        scheme.target_url_template = (data['target_url_template'] or '').strip() or None
+    if 'is_active' in data:
+        scheme.is_active = data['is_active']
+    if 'sort_order' in data:
+        scheme.sort_order = data['sort_order']
+
+    db.session.commit()
+    return success(scheme.to_dict())
+
+
+@bp.route('/identifier-schemes/<int:scheme_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_identifier_scheme(scheme_id):
+    institution_id = current_user.active_institution_id
+    scheme = IdentifierScheme.query.filter_by(
+        id=scheme_id, institution_id=institution_id).first()
+    if not scheme:
+        return error('Scheme not found', 404)
+
+    in_use = NodeIdentifier.query.filter_by(scheme_id=scheme_id).count()
+    if in_use > 0:
+        return error(
+            f'{in_use} record(s) use this scheme. Deactivate it instead of deleting.', 409)
+
+    db.session.delete(scheme)
+    db.session.commit()
+    return success({'message': 'Scheme deleted'})
+
+
+@bp.route('/label-templates', methods=['GET'])
+@login_required
+def list_label_templates():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    templates = LabelTemplate.query.filter_by(
+        institution_id=institution_id).order_by(LabelTemplate.name).all()
+    return success([t.to_dict() for t in templates])
+
+
+@bp.route('/label-templates/<int:template_id>', methods=['GET'])
+@login_required
+def get_label_template(template_id):
+    institution_id = current_user.active_institution_id
+    t = LabelTemplate.query.filter_by(
+        id=template_id, institution_id=institution_id).first()
+    if not t:
+        return error('Template not found', 404)
+    return success(t.to_dict())
+
+
+@bp.route('/label-templates', methods=['POST'])
+@login_required
+@require_write
+def create_label_template():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    format_key = (data.get('format_key') or '').strip()
+    if not name:
+        return error('name is required', 400)
+    if not format_key:
+        return error('format_key is required', 400)
+    if LabelTemplate.query.filter_by(institution_id=institution_id, name=name).first():
+        return error(f'A template named "{name}" already exists.', 409)
+
+    make_default = bool(data.get('is_default'))
+    if make_default:
+        LabelTemplate.query.filter_by(
+            institution_id=institution_id, is_default=True).update({'is_default': False})
+
+    t = LabelTemplate(
+        institution_id=institution_id,
+        name=name,
+        format_key=format_key,
+        is_default=make_default,
+        elements=data.get('elements') or [],
+        updated_by_id=current_user.id,
+    )
+    db.session.add(t)
+    db.session.commit()
+    return success(t.to_dict(), 201)
+
+
+@bp.route('/label-templates/<int:template_id>', methods=['PUT'])
+@login_required
+@require_write
+def update_label_template(template_id):
+    institution_id = current_user.active_institution_id
+    t = LabelTemplate.query.filter_by(
+        id=template_id, institution_id=institution_id).first()
+    if not t:
+        return error('Template not found', 404)
+    data = request.get_json(silent=True) or {}
+
+    if 'name' in data:
+        name = (data['name'] or '').strip()
+        if not name:
+            return error('name cannot be empty', 400)
+        clash = LabelTemplate.query.filter_by(
+            institution_id=institution_id, name=name).filter(
+            LabelTemplate.id != template_id).first()
+        if clash:
+            return error(f'A template named "{name}" already exists.', 409)
+        t.name = name
+    if 'format_key' in data:
+        t.format_key = (data['format_key'] or '').strip()
+    if 'elements' in data:
+        t.elements = data['elements'] or []
+    if 'is_default' in data:
+        if data['is_default']:
+            LabelTemplate.query.filter_by(
+                institution_id=institution_id, is_default=True).filter(
+                LabelTemplate.id != template_id).update({'is_default': False})
+        t.is_default = bool(data['is_default'])
+
+    t.updated_by_id = current_user.id
+    db.session.commit()
+    return success(t.to_dict())
+
+
+@bp.route('/label-templates/<int:template_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_label_template(template_id):
+    institution_id = current_user.active_institution_id
+    t = LabelTemplate.query.filter_by(
+        id=template_id, institution_id=institution_id).first()
+    if not t:
+        return error('Template not found', 404)
+    db.session.delete(t)
+    db.session.commit()
+    return success({'message': 'Deleted'})

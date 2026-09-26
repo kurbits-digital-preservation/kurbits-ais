@@ -1,0 +1,552 @@
+.tab {
+  padding: var(--space-5) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* ─── Section ────────────────────────────────────────────────────── */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sectionLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+.sectionLoading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.empty {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  padding: var(--space-2) 0;
+}
+
+/* ─── Linked items ───────────────────────────────────────────────── */
+.linkedItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  transition: border-color 0.08s;
+}
+.linkedItem:hover { border-color: var(--color-border-strong); }
+
+.linkedItemBtn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  padding: 0;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+.linkedItemBtn:hover .linkedItemName { color: var(--color-accent); }
+
+.linkedItemIcon {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--color-ink-muted);
+  flex-shrink: 0;
+}
+
+.linkedItemBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.linkedItemName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.linkedItemCode {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  letter-spacing: 0.03em;
+}
+
+.linkedItemMeta {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Picker ─────────────────────────────────────────────────────── */
+.picker {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  margin-bottom: var(--space-1);
+}
+
+.pickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+}
+
+.pickerTitle {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pickerExtra {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pickerExtra label {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--color-ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pickerSearch {
+  position: relative;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pickerSearchIcon {
+  position: absolute;
+  left: calc(var(--space-3) + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-ink-faint);
+  pointer-events: none;
+}
+
+.pickerSearchInput {
+  padding-left: 28px !important;
+  font-size: var(--text-sm) !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+  background: var(--color-bg-subtle) !important;
+}
+.pickerSearchInput:focus {
+  border-color: var(--color-accent) !important;
+  background: var(--color-surface) !important;
+}
+
+.pickerResults {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.pickerLoading {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+}
+
+.pickerEmpty {
+  padding: var(--space-4) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  text-align: center;
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px var(--space-3);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: background 0.08s;
+}
+.pickerItem:last-child { border-bottom: none; }
+.pickerItem:hover { background: var(--color-bg-subtle); }
+.pickerItemSelected { background: var(--color-accent-bg) !important; }
+
+.pickerFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-bg-subtle);
+}
+
+/* ─── Picker item contents ───────────────────────────────────────── */
+.agentPickItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+.agentPickIcon { color: var(--color-ink-muted); flex-shrink: 0; }
+.agentPickName { flex: 1; font-size: var(--text-sm); color: var(--color-ink); font-weight: 500; }
+
+.locationPickItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: var(--space-3);
+}
+.locationPickName { font-size: var(--text-sm); color: var(--color-ink); font-weight: 500; }
+.locationPickMeta { font-size: var(--text-xs); color: var(--color-ink-faint); font-family: var(--font-mono); }
+
+.classPickItem {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+}
+.classPickCode { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-accent); letter-spacing: 0.03em; flex-shrink: 0; }
+.classPickName { font-size: var(--text-sm); color: var(--color-ink); font-weight: 500; }
+
+.nodePickItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+.nodePickTitle { font-size: var(--text-sm); color: var(--color-ink); font-weight: 500; }
+.nodePickRef { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink-faint); }
+
+.locationPickPath {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+}
+
+.movePanel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-surface);
+  margin-bottom: var(--space-1);
+}
+
+.movePanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-warning-bg);
+  border-bottom: 1px solid var(--color-warning-border);
+  font-size: var(--text-xs);
+  color: var(--color-warning);
+}
+
+/* ─── Classification scheme picker ──────────────────────────────── */
+.classPickerPanel {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: var(--space-1);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.classPickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-bg-subtle);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.classPickerHint {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.schemeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 10px var(--space-3);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+  transition: background 0.08s;
+}
+.schemeRow:last-child { border-bottom: none; }
+.schemeRow:hover { background: var(--color-bg-subtle); }
+
+.schemeName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.schemeMeta {
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  font-family: var(--font-mono);
+}
+
+.schemeBack {
+  display: block;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-accent-bg);
+  border: none;
+  border-bottom: 1px solid var(--color-accent-border);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-accent);
+  font-family: var(--font-sans);
+}
+.schemeBack:hover { background: color-mix(in srgb, var(--color-accent-bg) 70%, var(--color-bg)); }
+/* ─── Storage location: current item ─────────────────────────────── */
+.emptyState {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  font-style: italic;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+}
+
+.locationItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin: 0 var(--space-4) var(--space-2);
+  background: var(--color-surface);
+}
+.locationItemCheckedOut {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+
+.locationItemIcon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--color-ink-faint);
+}
+.locationItemCheckedOut .locationItemIcon {
+  color: var(--color-warning);
+}
+
+.locationItemInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.locationItemName {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-ink);
+}
+
+.locationItemLink {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--color-accent);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+.locationItemLink:hover { text-decoration: underline; }
+
+.checkedOutBadge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-warning);
+  color: #fff;
+}
+
+/* ─── Check-out reason panel (reuses .movePanel wrapper) ──────────── */
+.checkoutPanelBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.checkoutSelect {
+  width: 100%;
+  font-size: var(--text-sm);
+}
+
+.checkoutPanelActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* ─── Tree-scoped resource picker ─────────────────────────────────── */
+.pickerWithScope {
+  margin-bottom: var(--space-1);
+}
+
+.scopeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--color-accent-bg);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  font-size: var(--text-xs);
+}
+
+.scopeLabel {
+  color: var(--color-accent);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scopeActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.scopeAction {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scopeAction:hover { color: var(--color-accent); text-decoration: underline; }
+
+/* Picker directly below the scope bar loses its own top rounding so the
+   two read as one continuous card. */
+.pickerWithScope .picker {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  margin-bottom: 0;
+}
+
+/* ─── Tree-scoped resource picker ─────────────────────────────────── */
+.pickerWithScope {
+  margin-bottom: var(--space-1);
+}
+
+.scopeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--color-accent-bg);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  font-size: var(--text-xs);
+}
+
+.scopeLabel {
+  color: var(--color-accent);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.scopeActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.scopeAction {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scopeAction:hover { color: var(--color-accent); text-decoration: underline; }
+
+/* Picker directly below the scope bar loses its own top rounding so the
+   two read as one continuous card. */
+.pickerWithScope .picker {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  margin-bottom: 0;
+}

@@ -1,0 +1,58 @@
+.container {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.left {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-bg-panel);
+  border-right: 1px solid var(--color-border);
+}
+
+.handle {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin-left: -1px;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.1s;
+}
+
+.handle:hover,
+.handle:active {
+  background: var(--color-accent-bg);
+}
+
+.handle:hover .handleBar,
+.handle:active .handleBar {
+  background: var(--color-accent);
+  opacity: 1;
+}
+
+.handleBar {
+  width: 2px;
+  height: 32px;
+  background: var(--color-border-strong);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.handle:hover .handleBar { opacity: 1; }
+
+.right {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}

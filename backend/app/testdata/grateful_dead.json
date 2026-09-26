@@ -1,0 +1,258 @@
+{
+  "_comment": "Grateful Dead fonds — testdata fixture for Kurbits AIS",
+  "_description": "A fictional archival collection for the Grateful Dead. Band members are looked up from Wikidata. This fixture demonstrates the full range of Kurbits data types.",
+
+  "agents": [
+    {
+      "_id": "grateful_dead_org",
+      "name": "Grateful Dead",
+      "authorized_form": "Grateful Dead",
+      "agent_type": "organization",
+      "date_from": "1965",
+      "date_to": "1995",
+      "description": "The best band ever formed in 1965 in Palo Alto, California. One of the most influential bands in rock history, known for their eclectic style and improvisational live performances.",
+      "wikidata_id": "Q191644",
+      "notes": [
+        {
+          "note_type": "history",
+          "content": "The Grateful Dead formed in the San Francisco Bay Area and became one of the most successful touring bands of all time. Their musical style drew on numerous influences including rock, folk, bluegrass, blues, reggae, country, jazz, psychedelia, and space rock. They were known for their lengthy improvisational jams and dedicated fanbase known as Deadheads.",
+          "is_public": true
+        }
+      ]
+    },
+    {
+      "_id": "jerry_garcia",
+      "name": "Jerry Garcia",
+      "authorized_form": "Garcia, Jerome John, 1942–1995",
+      "agent_type": "person",
+      "date_from": "1942",
+      "date_to": "1995",
+      "description": "Lead guitarist and vocalist of the Grateful Dead.",
+      "wikidata_id": "Q216048"
+    },
+    {
+      "_id": "bob_weir",
+      "name": "Bob Weir",
+      "authorized_form": "Weir, Bob, 1947–",
+      "agent_type": "person",
+      "date_from": "1947",
+      "description": "Rhythm guitarist and vocalist of the Grateful Dead.",
+      "wikidata_id": "Q217264"
+    },
+    {
+      "_id": "phil_lesh",
+      "name": "Phil Lesh",
+      "authorized_form": "Lesh, Phil, 1940–2024",
+      "agent_type": "person",
+      "date_from": "1940",
+      "date_to": "2024",
+      "description": "Bassist of the Grateful Dead.",
+      "wikidata_id": "Q216668"
+    },
+    {
+      "_id": "bill_kreutzmann",
+      "name": "Bill Kreutzmann",
+      "authorized_form": "Kreutzmann, Bill, 1946–",
+      "agent_type": "person",
+      "date_from": "1946",
+      "description": "Drummer of the Grateful Dead.",
+      "wikidata_id": "Q959946"
+    },
+    {
+      "_id": "mickey_hart",
+      "name": "Mickey Hart",
+      "authorized_form": "Hart, Mickey, 1943–",
+      "agent_type": "person",
+      "date_from": "1943",
+      "description": "Percussionist of the Grateful Dead, member from 1967.",
+      "wikidata_id": "Q727067"
+    },
+    {
+      "_id": "ron_pigpen_mckerman",
+      "name": "Ron McKernan",
+      "authorized_form": "McKernan, Ron, 1945–1973",
+      "agent_type": "person",
+      "date_from": "1945",
+      "date_to": "1973",
+      "description": "Keyboardist and vocalist, founding member of the Grateful Dead, known as 'Pigpen'.",
+      "wikidata_id": "Q938474"
+    },
+    {
+      "_id": "keith_godchaux",
+      "name": "Keith Godchaux",
+      "authorized_form": "Godchaux, Keith, 1948–1980",
+      "agent_type": "person",
+      "date_from": "1948",
+      "date_to": "1980",
+      "description": "Keyboardist of the Grateful Dead 1971–1979.",
+      "wikidata_id": "Q1378965"
+    },
+    {
+      "_id": "brent_mydland",
+      "name": "Brent Mydland",
+      "authorized_form": "Mydland, Brent, 1952–1990",
+      "agent_type": "person",
+      "date_from": "1952",
+      "date_to": "1990",
+      "description": "Keyboardist of the Grateful Dead 1979–1990.",
+      "wikidata_id": "Q949882"
+    }
+  ],
+
+  "fonds": {
+    "title": "Grateful Dead Collection",
+    "local_ref": "GD",
+    "level": "Fonds",
+    "date_from": "1965",
+    "date_to": "1995",
+    "scope_and_content": "The Grateful Dead Collection documents the history of the band from its formation in 1965 through its dissolution following the death of Jerry Garcia in 1995. The collection includes recordings, correspondence, concert materials, visual art, and business records.",
+    "description": "Extent: approximately 500 linear feet of textual records, 10,000 audio recordings, 50,000 photographs.",
+    "creators": ["grateful_dead_org"],
+    "notes": [
+      {
+        "note_type": "administrative_history",
+        "content": "The Grateful Dead formed in Palo Alto, California in 1965 and became one of the defining bands of the psychedelic era. The band was officially dissolved in December 1995, four months after the death of Jerry Garcia.",
+        "is_public": true
+      },
+      {
+        "note_type": "scope_and_content",
+        "content": "The collection is arranged into six series reflecting the major areas of the band's activities: recordings, concert files, correspondence, business records, visual materials, and memorabilia.",
+        "is_public": true
+      }
+    ],
+    "series": [
+      {
+        "title": "Recordings",
+        "local_ref": "A",
+        "level": "Series",
+        "date_from": "1965",
+        "date_to": "1995",
+        "scope_and_content": "Studio recordings, live concert recordings, and outtakes. Includes master tapes, reference copies, and digital transfers.",
+        "files": [
+          {
+            "title": "Anthem of the Sun — Studio Sessions",
+            "local_ref": "1",
+            "level": "File",
+            "date_from": "1967",
+            "date_to": "1968",
+            "scope_and_content": "Master tapes and session notes for the album Anthem of the Sun, recorded at American Recording Company, Los Angeles, and Columbus Recorders, San Francisco.",
+            "agents": [
+              {"_id": "jerry_garcia", "relation": "creator"},
+              {"_id": "bob_weir", "relation": "creator"},
+              {"_id": "phil_lesh", "relation": "creator"}
+            ]
+          },
+          {
+            "title": "Live Concert Recordings, 1969",
+            "local_ref": "2",
+            "level": "File",
+            "date_from": "1969",
+            "date_to": "1969",
+            "scope_and_content": "Soundboard and audience recordings from the 1969 tour. Includes recordings from Fillmore West, San Francisco and Woodstock Festival, Bethel, New York."
+          },
+          {
+            "title": "Live Concert Recordings, 1977",
+            "local_ref": "3",
+            "level": "File",
+            "date_from": "1977",
+            "date_to": "1977",
+            "scope_and_content": "Recordings from the acclaimed Spring 1977 tour, widely considered the band's finest period. Includes the complete Cornell University show, 8 May 1977."
+          }
+        ]
+      },
+      {
+        "title": "Concert Files",
+        "local_ref": "B",
+        "level": "Series",
+        "date_from": "1965",
+        "date_to": "1995",
+        "scope_and_content": "Administrative files relating to concert production. Includes contracts, set lists, rider agreements, promotional materials, and touring correspondence.",
+        "files": [
+          {
+            "title": "Fillmore West, San Francisco — Concert Files",
+            "local_ref": "1",
+            "level": "File",
+            "date_from": "1966",
+            "date_to": "1971",
+            "scope_and_content": "Contracts, promotional posters, and set lists for performances at the Fillmore West, San Francisco."
+          },
+          {
+            "title": "European Tour, 1972",
+            "local_ref": "2",
+            "level": "File",
+            "date_from": "1972",
+            "date_to": "1972",
+            "scope_and_content": "Complete files for the 1972 European tour including contracts, itineraries, set lists, photographs, and correspondence. Tour featured 22 concerts across UK, Germany, France, Netherlands, and Denmark."
+          },
+          {
+            "title": "Fare Thee Well Tour, 1995",
+            "local_ref": "3",
+            "level": "File",
+            "date_from": "1995",
+            "date_to": "1995",
+            "scope_and_content": "Files for the final Grateful Dead performances at Soldier Field, Chicago, 8–9 July 1995.",
+            "agents": [
+              {"_id": "jerry_garcia", "relation": "contributor"},
+              {"_id": "bob_weir", "relation": "contributor"},
+              {"_id": "phil_lesh", "relation": "contributor"},
+              {"_id": "bill_kreutzmann", "relation": "contributor"},
+              {"_id": "mickey_hart", "relation": "contributor"}
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Correspondence",
+        "local_ref": "C",
+        "level": "Series",
+        "date_from": "1965",
+        "date_to": "1995",
+        "scope_and_content": "Incoming and outgoing correspondence relating to band business, fan mail, and personal communications.",
+        "files": [
+          {
+            "title": "Fan Mail",
+            "local_ref": "1",
+            "level": "File",
+            "date_from": "1967",
+            "date_to": "1995",
+            "scope_and_content": "Selected fan correspondence. The band maintained an unusually direct relationship with their fans and responded to a substantial portion of fan mail."
+          },
+          {
+            "title": "Business Correspondence",
+            "local_ref": "2",
+            "level": "File",
+            "date_from": "1965",
+            "date_to": "1995",
+            "scope_and_content": "Correspondence with record labels (Warner Bros., Arista), booking agencies, venue managers, and promoters."
+          }
+        ]
+      },
+      {
+        "title": "Visual Materials",
+        "local_ref": "D",
+        "level": "Series",
+        "date_from": "1965",
+        "date_to": "1995",
+        "scope_and_content": "Photographs, film, video, and graphic artwork. Includes concert photographs, promotional images, and commissioned artwork.",
+        "files": [
+          {
+            "title": "Concert Photographs, 1965–1980",
+            "local_ref": "1",
+            "level": "File",
+            "date_from": "1965",
+            "date_to": "1980",
+            "scope_and_content": "Approximately 15,000 black-and-white and colour photographs from concerts and backstage."
+          },
+          {
+            "title": "Poster Art",
+            "local_ref": "2",
+            "level": "File",
+            "date_from": "1966",
+            "date_to": "1995",
+            "scope_and_content": "Original artwork and printing proofs for concert posters. Includes work by Wes Wilson, Victor Moscoso, and other San Francisco psychedelic poster artists."
+          }
+        ]
+      }
+    ]
+  }
+}

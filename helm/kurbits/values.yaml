@@ -1,0 +1,128 @@
+# ─── Kurbits AIS — Base Helm values ──────────────────────────────────
+# Use with one of the platform overlays:
+#   Kubernetes:  -f values-kubernetes.yaml
+#   OpenShift:   -f values-openshift.yaml
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/kurbits
+  pullPolicy: IfNotPresent
+  tag: ""  # defaults to Chart.appVersion
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+# ── Application ────────────────────────────────────────────────────────
+app:
+  env: production
+  secretKey: ""        # REQUIRED — set via --set or a values override
+  logLevel: info
+  gunicornWorkers: 2
+  gunicornThreads: 2
+
+# ── Database ───────────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: kurbits
+    password: ""       # REQUIRED — set via --set or a values override
+    database: kurbits
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+
+# When postgresql.enabled=false provide the full connection string
+externalDatabaseUrl: ""
+
+# ── Uploads persistence ────────────────────────────────────────────────
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+# ── Service ────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 8080
+
+# ── Ingress (standard Kubernetes) ─────────────────────────────────────
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: kurbits.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ── OpenShift Route ────────────────────────────────────────────────────
+route:
+  enabled: false
+  host: ""
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+
+# ── Resources ──────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+# ── Pod security context ───────────────────────────────────────────────
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 0
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+
+# ── Probes ─────────────────────────────────────────────────────────────
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# ── Autoscaling ────────────────────────────────────────────────────────
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+# ── Service account ────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

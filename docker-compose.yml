@@ -1,0 +1,70 @@
+services:
+
+  # ── PostgreSQL database ──────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kurbits
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kurbits}
+      POSTGRES_DB: kurbits
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kurbits"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    profiles:
+      - postgres
+      - default
+
+  # ── Kurbits application ──────────────────────────────────────────────
+  app:
+    image: kurbits:latest
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      FLASK_ENV: production
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://kurbits:${POSTGRES_PASSWORD:-kurbits}@db:5432/kurbits}
+      UPLOAD_FOLDER: /app/uploads
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-2}
+      GUNICORN_THREADS: ${GUNICORN_THREADS:-2}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - postgres
+      - default
+
+  # ── App with SQLite (no DB service needed) ───────────────────────────
+  app-sqlite:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      FLASK_ENV: production
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+      DATABASE_URL: sqlite:////app/data/kurbits.db
+      UPLOAD_FOLDER: /app/uploads
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    volumes:
+      - sqlite_data:/app/data
+      - uploads:/app/uploads
+    profiles:
+      - sqlite
+
+volumes:
+  pgdata:
+  uploads:
+  sqlite_data:

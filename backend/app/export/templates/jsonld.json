@@ -1,0 +1,50 @@
+{%- macro node_ld(n) -%}
+{
+    "@type": "ArchiveComponent",
+    "@id": "urn:kurbits:{{ n.ref_code }}",
+    "identifier": {{ n.ref_code | tojson }},
+    "name": {{ n.title | tojson }},
+    "dc:type": {{ n.level | tojson }},
+    {% if n.description %}"description": {{ n.description | tojson }},{% endif %}
+    {% if n.scope_and_content %}"abstract": {{ n.scope_and_content | tojson }},{% endif %}
+    {% if n.date_start %}"temporalCoverage": "{{ n.date_start }}{% if n.date_end %}/{{ n.date_end }}{% endif %}",{% endif %}
+    {% if n.language %}"inLanguage": {{ n.language | tojson }},{% endif %}
+    {% if n.extent %}"size": {{ n.extent | tojson }},{% endif %}
+    {% if n.access_conditions %}"conditionsOfAccess": {{ n.access_conditions | tojson }},{% endif %}
+    {% if n.creators %}
+    "creator": [
+      {% for c in n.creators %}
+      {
+        "@type": "{{ 'Person' if c.agent_type == 'person' else 'Organization' }}",
+        "name": {{ c.name | tojson }}{% if c.identifier %},"identifier": {{ c.identifier | tojson }}{% endif %}
+      }{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ],
+    {% endif %}
+    {% if n.classifications %}
+    "about": [
+      {% for c in n.classifications %}
+      {"@type": "DefinedTerm", "termCode": {{ c.full_code | tojson }}, "name": {{ c.name | tojson }}}{% if not loop.last %},{% endif %}
+      {% endfor %}
+    ],
+    {% endif %}
+    "isPartOf": {"@type": "Archive", "name": {{ n.institution_name | tojson }}},
+    "dateModified": {{ n.updated_at[:10] | tojson }}
+}
+{%- endmacro -%}
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "dc": "http://purl.org/dc/terms/"
+  },
+  {% if include_children and node.children %}
+  "@graph": [
+    {{ node_ld(node) }}
+    {% for n in all_nodes[1:] %},
+    {{ node_ld(n) }}
+    {% endfor %}
+  ]
+  {% else %}
+  {{ node_ld(node) | indent(2) }}
+  {% endif %}
+}

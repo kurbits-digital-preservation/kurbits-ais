@@ -1,0 +1,12 @@
+apiVersion: v2
+name: kurbits
+description: Kurbits Archival Information System
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - archival
+  - ead
+  - oai-pmh
+maintainers:
+  - name: Kurbits Team
