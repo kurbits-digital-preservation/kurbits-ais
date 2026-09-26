@@ -3,3 +3,4 @@
 /backend/demos/
 /backend/kurbits_dev.db
 /frontend/node_modules/
+/whisper_service/models/
