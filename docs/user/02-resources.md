@@ -18,11 +18,33 @@ Use the **+ New** button at the top of the tree panel to add a root-level node. 
 
 Every new resource requires at minimum a **title** and a **level of description**.
 
-### Rapid Entry 
+### Rapid Entry
 
-Kurbits offers a rapid entry functionality. Useful for mass registration of items or boxes. It's also possible to copy and paste directly from a spreadsheet and then populate columns. 
+Kurbits offers a rapid entry functionality. Useful for mass registration of items or boxes. It's also possible to copy and paste directly from a spreadsheet and then populate columns.
 
 ![02_rapid_entry.png](assets/02_rapid_entry.png)
+
+You can also attach files to rows and have Kurbits create a representation for each one, so a batch of digitised items can be described and have their scans attached in a single pass.
+
+#### Attaching files
+
+1. Click **Pick files** to select files from your computer. They aren't uploaded yet — they're held in the browser and matched to rows by filename.
+2. Tell Kurbits which file(s) belong to which row. There are two ways to do this:
+   - **From a pasted sheet** — include a `files` column listing filenames (semicolon-separated if a row has more than one file), and a column naming the **representation type** (e.g. *Preservation master*, *Access copy*) to use for that row's files. Map both columns during the paste's column-mapping step.
+   - **Manually / Auto-match** — type filenames straight into a row's Files cell, or click **Auto-match** to have Kurbits match each selected file to a row automatically: it strips the extension and looks for a row whose **reference** matches the filename (or the filename prefixed with it), falling back to the **title** if no reference matches.
+3. If your sheet didn't supply a representation type per row, use **Set representation for all rows with files** to apply one type to every file-bearing row at once.
+
+A reconciliation panel above the grid keeps you honest before you submit:
+
+- Shows how many files are matched, across how many rows, and how many you've selected in total.
+- Warns if a filename named in the sheet was never actually selected.
+- Warns if a row has files but no representation type.
+- Warns if a representation type named in the sheet doesn't match any configured type (configure types under **Administration → Vocabularies → Objects**).
+- Warns if the chosen **level of description** isn't flagged as an *object level* — representations can only be attached to object-level nodes, so this is flagged up front rather than failing silently after the records are created.
+
+#### What happens on submit
+
+Records are created first; files are attached afterwards as a second step, so an upload problem never blocks or rolls back the descriptions themselves. For each row with files, Kurbits creates one representation (of the chosen type) on the new node, then uploads that row's files to it, one at a time. A progress indicator tracks files done vs. total, and any individual failure — a rejected file, a permissions error — is listed by filename with the server's reason, without stopping the rest of the batch.
 
 ## The Details tab
 
