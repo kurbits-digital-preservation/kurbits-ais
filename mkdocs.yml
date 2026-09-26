@@ -1,4 +1,5 @@
 site_name: KURBITS AIS Documentation
+site_url: https://docs.kurbits.net/
 
 theme:
   name: material
@@ -21,7 +22,8 @@ markdown_extensions:
   - md_in_html
 
 nav:
-  - Home: user/index.md
+  - Home: index.md
+  - Change logs: change_logs/index.md
   - User manual:
       - Introduction: user/index.md
       - Getting-started: user/01-getting-started.md
@@ -34,4 +36,8 @@ nav:
       - Search: user/08-search.md
       - Administration: user/09-administration.md
       - Import / Export / Lookups: user/10-lookups-import-export.md
+      - Process descriptions: user/11-process-descriptions.md
+      - Label designer: user/12-labels.md
+      - Deploy with docker: user/13-docker.md
       - Visual-Arkiv: user/visual-arkiv-import.md
+  - Installation: installation/docker.md
