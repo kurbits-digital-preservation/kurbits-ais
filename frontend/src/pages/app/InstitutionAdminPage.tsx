@@ -18,20 +18,13 @@ import IdentifierSchemesTab from './IdentifierSchemesTab'
 import RecordsVocabularyTab from './RecordsVocabularyTab'
 import LabelDesigner from './LabelDesigner'
 import { Zap, RefreshCw, Globe } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 // ─── Constants ────────────────────────────────────────────────────────
 
-const ROLES = [
-  { value: 'institution_admin', label: 'Admin',     desc: 'Full institution management' },
-  { value: 'archivist',         label: 'Archivist', desc: 'Create and edit descriptions' },
-  { value: 'read_only',         label: 'Read only', desc: 'View internal records only' },
-]
-
-const ROLE_LABELS: Record<string, string> = {
-  institution_admin: 'Admin',
-  archivist:         'Archivist',
-  read_only:         'Read only',
-  system_admin:      'System admin',
+const ROLE_VALUES = ['institution_admin', 'archivist', 'read_only']
+const ROLE_KEY_MAP: Record<string, string> = {
+  institution_admin: 'admin', archivist: 'archivist', read_only: 'readOnly', system_admin: 'systemAdmin',
 }
 
 // ─── Role picker dropdown ─────────────────────────────────────────────
@@ -47,6 +40,7 @@ function RolePicker({
   institutionId: number
   disabled?: boolean
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
 
@@ -62,7 +56,7 @@ function RolePicker({
   if (disabled) {
     return (
       <span className={styles.roleStatic}>
-        {ROLE_LABELS[currentRole] ?? currentRole}
+        {ROLE_KEY_MAP[currentRole] ? t(`admin.roles.${ROLE_KEY_MAP[currentRole]}`) : currentRole}
       </span>
     )
   }
@@ -73,25 +67,25 @@ function RolePicker({
         className={styles.rolePickerBtn}
         onClick={() => setOpen(v => !v)}
       >
-        {ROLE_LABELS[currentRole] ?? currentRole}
+        {ROLE_KEY_MAP[currentRole] ? t(`admin.roles.${ROLE_KEY_MAP[currentRole]}`) : currentRole}
         <ChevronDown size={12} />
       </button>
       {open && (
         <>
           <div className={styles.rolePickerBackdrop} onClick={() => setOpen(false)} />
           <div className={styles.rolePickerMenu}>
-            {ROLES.map(role => (
+            {ROLE_VALUES.map(roleValue => (
               <button
-                key={role.value}
+                key={roleValue}
                 className={styles.rolePickerOption}
-                onClick={() => mutation.mutate(role.value)}
+                onClick={() => mutation.mutate(roleValue)}
                 disabled={mutation.isPending}
               >
                 <div className={styles.rolePickerOptionMain}>
-                  <span className={styles.rolePickerOptionLabel}>{role.label}</span>
-                  <span className={styles.rolePickerOptionDesc}>{role.desc}</span>
+                  <span className={styles.rolePickerOptionLabel}>{t(`admin.roles.${ROLE_KEY_MAP[roleValue]}`)}</span>
+                  <span className={styles.rolePickerOptionDesc}>{t(`admin.roles.${ROLE_KEY_MAP[roleValue]}Desc`)}</span>
                 </div>
-                {currentRole === role.value && <Check size={13} className={styles.roleCheckmark} />}
+                {currentRole === roleValue && <Check size={13} className={styles.roleCheckmark} />}
               </button>
             ))}
           </div>
@@ -104,6 +98,7 @@ function RolePicker({
 // ─── Members tab ──────────────────────────────────────────────────────
 
 function MembersTab({ institution }: { institution: any }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
   const [inviting, setInviting] = useState(false)
@@ -126,7 +121,7 @@ function MembersTab({ institution }: { institution: any }) {
       setFormError('')
     },
     onError: (err: any) => {
-      setFormError(err.response?.data?.message ?? 'Failed to create user')
+      setFormError(err.response?.data?.message ?? t('admin.members.createFailed'))
     },
   })
 
@@ -141,17 +136,17 @@ function MembersTab({ institution }: { institution: any }) {
     <div className={styles.tabContent}>
       <div className={styles.membersHeader}>
         <p className={styles.memberCount}>
-          {members?.length ?? 0} member{members?.length !== 1 ? 's' : ''}
+          {t('admin.members.countLabel', { count: members?.length ?? 0 })}
         </p>
         <button className="btn btn-primary btn-sm" onClick={() => setInviting(v => !v)}>
-          <UserPlus size={14} /> Add user
+          <UserPlus size={14} /> {t('admin.members.addUser')}
         </button>
       </div>
 
       {inviting && (
         <div className={styles.inviteForm}>
           <div className={styles.inviteFormTitle}>
-            <UserPlus size={15} /> Create new user
+            <UserPlus size={15} /> {t('admin.members.createNewUser')}
           </div>
           {formError && (
             <div className={styles.formError}>
@@ -160,40 +155,40 @@ function MembersTab({ institution }: { institution: any }) {
           )}
           <div className={styles.inviteGrid}>
             <div className="form-group">
-              <label>Username *</label>
+              <label>{t('admin.members.username')}</label>
               <input
                 value={form.username}
                 onChange={e => setForm(f => ({ ...f, username: e.target.value }))}
-                placeholder="e.g. jsmith"
+                placeholder={t('admin.members.usernamePlaceholder')}
                 autoFocus
               />
             </div>
             <div className="form-group">
-              <label>Email *</label>
+              <label>{t('admin.members.email')}</label>
               <input
                 type="email"
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="user@institution.org"
+                placeholder={t('admin.members.emailPlaceholder')}
               />
             </div>
             <div className="form-group">
-              <label>Password *</label>
+              <label>{t('admin.members.password')}</label>
               <input
                 type="password"
                 value={form.password}
                 onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                placeholder="Temporary password"
+                placeholder={t('admin.members.passwordPlaceholder')}
               />
             </div>
             <div className="form-group">
-              <label>Role *</label>
+              <label>{t('admin.members.role')}</label>
               <select
                 value={form.role}
                 onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
               >
-                {ROLES.map(r => (
-                  <option key={r.value} value={r.value}>{r.label} — {r.desc}</option>
+                {ROLE_VALUES.map(r => (
+                  <option key={r} value={r}>{t(`admin.roles.${ROLE_KEY_MAP[r]}`)} — {t(`admin.roles.${ROLE_KEY_MAP[r]}Desc`)}</option>
                 ))}
               </select>
             </div>
@@ -202,7 +197,7 @@ function MembersTab({ institution }: { institution: any }) {
             <button className="btn btn-ghost btn-sm" onClick={() => {
               setInviting(false); setFormError('')
             }}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button
               className="btn btn-primary btn-sm"
@@ -210,7 +205,7 @@ function MembersTab({ institution }: { institution: any }) {
               onClick={() => inviteMutation.mutate()}
             >
               {inviteMutation.isPending ? <Spinner size={13} /> : <UserPlus size={13} />}
-              Create user
+              {t('admin.members.createUser')}
             </button>
           </div>
         </div>
@@ -229,13 +224,13 @@ function MembersTab({ institution }: { institution: any }) {
               <div className={styles.memberInfo}>
                 <div className={styles.memberName}>
                   {member.username}
-                  {isSelf && <span className={styles.youBadge}>you</span>}
-                  {!member.is_active && <span className={styles.inactiveBadge}>inactive</span>}
+                  {isSelf && <span className={styles.youBadge}>{t('admin.members.you')}</span>}
+                  {!member.is_active && <span className={styles.inactiveBadge}>{t('admin.members.inactive')}</span>}
                 </div>
                 <span className={styles.memberEmail}>{member.email}</span>
                 {member.last_login && (
                   <span className={styles.memberLastLogin}>
-                    Last login: {new Date(member.last_login).toLocaleDateString()}
+                    {t('admin.members.lastLogin', { date: new Date(member.last_login).toLocaleDateString() })}
                   </span>
                 )}
               </div>
@@ -249,9 +244,9 @@ function MembersTab({ institution }: { institution: any }) {
                 {!isSelf && !isSystemAdmin && (
                   <button
                     className="btn btn-ghost btn-sm btn-icon"
-                    title="Remove from institution"
+                    title={t('admin.members.removeFromInstitution')}
                     onClick={() => {
-                      if (confirm(`Remove ${member.username} from ${institution.name}?`)) {
+                      if (confirm(t('admin.members.removeConfirm', { username: member.username, institution: institution.name }))) {
                         removeMutation.mutate(member.id)
                       }
                     }}
@@ -271,6 +266,7 @@ function MembersTab({ institution }: { institution: any }) {
 // ─── Settings tab ─────────────────────────────────────────────────────
 
 function SettingsTab({ institution }: { institution: any }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [form, setForm] = useState({
     name:             institution.name,
@@ -297,16 +293,16 @@ function SettingsTab({ institution }: { institution: any }) {
   return (
     <div className={styles.tabContent}>
       <div className={styles.settingsSection}>
-        <h3 className={styles.settingsSectionTitle}>Institution details</h3>
+        <h3 className={styles.settingsSectionTitle}>{t('admin.settings.institutionDetails')}</h3>
 
         <div className={styles.settingsGrid}>
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-            <label>Institution name</label>
+            <label>{t('admin.settings.institutionName')}</label>
             <input value={form.name} onChange={set('name')} />
           </div>
 
           <div className="form-group">
-            <label>Country code</label>
+            <label>{t('admin.settings.countryCode')}</label>
             <input
               value={form.country_code}
               onChange={set('country_code')}
@@ -314,12 +310,13 @@ function SettingsTab({ institution }: { institution: any }) {
               maxLength={10}
             />
             <span className="form-hint">
-              Used in reference codes — e.g. <strong>{form.country_code.toUpperCase() || 'SE'}-{form.institution_code.toUpperCase() || 'DEMO'}/A1</strong>
+              {t('admin.settings.refCodeHintPrefix')}{' '}
+              <strong>{form.country_code.toUpperCase() || 'SE'}-{form.institution_code.toUpperCase() || 'DEMO'}/A1</strong>
             </span>
           </div>
 
           <div className="form-group">
-            <label>Institution code</label>
+            <label>{t('admin.settings.institutionCode')}</label>
             <input
               value={form.institution_code}
               onChange={set('institution_code')}
@@ -329,17 +326,17 @@ function SettingsTab({ institution }: { institution: any }) {
           </div>
 
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-            <label>Description</label>
+            <label>{t('resources.form.fields.description')}</label>
             <textarea
               value={form.description}
               onChange={set('description')}
               rows={3}
-              placeholder="Brief description of the institution…"
+              placeholder={t('admin.settings.descriptionPlaceholder')}
             />
           </div>
 
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-            <label>Website</label>
+            <label>{t('admin.settings.website')}</label>
             <input
               type="url"
               value={form.website}
@@ -356,18 +353,18 @@ function SettingsTab({ institution }: { institution: any }) {
             disabled={mutation.isPending}
           >
             {mutation.isPending ? <Spinner size={14} /> : <Save size={14} />}
-            {saved ? 'Saved!' : 'Save changes'}
+            {saved ? t('admin.settings.saved') : t('resources.form.saveChanges')}
           </button>
         </div>
       </div>
 
       <div className={styles.settingsSection}>
-        <h3 className={styles.settingsSectionTitle}>Roles reference</h3>
+        <h3 className={styles.settingsSectionTitle}>{t('admin.settings.rolesReference')}</h3>
         <div className={styles.rolesTable}>
-          {ROLES.map(role => (
-            <div key={role.value} className={styles.roleRow}>
-              <span className={styles.roleLabel}>{role.label}</span>
-              <span className={styles.roleDesc}>{role.desc}</span>
+          {ROLE_VALUES.map(roleValue => (
+            <div key={roleValue} className={styles.roleRow}>
+              <span className={styles.roleLabel}>{t(`admin.roles.${ROLE_KEY_MAP[roleValue]}`)}</span>
+              <span className={styles.roleDesc}>{t(`admin.roles.${ROLE_KEY_MAP[roleValue]}Desc`)}</span>
             </div>
           ))}
         </div>
@@ -384,6 +381,7 @@ function SettingsTab({ institution }: { institution: any }) {
 // ─── Portal tab ───────────────────────────────────────────────────────
 
 function PortalTab() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [saved, setSaved] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message?: string } | null>(null)
@@ -427,7 +425,7 @@ const { data: config, isLoading } = useQuery({
       const r = await portalApi.testWebhook()
       setTestResult(r.data.data)
     } catch {
-      setTestResult({ ok: false, message: 'Request failed' })
+      setTestResult({ ok: false, message: t('admin.portal.requestFailed') })
     } finally {
       setTesting(false)
     }
@@ -437,9 +435,9 @@ const { data: config, isLoading } = useQuery({
     setSyncing(true)
     try {
       const r = await portalApi.bulkSync()
-      alert(`Queued ${r.data.data.queued} of ${r.data.data.total} published nodes for sync.`)
+      alert(t('admin.portal.syncQueued', { queued: r.data.data.queued, total: r.data.data.total }))
     } catch {
-      alert('Sync failed — check portal config.')
+      alert(t('admin.portal.syncFailed'))
     } finally {
       setSyncing(false)
     }
@@ -452,10 +450,9 @@ const { data: config, isLoading } = useQuery({
 
   return (
     <div className={styles.settingsSection}>
-      <h3 className={styles.settingsSectionTitle}>Public portal</h3>
+      <h3 className={styles.settingsSectionTitle}>{t('admin.portal.title')}</h3>
       <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)', marginBottom: 'var(--space-4)' }}>
-        When enabled, published nodes are pushed to the public portal via webhook.
-        The portal is a separate application — configure its URL and shared secret below.
+        {t('admin.portal.desc')}
       </p>
 
       <div className={styles.settingsGrid}>
@@ -475,30 +472,30 @@ const { data: config, isLoading } = useQuery({
             onChange={set('enabled')}
             style={{ width: 'auto', margin: 0, flexShrink: 0 }}
           />
-          Enable portal publishing for this institution
+          {t('admin.portal.enableLabel')}
         </label>
 
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Webhook URL</label>
+          <label>{t('admin.portal.webhookUrl')}</label>
           <input
             value={form.webhook_url}
             onChange={set('webhook_url')}
             placeholder="https://portal.example.com/webhook"
             disabled={!form.enabled}
           />
-          <span className="form-hint">The portal's /webhook endpoint</span>
+          <span className="form-hint">{t('admin.portal.webhookUrlHint')}</span>
         </div>
 
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Webhook secret {config?.has_secret && <span style={{ color: 'var(--color-success)', fontSize: 'var(--text-xs)' }}>✓ secret saved</span>}</label>
+          <label>{t('admin.portal.webhookSecret')} {config?.has_secret && <span style={{ color: 'var(--color-success)', fontSize: 'var(--text-xs)' }}>{t('admin.portal.secretSaved')}</span>}</label>
           <input
             type="password"
             value={form.webhook_secret}
             onChange={set('webhook_secret')}
-            placeholder={config?.has_secret ? '(leave blank to keep existing)' : 'Shared HMAC secret'}
+            placeholder={config?.has_secret ? t('admin.portal.secretPlaceholderExisting') : t('admin.portal.secretPlaceholderNew')}
             disabled={!form.enabled}
           />
-          <span className="form-hint">Generate a strong random string and paste the same value in the portal's config</span>
+          <span className="form-hint">{t('admin.portal.secretHint')}</span>
         </div>
       </div>
 
@@ -510,7 +507,7 @@ const { data: config, isLoading } = useQuery({
             disabled={!form.enabled || !form.webhook_url || testing}
           >
             {testing ? <Spinner size={13} /> : <Zap size={13} />}
-            Test connection
+            {t('admin.portal.testConnection')}
           </button>
           <button
             className="btn btn-secondary"
@@ -518,7 +515,7 @@ const { data: config, isLoading } = useQuery({
             disabled={!form.enabled || syncing}
           >
             {syncing ? <Spinner size={13} /> : <RefreshCw size={13} />}
-            Bulk re-sync
+            {t('admin.portal.bulkResync')}
           </button>
         </div>
         <button
@@ -527,7 +524,7 @@ const { data: config, isLoading } = useQuery({
           disabled={saveMutation.isPending}
         >
           {saveMutation.isPending ? <Spinner size={14} /> : <Save size={14} />}
-          {saved ? 'Saved!' : 'Save'}
+          {saved ? t('admin.settings.saved') : t('common.save')}
         </button>
       </div>
 
@@ -540,7 +537,7 @@ const { data: config, isLoading } = useQuery({
           color: testResult.ok ? 'var(--color-success)' : 'var(--color-error)',
           fontSize: 'var(--text-sm)',
         }}>
-          {testResult.ok ? '✓ Portal responded successfully' : `✗ ${testResult.message ?? 'Connection failed'}`}
+          {testResult.ok ? t('admin.portal.testSuccess') : `${t('admin.portal.testFailurePrefix')} ${testResult.message ?? t('admin.portal.connectionFailed')}`}
         </div>
       )}
     </div>
@@ -552,6 +549,7 @@ function TemplatesTab() {
 }
 
 export default function InstitutionAdminPage() {
+  const { t } = useTranslation()
   const { user } = useAuthStore()
   const [tab, setTab] = useState('members')
 
@@ -574,7 +572,7 @@ export default function InstitutionAdminPage() {
     return (
       <div className={styles.noAccess}>
         <AlertCircle size={28} />
-        <p>No active institution selected.</p>
+        <p>{t('admin.page.noInstitution')}</p>
       </div>
     )
   }
@@ -583,23 +581,23 @@ export default function InstitutionAdminPage() {
     return (
       <div className={styles.noAccess}>
         <Shield size={28} />
-        <p>Institution admin access required.</p>
+        <p>{t('admin.page.accessRequired')}</p>
       </div>
     )
   }
 
   const tabs = [
-    { key: 'members',     icon: <Users size={14} />,    label: `Members (${institution.member_count})` },
-    { key: 'settings',    icon: <Settings size={14} />, label: 'Settings' },
-    { key: 'vocabularies', icon: <BookOpen size={14} />, label: 'Vocabularies' },
-    { key: 'hierarchies',  icon: <Layers size={14} />,   label: 'Hierarchies' },
-    { key: 'templates',    icon: <Layers size={14} />,   label: 'Field templates' },
-    { key: 'integrations', icon: <Link size={14} />,     label: 'Integrations' },
-    { key: 'ai',           icon: <Mic size={14} />,      label: 'Transcription' },
-    { key: 'identifiers',  icon: <Fingerprint size={14} />, label: 'Identifier schemes' },
-    { key: 'records-vocab', icon: <ListChecks size={14} />, label: 'Records values' },
-    { key: 'labels',        icon: <Printer size={14} />,   label: 'Label designer' },
-    { key: 'portal', icon: <Globe size={14} />, label: 'Portal' },
+    { key: 'members',     icon: <Users size={14} />,    label: t('admin.page.tabs.members', { count: institution.member_count }) },
+    { key: 'settings',    icon: <Settings size={14} />, label: t('admin.page.tabs.settings') },
+    { key: 'vocabularies', icon: <BookOpen size={14} />, label: t('admin.page.tabs.vocabularies') },
+    { key: 'hierarchies',  icon: <Layers size={14} />,   label: t('admin.page.tabs.hierarchies') },
+    { key: 'templates',    icon: <Layers size={14} />,   label: t('admin.page.tabs.fieldTemplates') },
+    { key: 'integrations', icon: <Link size={14} />,     label: t('admin.page.tabs.integrations') },
+    { key: 'ai',           icon: <Mic size={14} />,      label: t('admin.page.tabs.transcription') },
+    { key: 'identifiers',  icon: <Fingerprint size={14} />, label: t('admin.page.tabs.identifierSchemes') },
+    { key: 'records-vocab', icon: <ListChecks size={14} />, label: t('admin.page.tabs.recordsValues') },
+    { key: 'labels',        icon: <Printer size={14} />,   label: t('admin.page.tabs.labelDesigner') },
+    { key: 'portal', icon: <Globe size={14} />, label: t('admin.page.tabs.portal') },
   ]
 
   return (

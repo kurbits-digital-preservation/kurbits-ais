@@ -4,9 +4,11 @@ import { Plus, Pencil, Trash2, X, Save, AlertCircle } from 'lucide-react'
 import { integrationsApi, institutionApi } from '@/api'
 import type { ExternalIntegration } from '@/types'
 import { Spinner } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import styles from './IntegrationsTab.module.css'
 
 // ─── Built-in authority sources ───────────────────────────────────────
+// Brand/service names (Wikidata, VIAF, ORCID) are proper nouns, not translated.
 
 const BUILTINS = [
   { key: 'wikidata', label: 'Wikidata',  colour: '#006699' },
@@ -18,26 +20,7 @@ const BUILTINS = [
 // 'agent'    → appears in authority lookup on agents page
 // 'metadata' → appears in vocabulary search on metadata fields
 
-const ENTITY_TYPES = [
-  { value: 'agent',    label: 'Agent authority lookup' },
-  { value: 'metadata', label: 'Metadata vocabulary field' },
-]
-
-// ─── Field mapping help ───────────────────────────────────────────────
-
-const MAPPING_HELP = `Map target fields to dot-paths in each result item.
-
-Example for {"persons": [{"name_full": "...", "acc": "..."}]}:
-{
-  "name":        "name_full",
-  "identifier":  "acc",
-  "description": "aff_name_en"
-}
-
-Supported target fields:
-  name, authorized_form, agent_type,
-  date_from, date_to, description,
-  identifier, website`
+const ENTITY_TYPE_VALUES = ['agent', 'metadata']
 
 // ─── Empty form ───────────────────────────────────────────────────────
 
@@ -62,6 +45,7 @@ function IntegrationForm({
   onCancel: () => void
   isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState(initial)
   const [headersText, setHeadersText] = useState(
     JSON.stringify(initial.headers ?? {}, null, 2)
@@ -82,48 +66,48 @@ function IntegrationForm({
       setJsonError('')
       onSave({ ...form, headers, field_mappings })
     } catch {
-      setJsonError('Headers or field mappings contain invalid JSON')
+      setJsonError(t('admin.integrations.jsonInvalid'))
     }
   }
 
   return (
     <div className={styles.formGrid}>
       <div className={styles.formGroup}>
-        <label>Name *</label>
+        <label>{t('agents.form.name')}</label>
         <input value={form.name} onChange={set('name')} placeholder="LC Subject Headings" />
       </div>
 
       <div className={styles.formGroup}>
-        <label>Used for *</label>
+        <label>{t('admin.integrations.usedFor')}</label>
         <select value={form.entity_type} onChange={set('entity_type')}>
-          {ENTITY_TYPES.map(et => (
-            <option key={et.value} value={et.value}>{et.label}</option>
+          {ENTITY_TYPE_VALUES.map(et => (
+            <option key={et} value={et}>{t(`admin.integrations.entityTypes.${et}`)}</option>
           ))}
         </select>
       </div>
 
       <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
-        <label>Base URL *</label>
+        <label>{t('admin.integrations.baseUrl')}</label>
         <input value={form.base_url} onChange={set('base_url')} placeholder="https://api.example.com" />
       </div>
 
       <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
         <label>
-          Search path * <span className={styles.hint}>use <code>{'{query}'}</code> as placeholder</span>
+          {t('admin.integrations.searchPath')} <span className={styles.hint}>{t('admin.integrations.searchPathHint')}</span>
         </label>
         <input value={form.search_path} onChange={set('search_path')} placeholder="search?q={query}" />
       </div>
 
       <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
         <label>
-          Result path <span className={styles.hint}>dot-path to the array, e.g. <code>persons</code> or <code>hits.hit</code> — leave empty if response is already an array</span>
+          {t('admin.integrations.resultPath')} <span className={styles.hint}>{t('admin.integrations.resultPathHint')}</span>
         </label>
         <input value={form.result_path} onChange={set('result_path')} placeholder="e.g. persons" />
       </div>
 
       <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
         <label>
-          Headers (JSON) <span className={styles.hint}>auth headers, API keys</span>
+          {t('admin.identifierSchemes.headersJson')} <span className={styles.hint}>{t('admin.integrations.headersHint')}</span>
         </label>
         <textarea
           value={headersText}
@@ -137,7 +121,7 @@ function IntegrationForm({
 
       <div className={styles.formGroup} style={{ gridColumn: '1 / -1' }}>
         <label>
-          Field mappings (JSON) <span className={styles.hint}>target field → source dot-path</span>
+          {t('admin.integrations.fieldMappingsJson')} <span className={styles.hint}>{t('admin.integrations.fieldMappingsHint')}</span>
         </label>
         <textarea
           value={mappingsText}
@@ -147,7 +131,7 @@ function IntegrationForm({
           placeholder={'{\n  "name": "name_full",\n  "identifier": "acc"\n}'}
           spellCheck={false}
         />
-        <pre className={styles.mappingHelp}>{MAPPING_HELP}</pre>
+        <pre className={styles.mappingHelp}>{t('admin.integrations.mappingHelp')}</pre>
       </div>
 
       {jsonError && (
@@ -158,7 +142,7 @@ function IntegrationForm({
 
       <div className={styles.formActions} style={{ gridColumn: '1 / -1' }}>
         <button className="btn btn-ghost" onClick={onCancel} disabled={isSaving}>
-          <X size={14} /> Cancel
+          <X size={14} /> {t('common.cancel')}
         </button>
         <button
           className="btn btn-primary"
@@ -166,7 +150,7 @@ function IntegrationForm({
           disabled={!form.name || !form.base_url || !form.search_path || isSaving}
         >
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-          {isSaving ? 'Saving…' : 'Save'}
+          {isSaving ? t('resources.form.saving') : t('common.save')}
         </button>
       </div>
     </div>
@@ -176,6 +160,7 @@ function IntegrationForm({
 // ─── Built-in toggles ─────────────────────────────────────────────────
 
 function BuiltinToggles() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const { data: institution } = useQuery({
@@ -202,9 +187,9 @@ function BuiltinToggles() {
     <div className={styles.section}>
       <div className={styles.sectionHeader}>
         <div>
-          <div className={styles.sectionTitle}>Built-in authority sources</div>
+          <div className={styles.sectionTitle}>{t('admin.integrations.builtinSources')}</div>
           <div className={styles.sectionDesc}>
-            These are always available in the authority lookup. Disable any that are not relevant to your institution.
+            {t('admin.integrations.builtinSourcesDesc')}
           </div>
         </div>
       </div>
@@ -228,7 +213,7 @@ function BuiltinToggles() {
                   onClick={() => toggle(b.key)}
                   disabled={mutation.isPending}
                 >
-                  {isEnabled ? 'Enabled' : 'Disabled'}
+                  {isEnabled ? t('admin.integrations.enabled') : t('admin.integrations.disabled')}
                 </button>
               </div>
             </div>
@@ -242,6 +227,7 @@ function BuiltinToggles() {
 // ─── Main tab ─────────────────────────────────────────────────────────
 
 export default function IntegrationsTab() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<number | null>(null)
@@ -278,13 +264,12 @@ export default function IntegrationsTab() {
 
   if (isLoading) return <div className={styles.tab}><Spinner /></div>
 
-  const entityLabel = (et: string) => ENTITY_TYPES.find(x => x.value === et)?.label ?? et
+  const entityLabel = (et: string) => ENTITY_TYPE_VALUES.includes(et) ? t(`admin.integrations.entityTypes.${et}`) : et
 
   return (
     <div className={styles.tab}>
       <p className={styles.intro}>
-        Configure external APIs for authority lookups and vocabulary fields.
-        Searches are proxied through the server so credentials stay private.
+        {t('admin.integrations.intro')}
       </p>
 
       <BuiltinToggles />
@@ -292,14 +277,14 @@ export default function IntegrationsTab() {
       <div className={styles.section}>
         <div className={styles.sectionHeader}>
           <div>
-            <div className={styles.sectionTitle}>Custom integrations</div>
+            <div className={styles.sectionTitle}>{t('admin.integrations.customIntegrations')}</div>
             <div className={styles.sectionDesc}>
-              Custom APIs searched alongside the built-ins above, or used in vocabulary metadata fields.
+              {t('admin.integrations.customIntegrationsDesc')}
             </div>
           </div>
           {!showForm && editing === null && (
             <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}>
-              <Plus size={13} /> Add integration
+              <Plus size={13} /> {t('admin.integrations.addIntegration')}
             </button>
           )}
         </div>
@@ -317,7 +302,7 @@ export default function IntegrationsTab() {
           )}
 
           {integrations.length === 0 && !showForm && (
-            <div className={styles.empty}>No custom integrations configured yet.</div>
+            <div className={styles.empty}>{t('admin.integrations.noneYet')}</div>
           )}
 
           {integrations.map(intg => (
@@ -344,7 +329,7 @@ export default function IntegrationsTab() {
                     </button>
                     <button
                       className="btn btn-ghost btn-sm btn-icon"
-                      onClick={() => { if (confirm(`Delete "${intg.name}"?`)) deleteMutation.mutate(intg.id) }}
+                      onClick={() => { if (confirm(t('admin.integrations.deleteConfirm', { name: intg.name }))) deleteMutation.mutate(intg.id) }}
                     >
                       <Trash2 size={13} />
                     </button>

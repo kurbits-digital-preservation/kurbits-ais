@@ -13,6 +13,7 @@ import ClassificationBpmnTab, { ProducedByPanel } from '@/components/classificat
 import { PageShell, SidebarPanel, EmptyState, Tabs, FieldList, Spinner } from '@/components/ui'
 import HierarchyLevelSelect from '@/components/ui/HierarchyLevelSelect'
 import type { ClassificationStub } from '@/types'
+import { useTranslation } from 'react-i18next'
 import styles from './ClassificationsPage.module.css'
 
 // ─── Form ─────────────────────────────────────────────────────────────
@@ -46,6 +47,7 @@ function ClassificationForm({
   onCancel: () => void
   isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<FormData>({ ...EMPTY_FORM, ...initial })
   const set = (field: keyof FormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -57,21 +59,21 @@ function ClassificationForm({
         <div className={styles.parentNote}>
           <ChevronRight size={13} />
           <span>
-            Child of <strong>{parentClassification.full_code}</strong> — {parentClassification.name}
+            {t('classifications.form.childOf')} <strong>{parentClassification.full_code}</strong> — {parentClassification.name}
           </span>
         </div>
       )}
 
       <div className={styles.formGrid}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Name *</label>
-          <input value={form.name} onChange={set('name')} placeholder="Classification name" required />
+          <label>{t('classifications.form.name')}</label>
+          <input value={form.name} onChange={set('name')} placeholder={t('classifications.form.namePlaceholder')} required />
         </div>
 
         <div className="form-group">
-          <label>Code *</label>
-          <input value={form.code} onChange={set('code')} placeholder="e.g. A, 1.2, F3" />
-          <span className="form-hint">Unique within parent. Full code is computed automatically.</span>
+          <label>{t('classifications.form.code')}</label>
+          <input value={form.code} onChange={set('code')} placeholder={t('classifications.form.codePlaceholder')} />
+          <span className="form-hint">{t('classifications.form.codeHint')}</span>
         </div>
 
         <HierarchyLevelSelect
@@ -84,32 +86,32 @@ function ClassificationForm({
         />
 
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Description</label>
+          <label>{t('resources.form.fields.description')}</label>
           <textarea value={form.description} onChange={set('description')} rows={3}
-            placeholder="What this classification covers…" />
+            placeholder={t('classifications.form.descriptionPlaceholder')} />
         </div>
 
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Scope note</label>
+          <label>{t('classifications.form.scopeNote')}</label>
           <textarea value={form.scope_note} onChange={set('scope_note')} rows={2}
-            placeholder="Guidance on what to include / exclude…" />
+            placeholder={t('classifications.form.scopeNotePlaceholder')} />
         </div>
 
         <div className="form-group">
-          <label>Valid from</label>
+          <label>{t('classifications.form.validFrom')}</label>
           <input value={form.valid_from} onChange={set('valid_from')} type="date" />
         </div>
 
         <div className="form-group">
-          <label>Valid to</label>
+          <label>{t('classifications.form.validTo')}</label>
           <input value={form.valid_to} onChange={set('valid_to')} type="date" />
-          <span className="form-hint">Leave empty if still active</span>
+          <span className="form-hint">{t('classifications.form.validToHint')}</span>
         </div>
       </div>
 
       <div className={styles.formActions}>
         <button className="btn btn-ghost" onClick={onCancel} disabled={isSaving}>
-          <X size={14} /> Cancel
+          <X size={14} /> {t('common.cancel')}
         </button>
         <button
           className="btn btn-primary"
@@ -117,7 +119,7 @@ function ClassificationForm({
           disabled={!form.name || !form.code || !form.level_name || !form.hierarchy_type_id || isSaving}
         >
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-          {isSaving ? 'Saving…' : 'Save'}
+          {isSaving ? t('resources.form.saving') : t('common.save')}
         </button>
       </div>
     </div>
@@ -127,24 +129,25 @@ function ClassificationForm({
 // ─── Details tab ──────────────────────────────────────────────────────
 
 function DetailsTab({ classification }: { classification: any }) {
+  const { t } = useTranslation()
   return (
     <div className={styles.tabContent}>
       <FieldList fields={[
-        { label: 'Full code',    value: classification.full_code },
-        { label: 'Level',        value: classification.level_name },
-        { label: 'Description',  value: classification.description },
-        { label: 'Scope note',   value: classification.scope_note },
+        { label: t('classifications.details.fullCode'), value: classification.full_code },
+        { label: t('locations.overview.level'),          value: classification.level_name },
+        { label: t('resources.form.fields.description'), value: classification.description },
+        { label: t('classifications.form.scopeNote'),    value: classification.scope_note },
         {
-          label: 'Validity period',
+          label: t('classifications.details.validityPeriod'),
           value: classification.valid_from || classification.valid_to
-            ? `${classification.valid_from ?? '?'} → ${classification.valid_to ?? 'present'}`
+            ? `${classification.valid_from ?? '?'} → ${classification.valid_to ?? t('agents.details.present')}`
             : null,
         },
       ]} />
       <ProducedByPanel classificationId={classification.id} />
       <div className={styles.detailFooter}>
-        <span>Created by {classification.created_by ?? '—'}</span>
-        <span>Updated {new Date(classification.updated_at).toLocaleDateString()}</span>
+        <span>{t('agents.details.createdBy', { name: classification.created_by || '—' })}</span>
+        <span>{t('agents.details.updated', { date: new Date(classification.updated_at).toLocaleDateString() })}</span>
       </div>
     </div>
   )
@@ -153,6 +156,7 @@ function DetailsTab({ classification }: { classification: any }) {
 // ─── Linked nodes tab ─────────────────────────────────────────────────
 
 function LinkedNodesTab({ classification }: { classification: any }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -244,7 +248,7 @@ function LinkedNodesTab({ classification }: { classification: any }) {
             <Search size={12} className={styles.linkedNodesSearchIcon} />
             <input
               className={styles.linkedNodesSearchInput}
-              placeholder={`Search ${data?.length} resource${data?.length !== 1 ? 's' : ''}…`}
+              placeholder={t('agents.linkedResources.searchCount', { count: data?.length ?? 0 })}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -261,7 +265,7 @@ function LinkedNodesTab({ classification }: { classification: any }) {
                 <input
                   className={styles.linkedNodesSearchInput}
                   style={{ fontSize: 'var(--text-xs)' }}
-                  placeholder="Filter by fonds…"
+                  placeholder={t('agents.linkedResources.filterByFonds')}
                   value={rootFilter ? rootFilter.label : rootInput}
                   readOnly={!!rootFilter}
                   onChange={e => { setRootInput(e.target.value); setRootOpen(true) }}
@@ -301,11 +305,11 @@ function LinkedNodesTab({ classification }: { classification: any }) {
 
       {(!data || data.length === 0) ? (
         <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>
-          No resources linked. Associate from the Resources section.
+          {t('classifications.linkedNodes.noneLinked')}
         </p>
       ) : filtered.length === 0 ? (
         <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>
-          No results.
+          {t('agents.linkedResources.noResults')}
         </p>
       ) : (
         filtered.map((node: any) => {
@@ -333,10 +337,10 @@ function LinkedNodesTab({ classification }: { classification: any }) {
                 </div>
               </button>
               <div className={styles.linkedNodeActions}>
-                <span className={`badge badge-${node.status}`}>{node.status}</span>
+                <span className={`badge badge-${node.status}`}>{t(`resources.status.${node.status}`, { defaultValue: node.status })}</span>
                 <button
                   className="btn btn-ghost btn-sm btn-icon"
-                  onClick={() => { if (confirm('Remove this link?')) removeMutation.mutate(node.id) }}
+                  onClick={() => { if (confirm(t('classifications.linkedNodes.removeConfirm'))) removeMutation.mutate(node.id) }}
                 >
                   <X size={12} />
                 </button>
@@ -352,6 +356,7 @@ function LinkedNodesTab({ classification }: { classification: any }) {
 // ─── History tab ──────────────────────────────────────────────────────
 
 function HistoryTab({ classificationId }: { classificationId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -364,7 +369,7 @@ function HistoryTab({ classificationId }: { classificationId: number }) {
   return (
     <div className={styles.tabContent}>
       {(!data || data.length === 0) ? (
-        <p className={styles.emptyText}>No history yet.</p>
+        <p className={styles.emptyText}>{t('resources.history.noneYet')}</p>
       ) : (
         data.map((change: any, i: number) => (
           <div key={change.id} className={styles.historyEntry}>
@@ -409,6 +414,7 @@ function ClassificationDetailPanel({
   onAddChild: (parentId: number) => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('details')
 
@@ -429,14 +435,14 @@ function ClassificationDetailPanel({
     },
   })
 
-  if (isLoading) return <div className={styles.loadingState}><Spinner /><span>Loading…</span></div>
+  if (isLoading) return <div className={styles.loadingState}><Spinner /><span>{t('common.loading')}</span></div>
   if (!classification) return null
 
   const tabs = [
-    { key: 'details', icon: <FileText size={13} />,      label: 'Details' },
-    { key: 'nodes',   icon: <Globe size={13} />,         label: `Resources${classification.node_count ? ` (${classification.node_count})` : ''}` },
-    { key: 'process', icon: <Workflow size={13} />,      label: classification.has_bpmn ? 'Process ●' : 'Process' },
-    { key: 'history', icon: <History size={13} />,       label: 'History' },
+    { key: 'details', icon: <FileText size={13} />,      label: t('resources.tabs.details') },
+    { key: 'nodes',   icon: <Globe size={13} />,         label: `${t('agents.detail.tabs.resources')}${classification.node_count ? ` (${classification.node_count})` : ''}` },
+    { key: 'process', icon: <Workflow size={13} />,      label: classification.has_bpmn ? `${t('classifications.detail.process')} ●` : t('classifications.detail.process') },
+    { key: 'history', icon: <History size={13} />,       label: t('resources.tabs.history') },
   ]
 
   return (
@@ -468,14 +474,14 @@ function ClassificationDetailPanel({
                   <span className={styles.metaSep}>·</span>
                   <span className={styles.detailValidity}>
                     <CalendarRange size={11} />
-                    {classification.valid_from ?? '?'} → {classification.valid_to ?? 'present'}
+                    {classification.valid_from ?? '?'} → {classification.valid_to ?? t('agents.details.present')}
                   </span>
                 </>
               )}
               {classification.node_count > 0 && (
                 <>
                   <span className={styles.metaSep}>·</span>
-                  <span className={styles.detailNodeCount}>{classification.node_count} linked</span>
+                  <span className={styles.detailNodeCount}>{classification.node_count} {t('classifications.detail.linkedSuffix')}</span>
                 </>
               )}
             </div>
@@ -507,27 +513,27 @@ function ClassificationDetailPanel({
               />
             )}
             <button className="btn btn-secondary btn-sm" onClick={() => onAddChild(classificationId)}>
-              <Plus size={13} /> Add child
+              <Plus size={13} /> {t('locations.detail.addChild')}
             </button>
             {classification.status === 'published' ? (
               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)', fontStyle: 'italic', padding: '4px 8px' }}
-                title="Create a new version to edit">
-                🔒 Published
+                title={t('classifications.detail.createVersionToEdit')}>
+                {t('classifications.detail.lockedPublished')}
               </span>
             ) : (
               <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(classification)}
-                title="Edit">
+                title={t('common.edit')}>
                 <Pencil size={14} />
               </button>
             )}
             <button
               className="btn btn-ghost btn-sm btn-icon"
-              title={classification.status === 'published' ? 'Retire before deleting' : 'Delete'}
+              title={classification.status === 'published' ? t('classifications.detail.retireBeforeDelete') : t('common.delete')}
               onClick={() => {
                 if (classification.status === 'published') return
                 const msg = classification.has_children
-                  ? `Delete "${classification.name}" and all its children? All must be retired or draft.`
-                  : `Delete "${classification.name}"?`
+                  ? t('classifications.detail.deleteConfirmWithChildren', { name: classification.name })
+                  : t('classifications.detail.deleteConfirmSimple', { name: classification.name })
                 if (confirm(msg)) deleteMutation.mutate()
               }}
               style={{ opacity: classification.status === 'published' ? 0.3 : 1 }}
@@ -559,10 +565,11 @@ type ViewMode = 'detail' | 'create' | 'edit'
 function StatusBadge({ status, version, versionLabel }: {
   status: string; version: number; versionLabel?: string | null
 }) {
+  const { t } = useTranslation()
   const s = status || 'draft'
   const label = s === 'published'
-    ? `v${versionLabel ?? version} published`
-    : s
+    ? t('classifications.status.publishedVersion', { version: versionLabel ?? version })
+    : t(`classifications.status.${s}`, { defaultValue: s })
   const cls = s === 'published'
     ? { background: 'var(--color-success-bg)', color: 'var(--color-success)', border: '1px solid var(--color-success-border)' }
     : s === 'retired'
@@ -578,6 +585,7 @@ function StatusBadge({ status, version, versionLabel }: {
 // ─── Publish / Retire buttons ─────────────────────────────────────────
 
 function PublishButton({ classificationId, onDone }: { classificationId: number; onDone: () => void }) {
+  const { t } = useTranslation()
   const [showLabel, setShowLabel] = useState(false)
   const [label, setLabel] = useState('')
   const mutation = useMutation({
@@ -588,19 +596,19 @@ function PublishButton({ classificationId, onDone }: { classificationId: number;
     return (
       <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
         <input value={label} onChange={e => setLabel(e.target.value)}
-          placeholder="Version label e.g. 2.1" style={{ fontSize: 'var(--text-sm)', padding: '4px 8px', width: 160 }}
+          placeholder={t('classifications.publish.versionLabelPlaceholder')} style={{ fontSize: 'var(--text-sm)', padding: '4px 8px', width: 160 }}
           onKeyDown={e => { if (e.key === 'Enter') mutation.mutate(); if (e.key === 'Escape') setShowLabel(false) }}
           autoFocus />
         <button className="btn btn-primary btn-sm" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-          <Eye size={13} /> Publish
+          <Eye size={13} /> {t('classifications.publish.publish')}
         </button>
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowLabel(false)}>Cancel</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowLabel(false)}>{t('common.cancel')}</button>
       </div>
     )
   }
   return (
     <button className="btn btn-secondary btn-sm" onClick={() => setShowLabel(true)}>
-      <Eye size={13} /> Publish
+      <Eye size={13} /> {t('classifications.publish.publish')}
     </button>
   )
 }
@@ -608,6 +616,7 @@ function PublishButton({ classificationId, onDone }: { classificationId: number;
 function RetireButton({ classificationId, hasChildren, onDone }: {
   classificationId: number; hasChildren: boolean; onDone: () => void
 }) {
+  const { t } = useTranslation()
   const mutation = useMutation({
     mutationFn: (recursive: boolean) =>
       classificationsApi.retire(classificationId, recursive),
@@ -617,9 +626,9 @@ function RetireButton({ classificationId, hasChildren, onDone }: {
   if (!hasChildren) {
     return (
       <button className="btn btn-ghost btn-sm"
-        onClick={() => { if (confirm('Retire this classification?')) mutation.mutate(false) }}
+        onClick={() => { if (confirm(t('classifications.retire.confirmSimple'))) mutation.mutate(false) }}
         style={{ color: 'var(--color-ink-faint)' }}>
-        <Archive size={13} /> Retire
+        <Archive size={13} /> {t('classifications.retire.retire')}
       </button>
     )
   }
@@ -627,14 +636,14 @@ function RetireButton({ classificationId, hasChildren, onDone }: {
   return (
     <div style={{ display: 'flex', gap: 'var(--space-1)' }}>
       <button className="btn btn-ghost btn-sm"
-        onClick={() => { if (confirm('Retire this classification only?')) mutation.mutate(false) }}
-        style={{ color: 'var(--color-ink-faint)' }} title="Retire this node only">
-        <Archive size={13} /> Retire
+        onClick={() => { if (confirm(t('classifications.retire.confirmSingle'))) mutation.mutate(false) }}
+        style={{ color: 'var(--color-ink-faint)' }} title={t('classifications.retire.retireThisOnly')}>
+        <Archive size={13} /> {t('classifications.retire.retire')}
       </button>
       <button className="btn btn-ghost btn-sm"
-        onClick={() => { if (confirm('Retire this classification AND all its children?')) mutation.mutate(true) }}
-        style={{ color: 'var(--color-ink-faint)' }} title="Retire entire tree">
-        <Archive size={13} /> Retire tree
+        onClick={() => { if (confirm(t('classifications.retire.confirmTree'))) mutation.mutate(true) }}
+        style={{ color: 'var(--color-ink-faint)' }} title={t('classifications.retire.retireEntireTree')}>
+        <Archive size={13} /> {t('classifications.retire.retireTree')}
       </button>
     </div>
   )
@@ -643,6 +652,7 @@ function RetireButton({ classificationId, hasChildren, onDone }: {
 // ─── New Version button ───────────────────────────────────────────────
 
 function NewVersionButton({ classification, onDone }: { classification: any; onDone: () => void }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [versionLabel, setVersionLabel] = useState('')
@@ -669,7 +679,7 @@ function NewVersionButton({ classification, onDone }: { classification: any; onD
   if (!open) {
     return (
       <button className="btn btn-secondary btn-sm" onClick={() => setOpen(true)}>
-        <GitCommit size={13} /> New version
+        <GitCommit size={13} /> {t('classifications.newVersion.button')}
       </button>
     )
   }
@@ -683,26 +693,26 @@ function NewVersionButton({ classification, onDone }: { classification: any; onD
       borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-xl)',
       padding: 'var(--space-4)', minWidth: 320, display: 'flex', flexDirection: 'column', gap: 'var(--space-3)',
     }}>
-      <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>Create new version</div>
+      <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)' }}>{t('classifications.newVersion.title')}</div>
 
       {isRoot && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>Revision type</label>
+          <label style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{t('classifications.newVersion.revisionType')}</label>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}>
             <input type="radio" checked={type === 'major'} onChange={() => setType('major')} style={{ marginTop: 3 }} />
             <div>
-              <div style={{ fontWeight: 500 }}>Major revision</div>
+              <div style={{ fontWeight: 500 }}>{t('classifications.newVersion.majorRevision')}</div>
               <div style={{ color: 'var(--color-ink-faint)', fontSize: 'var(--text-xs)' }}>
-                Copies the entire tree as a new draft. The current published tree remains active until the new one is published.
+                {t('classifications.newVersion.majorDesc')}
               </div>
             </div>
           </label>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 'var(--space-2)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}>
             <input type="radio" checked={type === 'minor'} onChange={() => setType('minor')} style={{ marginTop: 3 }} />
             <div>
-              <div style={{ fontWeight: 500 }}>Minor revision</div>
+              <div style={{ fontWeight: 500 }}>{t('classifications.newVersion.minorRevision')}</div>
               <div style={{ color: 'var(--color-ink-faint)', fontSize: 'var(--text-xs)' }}>
-                Republishes this node with an incremented version number. No copy is made.
+                {t('classifications.newVersion.minorDesc')}
               </div>
             </div>
           </label>
@@ -710,16 +720,16 @@ function NewVersionButton({ classification, onDone }: { classification: any; onD
       )}
 
       <div className="form-group" style={{ margin: 0 }}>
-        <label>Version label (optional)</label>
+        <label>{t('classifications.newVersion.versionLabelOptional')}</label>
         <input value={versionLabel} onChange={e => setVersionLabel(e.target.value)}
           placeholder={type === 'major' ? 'e.g. 3.0' : 'e.g. 2.1'}
           autoFocus />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)' }}>
-        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => setOpen(false)}>{t('common.cancel')}</button>
         <button className="btn btn-primary btn-sm" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
-          {mutation.isPending ? 'Creating…' : type === 'major' ? 'Copy & draft' : 'Publish new version'}
+          {mutation.isPending ? t('classifications.newVersion.creating') : type === 'major' ? t('classifications.newVersion.copyAndDraft') : t('classifications.newVersion.publishNewVersion')}
         </button>
       </div>
     </div>
@@ -729,6 +739,7 @@ function NewVersionButton({ classification, onDone }: { classification: any; onD
 // ─── Import modal ─────────────────────────────────────────────────────
 
 function ImportModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
+  const { t } = useTranslation()
   const [file, setFile] = useState<File | null>(null)
   const [hierarchyTypeId, setHierarchyTypeId] = useState('')
   const [result, setResult] = useState<any>(null)
@@ -746,7 +757,7 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
       setImportError('')
       onImported()
     },
-    onError: (e: any) => setImportError(e.response?.data?.message ?? 'Import failed'),
+    onError: (e: any) => setImportError(e.response?.data?.message ?? t('agents.import.failed')),
   })
 
   return (
@@ -755,40 +766,40 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
       <div style={{ width: 480, background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-xl)', boxShadow: 'var(--shadow-xl)', overflow: 'hidden' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-5)', borderBottom: '1px solid var(--color-border)' }}>
-          <h3 style={{ fontWeight: 600 }}><Upload size={15} style={{ marginRight: 'var(--space-2)' }} />Import classifications</h3>
+          <h3 style={{ fontWeight: 600 }}><Upload size={15} style={{ marginRight: 'var(--space-2)' }} />{t('classifications.import.title')}</h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><X size={14} /></button>
         </div>
         <div style={{ padding: 'var(--space-5)', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           {result ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-4)' }}>
               <Check size={24} style={{ color: 'var(--color-success)', marginBottom: 'var(--space-2)' }} />
-              <p>{result.created} classifications imported</p>
-              {result.errors?.length > 0 && <p style={{ color: 'var(--color-warning)', fontSize: 'var(--text-sm)' }}>{result.errors.length} skipped</p>}
+              <p>{t('classifications.import.createdCount', { count: result.created })}</p>
+              {result.errors?.length > 0 && <p style={{ color: 'var(--color-warning)', fontSize: 'var(--text-sm)' }}>{t('classifications.import.skippedCount', { count: result.errors.length })}</p>}
             </div>
           ) : (
             <>
               {importError && <div style={{ padding: 'var(--space-3)', background: 'var(--color-error-bg)', color: 'var(--color-error)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-sm)' }}>{importError}</div>}
               <div className="form-group">
-                <label>Kurbits JSON file *</label>
+                <label>{t('classifications.import.jsonFileLabel')}</label>
                 <input type="file" accept=".json" onChange={e => setFile(e.target.files?.[0] ?? null)} />
               </div>
               <div className="form-group">
-                <label>Hierarchy type *</label>
+                <label>{t('resources.modals.import.hierarchyTypeLabel')}</label>
                 <select value={hierarchyTypeId} onChange={e => setHierarchyTypeId(e.target.value)}>
-                  <option value="">Select…</option>
+                  <option value="">{t('relations.picker.selectPlaceholder')}</option>
                   {types?.map((ht: any) => <option key={ht.id} value={ht.id}>{ht.name}</option>)}
                 </select>
               </div>
               <div style={{ background: 'var(--color-bg-subtle)', padding: 'var(--space-3)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
-                JSON format: <code>{`[{"code":"A","name":"...","level":"Klass","children":[...],"diagram":"graph TD..."}]`}</code>
+                {t('classifications.import.jsonFormatLabel')} <code>{`[{"code":"A","name":"...","level":"Klass","children":[...],"diagram":"graph TD..."}]`}</code>
               </div>
             </>
           )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)', padding: 'var(--space-4) var(--space-5)', borderTop: '1px solid var(--color-border)' }}>
-          <button className="btn btn-ghost" onClick={onClose}>{result ? 'Close' : 'Cancel'}</button>
+          <button className="btn btn-ghost" onClick={onClose}>{result ? t('common.close') : t('common.cancel')}</button>
           {!result && <button className="btn btn-primary" disabled={!file || !hierarchyTypeId || mutation.isPending} onClick={() => mutation.mutate()}>
-            <Upload size={14} /> Import
+            <Upload size={14} /> {t('resources.modals.import.importButton')}
           </button>}
         </div>
       </div>
@@ -797,6 +808,7 @@ function ImportModal({ onClose, onImported }: { onClose: () => void; onImported:
 }
 
 export default function ClassificationsPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const location = useLocation()
   const [selectedId, setSelectedId] = useState<number | null>(
@@ -862,13 +874,13 @@ export default function ClassificationsPage() {
     <PageShell
       sidebar={
         <SidebarPanel
-          title="Classifications"
+          title={t('nav.classifications')}
           actions={
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => setShowImport(true)}
-                title="Import from JSON"
+                title={t('classifications.page.importFromJson')}
               >
                 <Upload size={14} />
               </button>
@@ -876,7 +888,7 @@ export default function ClassificationsPage() {
                 className="btn btn-primary btn-sm"
                 onClick={() => { setAddingChildOf(null); setViewMode('create') }}
               >
-                <Plus size={14} /> New
+                <Plus size={14} /> {t('resources.tree.newButton')}
               </button>
             </div>
           }
@@ -896,8 +908,8 @@ export default function ClassificationsPage() {
             <div className={styles.formPanelHeader}>
               <h2 className={styles.formPanelTitle}>
                 {viewMode === 'create'
-                  ? addingChildOf ? 'Add child classification' : 'New classification'
-                  : `Edit: ${editingItem?.name}`}
+                  ? addingChildOf ? t('classifications.page.addChildClassification') : t('classifications.page.newClassification')
+                  : t('classifications.page.editClassification', { name: editingItem?.name })}
               </h2>
             </div>
             <div className={styles.formPanelBody}>
@@ -937,8 +949,8 @@ export default function ClassificationsPage() {
         ) : (
           <EmptyState
             icon={<Tag size={36} />}
-            title="Select a classification to view details"
-            subtitle="or create a new one"
+            title={t('classifications.page.emptyTitle')}
+            subtitle={t('resources.emptyState.subtitle')}
           />
         )
       }

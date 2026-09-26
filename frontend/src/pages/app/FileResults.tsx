@@ -1,5 +1,6 @@
 import { FileText, Image, Film, Music, FileArchive, File as FileIcon } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import styles from './FileResults.module.css'
 
 interface FileMatch {
@@ -37,6 +38,7 @@ function fileIcon(mime: string) {
 }
 
 export default function FileResults({ groups }: { groups: FileGroup[] }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
 
   if (!groups || groups.length === 0) return null
@@ -48,7 +50,7 @@ export default function FileResults({ groups }: { groups: FileGroup[] }) {
           <button
             className={styles.groupHeader}
             onClick={() => navigate('/app/resources', { state: { selectNodeId: group.node_id } })}
-            title="Open resource"
+            title={t('search.fileResults.openResource')}
           >
             <div className={styles.groupHeaderInfo}>
               <span className={styles.groupTitle}>{group.title}</span>
@@ -58,7 +60,7 @@ export default function FileResults({ groups }: { groups: FileGroup[] }) {
               </div>
             </div>
             <span className={styles.groupCount}>
-              {group.match_count} file{group.match_count !== 1 ? 's' : ''}
+              {t('search.fileResults.filesCount', { count: group.match_count })}
             </span>
           </button>
 
@@ -68,7 +70,7 @@ export default function FileResults({ groups }: { groups: FileGroup[] }) {
                 key={f.id}
                 className={styles.fileRow}
                 onClick={() => navigate('/app/resources', { state: { selectNodeId: group.node_id } })}
-                title="Open in resource's Files tab"
+                title={t('search.fileResults.openInFilesTab')}
               >
                 <span className={styles.fileIcon}>{fileIcon(f.mime_type)}</span>
                 <span className={styles.fileName}>{f.filename}</span>
@@ -79,7 +81,7 @@ export default function FileResults({ groups }: { groups: FileGroup[] }) {
                     <span>{f.image_width}×{f.image_height}</span>
                   )}
                   <span>{fmtSize(f.file_size)}</span>
-                  {f.has_checksum && <span className={styles.fileChecksum} title="Has checksum">✓</span>}
+                  {f.has_checksum && <span className={styles.fileChecksum} title={t('search.fileResults.hasChecksum')}>✓</span>}
                 </span>
               </button>
             ))}

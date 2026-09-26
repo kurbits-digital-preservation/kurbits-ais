@@ -1,8 +1,10 @@
+import { useTranslation } from 'react-i18next'
 import styles from './FileFilters.module.css'
 
 // Common formats offered as quick picks; the archivist can also leave blank.
+// Format names (JPEG, PDF, MP3, etc.) are universal acronyms, not translated.
 const MIME_PRESETS = [
-  { value: '', label: 'Any format' },
+  { value: '', labelKey: 'search.fileFilters.anyFormat' },
   { value: 'image/jpeg', label: 'JPEG' },
   { value: 'image/tiff', label: 'TIFF' },
   { value: 'image/png', label: 'PNG' },
@@ -16,6 +18,7 @@ export default function FileFilters({ params, setParam, clearParam }: {
   setParam: (k: string, v: string) => void
   clearParam: (k: string) => void
 }) {
+  const { t } = useTranslation()
   const active =
     ['file_mime', 'file_pronom', 'file_min_size', 'file_has_checksum', 'file_min_width']
     .some(k => params.has(k))
@@ -23,28 +26,28 @@ export default function FileFilters({ params, setParam, clearParam }: {
   return (
     <div className={styles.fileFilters}>
       <div className={styles.title}>
-        File filters
+        {t('search.fileFilters.title')}
         {active && (
           <button className={styles.clear} onClick={() =>
             ['file_mime','file_pronom','file_min_size','file_max_size','file_has_checksum','file_min_width','file_min_height']
               .forEach(clearParam)}>
-            clear
+            {t('search.facets.clear')}
           </button>
         )}
       </div>
 
       <label className={styles.field}>
-        <span>Format</span>
+        <span>{t('search.fileFilters.format')}</span>
         <select
           value={params.get('file_mime') ?? ''}
           onChange={e => e.target.value ? setParam('file_mime', e.target.value) : clearParam('file_mime')}
         >
-          {MIME_PRESETS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          {MIME_PRESETS.map(m => <option key={m.value} value={m.value}>{m.labelKey ? t(m.labelKey) : m.label}</option>)}
         </select>
       </label>
 
       <label className={styles.field}>
-        <span>PRONOM id</span>
+        <span>{t('search.fileFilters.pronomId')}</span>
         <input
           value={params.get('file_pronom') ?? ''}
           onChange={e => e.target.value ? setParam('file_pronom', e.target.value) : clearParam('file_pronom')}
@@ -53,7 +56,7 @@ export default function FileFilters({ params, setParam, clearParam }: {
       </label>
 
       <label className={styles.field}>
-        <span>Min size (MB)</span>
+        <span>{t('search.fileFilters.minSizeMb')}</span>
         <input
           type="number" min={0}
           value={params.get('file_min_size') ? String(Number(params.get('file_min_size')) / 1048576) : ''}
@@ -65,7 +68,7 @@ export default function FileFilters({ params, setParam, clearParam }: {
       </label>
 
       <label className={styles.field}>
-        <span>Min width (px)</span>
+        <span>{t('search.fileFilters.minWidthPx')}</span>
         <input
           type="number" min={0}
           value={params.get('file_min_width') ?? ''}
@@ -80,7 +83,7 @@ export default function FileFilters({ params, setParam, clearParam }: {
           checked={params.get('file_has_checksum') === 'true'}
           onChange={e => e.target.checked ? setParam('file_has_checksum', 'true') : clearParam('file_has_checksum')}
         />
-        <span>Has checksum only</span>
+        <span>{t('search.fileFilters.hasChecksumOnly')}</span>
       </label>
     </div>
   )

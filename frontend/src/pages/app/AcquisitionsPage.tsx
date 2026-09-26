@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { acquisitionsApi, agentsApi, checklistTemplatesApi } from '@/api'
 import { Spinner, Tabs } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import styles from './AcquisitionsPage.module.css'
 
 // ─── Constants ────────────────────────────────────────────────────────
@@ -41,7 +42,17 @@ const STATUS_COLORS: Record<string, string> = {
   closed:             'var(--color-success)',
 }
 
+const STATUS_KEY_MAP: Record<string, string> = {
+  draft: 'draft', active: 'active', suspended: 'suspended', terminated: 'terminated',
+  expected: 'expected', received: 'received', in_review: 'inReview', accepted: 'accepted',
+  partially_accepted: 'partiallyAccepted', rejected: 'rejected', open: 'open', closed: 'closed',
+}
+
 function StatusBadge({ status, label }: { status: string; label?: string }) {
+  const { t } = useTranslation()
+  const fallback = STATUS_KEY_MAP[status]
+    ? (status === 'draft' ? t('resources.status.draft') : status === 'open' ? t('flags.open') : t(`acquisitions.statusLabels.${STATUS_KEY_MAP[status]}`))
+    : status.replace(/_/g, ' ')
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center',
@@ -52,17 +63,18 @@ function StatusBadge({ status, label }: { status: string; label?: string }) {
       border: `1px solid color-mix(in srgb, ${STATUS_COLORS[status] ?? '#9ca3af'} 30%, transparent)`,
       whiteSpace: 'nowrap',
     }}>
-      {label ?? status.replace(/_/g, ' ')}
+      {label ?? fallback}
     </span>
   )
 }
 
 // ─── Agent search typeahead ───────────────────────────────────────────
 
-function AgentTypeahead({ value, label, onChange, placeholder = 'Search agents…' }: {
+function AgentTypeahead({ value, label, onChange, placeholder }: {
   value: number | null; label: string; onChange: (id: number | null, name: string) => void
   placeholder?: string
 }) {
+  const { t } = useTranslation()
   const [q, setQ] = useState(label)
   const [open, setOpen] = useState(false)
   const { data: results } = useQuery({
@@ -76,7 +88,7 @@ function AgentTypeahead({ value, label, onChange, placeholder = 'Search agents�
         onChange={e => { setQ(e.target.value); setOpen(true); if (!e.target.value) onChange(null, '') }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder={placeholder} />
+        placeholder={placeholder ?? t('agents.list.searchPlaceholder')} />
       {open && (results as any[])?.length > 0 && (
         <div className={styles.typeaheadMenu}>
           {(results as any[]).map((a: any) => (
@@ -101,6 +113,7 @@ function RefTypeahead({ items, value, onChange, placeholder, refKey }: {
   placeholder: string
   refKey: 'reference_number' | 'accession_number'
 }) {
+  const { t } = useTranslation()
   const selected = items.find((i: any) => String(i.id) === String(value))
   const [q, setQ] = useState(selected ? `${selected[refKey]} — ${selected.title}` : '')
   const [open, setOpen] = useState(false)
@@ -130,7 +143,7 @@ function RefTypeahead({ items, value, onChange, placeholder, refKey }: {
         <div className={styles.typeaheadMenu}>
           <button className={styles.typeaheadItem}
             onMouseDown={() => { onChange(null); setQ(''); setOpen(false) }}>
-            <span className={styles.typeaheadMeta}>None</span>
+            <span className={styles.typeaheadMeta}>{t('acquisitions.refSearch.none')}</span>
           </button>
           {filtered.slice(0, 12).map((i: any) => (
             <button key={i.id} className={styles.typeaheadItem}
@@ -153,6 +166,7 @@ function SAForm({ initial, onSave, onCancel, isSaving }: {
   initial?: any; onSave: (d: Record<string, unknown>) => void
   onCancel: () => void; isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState({
     title:                 initial?.title ?? '',
     agent_id:              initial?.agent_id ?? null as number | null,
@@ -174,62 +188,62 @@ function SAForm({ initial, onSave, onCancel, isSaving }: {
     <div className={styles.form}>
       <div className={styles.formGrid2}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Title *</label>
-          <input value={form.title} onChange={set('title')} placeholder="e.g. Gothenburg Municipal Records" autoFocus />
+          <label>{t('resources.form.fields.title')}</label>
+          <input value={form.title} onChange={set('title')} placeholder={t('acquisitions.sa.titlePlaceholder')} autoFocus />
         </div>
         <div className="form-group">
-          <label>Depositor (agent)</label>
+          <label>{t('acquisitions.sa.depositor')}</label>
           <AgentTypeahead value={form.agent_id} label={form.agent_name}
             onChange={(id, name) => setForm(p => ({ ...p, agent_id: id, agent_name: name }))} />
         </div>
         <div className="form-group">
-          <label>Status</label>
+          <label>{t('flags.status')}</label>
           <select value={form.status} onChange={set('status')}>
-            {SA_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            {SA_STATUSES.map(s => <option key={s} value={s}>{t(`acquisitions.statusLabels.${STATUS_KEY_MAP[s]}`, { defaultValue: s })}</option>)}
           </select>
         </div>
         <div className="form-group">
-          <label>Agreement date</label>
+          <label>{t('acquisitions.sa.agreementDate')}</label>
           <input type="date" value={form.agreement_date} onChange={set('agreement_date')} />
         </div>
         <div className="form-group">
-          <label>Review date</label>
+          <label>{t('acquisitions.sa.reviewDate')}</label>
           <input type="date" value={form.review_date} onChange={set('review_date')} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Delivery schedule</label>
+          <label>{t('acquisitions.sa.deliverySchedule')}</label>
           <textarea value={form.delivery_schedule} onChange={set('delivery_schedule')} rows={2}
-            placeholder="Annual transfer of records older than 10 years…" />
+            placeholder={t('acquisitions.sa.deliverySchedulePlaceholder')} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Scope and content</label>
+          <label>{t('resources.form.fields.scopeAndContent')}</label>
           <textarea value={form.scope_and_content} onChange={set('scope_and_content')} rows={3}
-            placeholder="Description of the records covered by this agreement…" />
+            placeholder={t('acquisitions.sa.scopeAndContentPlaceholder')} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Access conditions</label>
+          <label>{t('resources.form.fields.accessConditions')}</label>
           <textarea value={form.access_conditions} onChange={set('access_conditions')} rows={2} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Appraisal notes</label>
+          <label>{t('acquisitions.sa.appraisalNotes')}</label>
           <textarea value={form.appraisal_notes} onChange={set('appraisal_notes')} rows={2} />
         </div>
         <div className="form-group">
-          <label>Disposition authority</label>
+          <label>{t('acquisitions.sa.dispositionAuthority')}</label>
           <input value={form.disposition_authority} onChange={set('disposition_authority')}
-            placeholder="Reference to retention schedule or legal authority" />
+            placeholder={t('acquisitions.sa.dispositionAuthorityPlaceholder')} />
         </div>
         <div className="form-group">
-          <label>Notes</label>
+          <label>{t('locations.notes')}</label>
           <textarea value={form.notes} onChange={set('notes')} rows={2} />
         </div>
       </div>
       <div className={styles.formActions}>
-        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
         <button className="btn btn-primary" disabled={!form.title.trim() || isSaving}
           onClick={() => onSave({ ...form, agent_name: undefined })}>
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-          {initial ? 'Save changes' : 'Create agreement'}
+          {initial ? t('resources.form.saveChanges') : t('acquisitions.sa.createAgreement')}
         </button>
       </div>
     </div>
@@ -237,6 +251,7 @@ function SAForm({ initial, onSave, onCancel, isSaving }: {
 }
 
 function SADetail({ sa, onEdit, onDeleted }: { sa: any; onEdit: () => void; onDeleted: () => void }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadDesc, setUploadDesc] = useState('')
@@ -283,39 +298,39 @@ function SADetail({ sa, onEdit, onDeleted }: { sa: any; onEdit: () => void; onDe
         <div className={styles.detailActions}>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onEdit}><Pencil size={14} /></button>
           <button className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => { if (confirm('Delete this agreement?')) deleteMutation.mutate() }}>
+            onClick={() => { if (confirm(t('acquisitions.sa.deleteConfirm'))) deleteMutation.mutate() }}>
             <Trash2 size={14} />
           </button>
         </div>
       </div>
 
       <div className={styles.detailBody}>
-        {obj.agreement_date && <Field label="Agreement date" value={obj.agreement_date} />}
-        {obj.review_date && <Field label="Review date" value={obj.review_date} />}
-        {obj.delivery_schedule && <Field label="Delivery schedule" value={obj.delivery_schedule} multi />}
-        {obj.scope_and_content && <Field label="Scope and content" value={obj.scope_and_content} multi />}
-        {obj.access_conditions && <Field label="Access conditions" value={obj.access_conditions} multi />}
-        {obj.appraisal_notes && <Field label="Appraisal notes" value={obj.appraisal_notes} multi />}
-        {obj.disposition_authority && <Field label="Disposition authority" value={obj.disposition_authority} />}
-        {obj.notes && <Field label="Notes" value={obj.notes} multi />}
+        {obj.agreement_date && <Field label={t('acquisitions.sa.agreementDate')} value={obj.agreement_date} />}
+        {obj.review_date && <Field label={t('acquisitions.sa.reviewDate')} value={obj.review_date} />}
+        {obj.delivery_schedule && <Field label={t('acquisitions.sa.deliverySchedule')} value={obj.delivery_schedule} multi />}
+        {obj.scope_and_content && <Field label={t('resources.form.fields.scopeAndContent')} value={obj.scope_and_content} multi />}
+        {obj.access_conditions && <Field label={t('resources.form.fields.accessConditions')} value={obj.access_conditions} multi />}
+        {obj.appraisal_notes && <Field label={t('acquisitions.sa.appraisalNotes')} value={obj.appraisal_notes} multi />}
+        {obj.disposition_authority && <Field label={t('acquisitions.sa.dispositionAuthority')} value={obj.disposition_authority} />}
+        {obj.notes && <Field label={t('locations.notes')} value={obj.notes} multi />}
 
         {/* Attachments */}
         <div className={styles.attachSection}>
           <div className={styles.attachHeader}>
-            <span className={styles.attachTitle}><Paperclip size={13} /> Attachments</span>
+            <span className={styles.attachTitle}><Paperclip size={13} /> {t('acquisitions.sa.attachments')}</span>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowUpload(v => !v)}>
-              <Upload size={13} /> Upload
+              <Upload size={13} /> {t('acquisitions.sa.upload')}
             </button>
           </div>
           {showUpload && (
             <div className={styles.uploadForm}>
               <input type="file" onChange={e => setUploadFile(e.target.files?.[0] ?? null)} />
               <input value={uploadDesc} onChange={e => setUploadDesc(e.target.value)}
-                placeholder="Description (optional)" />
+                placeholder={t('acquisitions.sa.uploadDescPlaceholder')} />
               <button className="btn btn-primary btn-sm"
                 disabled={!uploadFile || uploadMutation.isPending}
                 onClick={() => uploadMutation.mutate()}>
-                {uploadMutation.isPending ? <Spinner size={13} /> : <Upload size={13} />} Upload
+                {uploadMutation.isPending ? <Spinner size={13} /> : <Upload size={13} />} {t('acquisitions.sa.upload')}
               </button>
             </div>
           )}
@@ -340,18 +355,18 @@ function SADetail({ sa, onEdit, onDeleted }: { sa: any; onEdit: () => void; onDe
                 target="_blank"
                 rel="noreferrer"
                 className="btn btn-ghost btn-sm btn-icon"
-                title="Download or view"
+                title={t('acquisitions.sa.downloadOrView')}
               >
                 <Download size={12} />
               </a>
-              <button className="btn btn-ghost btn-sm btn-icon" title="Delete"
+              <button className="btn btn-ghost btn-sm btn-icon" title={t('common.delete')}
                 onClick={() => deleteAttMutation.mutate(att.id)}>
                 <X size={11} />
               </button>
             </div>
           ))}
           {(obj.attachments ?? []).length === 0 && !showUpload && (
-            <p className={styles.empty}>No attachments.</p>
+            <p className={styles.empty}>{t('acquisitions.sa.noAttachments')}</p>
           )}
         </div>
       </div>
@@ -367,6 +382,7 @@ function DeliveryForm({ initial, onSave, onCancel, isSaving }: {
   initial?: any; onSave: (d: Record<string, unknown>) => void
   onCancel: () => void; isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState({
     title:                    initial?.title ?? '',
     submission_agreement_id:  initial?.submission_agreement_id ?? '' as any,
@@ -393,82 +409,82 @@ function DeliveryForm({ initial, onSave, onCancel, isSaving }: {
     enabled: !initial, // only needed when creating
   })
 
-  const relevantTemplates = (checklistTemplates as any[]).filter((t: any) =>
-    !t.delivery_method || !form.delivery_method || t.delivery_method === form.delivery_method
+  const relevantTemplates = (checklistTemplates as any[]).filter((tmpl: any) =>
+    !tmpl.delivery_method || !form.delivery_method || tmpl.delivery_method === form.delivery_method
   )
 
   return (
     <div className={styles.form}>
       <div className={styles.formGrid2}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Title *</label>
+          <label>{t('resources.form.fields.title')}</label>
           <input value={form.title} onChange={set('title')} autoFocus
-            placeholder="e.g. Annual transfer 2024 — Building permits" />
+            placeholder={t('acquisitions.delivery.titlePlaceholder')} />
         </div>
         <div className="form-group">
-          <label>Submission agreement</label>
+          <label>{t('acquisitions.delivery.submissionAgreement')}</label>
           <RefTypeahead
             items={(sas as any[]) ?? []}
             value={form.submission_agreement_id}
             onChange={id => setForm(p => ({ ...p, submission_agreement_id: id ?? '' as any }))}
-            placeholder="Search agreements…"
+            placeholder={t('acquisitions.delivery.searchAgreements')}
             refKey="reference_number"
           />
         </div>
         <div className="form-group">
-          <label>Status</label>
+          <label>{t('flags.status')}</label>
           <select value={form.status} onChange={set('status')}>
-            {DELIVERY_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {DELIVERY_STATUSES.map(s => <option key={s.value} value={s.value}>{t(`acquisitions.statusLabels.${STATUS_KEY_MAP[s.value]}`)}</option>)}
           </select>
         </div>
         <div className="form-group">
-          <label>Delivery method</label>
+          <label>{t('acquisitions.delivery.deliveryMethod')}</label>
           <select value={form.delivery_method} onChange={set('delivery_method')}>
-            <option value="">Unknown</option>
-            {DELIVERY_METHODS.map(m => <option key={m} value={m}>{m.replace(/_/g, ' ')}</option>)}
+            <option value="">{t('acquisitions.delivery.unknown')}</option>
+            {DELIVERY_METHODS.map(m => <option key={m} value={m}>{t(`acquisitions.methods.${m}`)}</option>)}
           </select>
         </div>
         <div className="form-group">
-          <label>Delivery date</label>
+          <label>{t('acquisitions.delivery.deliveryDate')}</label>
           <input type="date" value={form.delivery_date} onChange={set('delivery_date')} />
         </div>
         <div className="form-group">
-          <label>Item count</label>
-          <input type="number" value={form.item_count} onChange={set('item_count')} placeholder="Number of items" />
+          <label>{t('acquisitions.delivery.itemCount')}</label>
+          <input type="number" value={form.item_count} onChange={set('item_count')} placeholder={t('acquisitions.delivery.itemCountPlaceholder')} />
         </div>
         <div className="form-group">
-          <label>Physical extent</label>
-          <input value={form.physical_extent} onChange={set('physical_extent')} placeholder="e.g. 3 boxes, 0.4 hm" />
+          <label>{t('acquisitions.delivery.physicalExtent')}</label>
+          <input value={form.physical_extent} onChange={set('physical_extent')} placeholder={t('acquisitions.delivery.physicalExtentPlaceholder')} />
         </div>
         {!initial && (
           <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-            <label>Checklist template</label>
+            <label>{t('acquisitions.delivery.checklistTemplate')}</label>
             <select value={form.checklist_template_id} onChange={set('checklist_template_id')}>
-              <option value="">Auto-select based on delivery type</option>
-              {relevantTemplates.map((t: any) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                  {t.delivery_method ? ` (${t.delivery_method.replace(/_/g, ' ')})` : ' (all types)'}
-                  {t.is_default ? ' — default' : ''}
+              <option value="">{t('acquisitions.delivery.autoSelectHint')}</option>
+              {relevantTemplates.map((tmpl: any) => (
+                <option key={tmpl.id} value={tmpl.id}>
+                  {tmpl.name}
+                  {tmpl.delivery_method ? ` (${t(`acquisitions.methods.${tmpl.delivery_method}`)})` : ` ${t('acquisitions.delivery.allTypes')}`}
+                  {tmpl.is_default ? t('acquisitions.delivery.defaultSuffix') : ''}
                 </option>
               ))}
             </select>
             <span className="form-hint">
-              Leave as auto to use the default template for the selected delivery type.
+              {t('acquisitions.delivery.autoTemplateHint')}
             </span>
           </div>
         )}
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Description</label>
+          <label>{t('resources.form.fields.description')}</label>
           <textarea value={form.description} onChange={set('description')} rows={3} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Notes</label>
+          <label>{t('locations.notes')}</label>
           <textarea value={form.notes} onChange={set('notes')} rows={2} />
         </div>
       </div>
       <div className={styles.formActions}>
-        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
         <button className="btn btn-primary" disabled={!form.title.trim() || isSaving}
           onClick={() => onSave({
             ...form,
@@ -477,7 +493,7 @@ function DeliveryForm({ initial, onSave, onCancel, isSaving }: {
             checklist_template_id: form.checklist_template_id ? parseInt(form.checklist_template_id) : null,
           })}>
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-          {initial ? 'Save changes' : 'Create delivery'}
+          {initial ? t('resources.form.saveChanges') : t('acquisitions.delivery.createDelivery')}
         </button>
       </div>
     </div>
@@ -485,6 +501,7 @@ function DeliveryForm({ initial, onSave, onCancel, isSaving }: {
 }
 
 function Checklist({ delivery }: { delivery: any }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [items, setItems] = useState<any[]>(delivery.checklist ?? [])
   const [showTemplates, setShowTemplates] = useState(false)
@@ -521,8 +538,8 @@ function Checklist({ delivery }: { delivery: any }) {
 
   const saveNote = () => mutation.mutate(items)
 
-  const applyTemplate = (t: any) => {
-    const next = (t.items as any[]).map(i => ({
+  const applyTemplate = (tmpl: any) => {
+    const next = (tmpl.items as any[]).map(i => ({
       key: i.key || i.label.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
       label: i.label,
       checked: false,
@@ -538,7 +555,7 @@ function Checklist({ delivery }: { delivery: any }) {
   return (
     <div className={styles.checklist}>
       <div className={styles.checklistHeader}>
-        <span className={styles.checklistTitle}>Checklist</span>
+        <span className={styles.checklistTitle}>{t('acquisitions.checklist.title')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
           <span className={styles.checklistProgress}>
             {done}/{items.length}
@@ -548,8 +565,8 @@ function Checklist({ delivery }: { delivery: any }) {
           </span>
           <div style={{ position: 'relative' }}>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowTemplates(v => !v)}
-              title="Apply a checklist template">
-              Apply template
+              title={t('acquisitions.checklist.applyTemplateTitle')}>
+              {t('acquisitions.checklist.applyTemplate')}
             </button>
             {showTemplates && (
               <>
@@ -561,25 +578,25 @@ function Checklist({ delivery }: { delivery: any }) {
                   {(templates as any[]).length === 0 && (
                     <div style={{ padding: 'var(--space-3)', fontSize: 'var(--text-sm)',
                       color: 'var(--color-ink-faint)', fontStyle: 'italic' }}>
-                      No templates configured.
+                      {t('acquisitions.checklist.noTemplates')}
                     </div>
                   )}
-                  {(templates as any[]).map((t: any) => (
-                    <button key={t.id}
+                  {(templates as any[]).map((tmpl: any) => (
+                    <button key={tmpl.id}
                       style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%',
                         padding: '8px var(--space-3)', background: 'none', border: 'none',
                         borderBottom: '1px solid var(--color-border)', cursor: 'pointer',
                         textAlign: 'left', fontFamily: 'var(--font-sans)', transition: 'background 0.06s' }}
                       onMouseEnter={e => (e.currentTarget.style.background = 'var(--color-bg-subtle)')}
                       onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-                      onClick={() => applyTemplate(t)}>
+                      onClick={() => applyTemplate(tmpl)}>
                       <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--color-ink)' }}>
-                        {t.name}
+                        {tmpl.name}
                       </span>
                       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
-                        {t.items.length} items
-                        {t.delivery_method ? ` · ${t.delivery_method.replace(/_/g, ' ')}` : ''}
-                        {t.is_default ? ' · default' : ''}
+                        {t('acquisitions.checklist.itemsCount', { count: tmpl.items.length })}
+                        {tmpl.delivery_method ? ` · ${t(`acquisitions.methods.${tmpl.delivery_method}`)}` : ''}
+                        {tmpl.is_default ? ` · ${t('printLabels.default')}` : ''}
                       </span>
                     </button>
                   ))}
@@ -606,7 +623,7 @@ function Checklist({ delivery }: { delivery: any }) {
               value={item.note ?? ''}
               onChange={e => updateNote(idx, e.target.value)}
               onBlur={saveNote}
-              placeholder="Add note…"
+              placeholder={t('acquisitions.checklist.addNotePlaceholder')}
             />
           </div>
         </div>
@@ -619,6 +636,7 @@ function DeliveryDetail({ delivery, onEdit, onDeleted, onNavigate }: {
   delivery: any; onEdit: () => void; onDeleted: () => void
   onNavigate: (section: string, id: number) => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
 
   const { data: detail } = useQuery({
@@ -632,7 +650,7 @@ function DeliveryDetail({ delivery, onEdit, onDeleted, onNavigate }: {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['deliveries'] }); onDeleted() },
   })
 
-  const statusLabel = DELIVERY_STATUSES.find(s => s.value === obj.status)?.label ?? obj.status
+  const statusLabel = STATUS_KEY_MAP[obj.status] ? t(`acquisitions.statusLabels.${STATUS_KEY_MAP[obj.status]}`) : obj.status
 
   return (
     <div className={styles.detail}>
@@ -643,14 +661,14 @@ function DeliveryDetail({ delivery, onEdit, onDeleted, onNavigate }: {
           <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-1)' }}>
             <StatusBadge status={obj.status} label={statusLabel} />
             {obj.delivery_method && (
-              <span className={styles.detailMeta}>{obj.delivery_method.replace(/_/g, ' ')}</span>
+              <span className={styles.detailMeta}>{t(`acquisitions.methods.${obj.delivery_method}`, { defaultValue: obj.delivery_method.replace(/_/g, ' ') })}</span>
             )}
           </div>
         </div>
         <div className={styles.detailActions}>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onEdit}><Pencil size={14} /></button>
           <button className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => { if (confirm('Delete this delivery?')) deleteMutation.mutate() }}>
+            onClick={() => { if (confirm(t('acquisitions.delivery.deleteConfirm'))) deleteMutation.mutate() }}>
             <Trash2 size={14} />
           </button>
         </div>
@@ -658,7 +676,7 @@ function DeliveryDetail({ delivery, onEdit, onDeleted, onNavigate }: {
       <div className={styles.detailBody}>
         {obj.submission_agreement_ref && (
           <div className={styles.field}>
-            <dt className={styles.fieldLabel}>Submission agreement</dt>
+            <dt className={styles.fieldLabel}>{t('acquisitions.delivery.submissionAgreement')}</dt>
             <dd className={styles.fieldValue}>
               <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', color: 'var(--color-accent)', padding: 0, fontSize: 'var(--text-sm)' }}
                 onClick={() => onNavigate('agreements', obj.submission_agreement_id)}>
@@ -667,13 +685,13 @@ function DeliveryDetail({ delivery, onEdit, onDeleted, onNavigate }: {
             </dd>
           </div>
         )}
-        {obj.delivery_date && <Field label="Delivery date" value={obj.delivery_date} />}
-        {obj.received_at && <Field label="Received" value={`${obj.received_at.slice(0,10)} by ${obj.received_by}`} />}
-        {obj.item_count && <Field label="Item count" value={String(obj.item_count)} />}
-        {obj.physical_extent && <Field label="Physical extent" value={obj.physical_extent} />}
-        {obj.size_bytes && <Field label="Digital size" value={`${(obj.size_bytes / 1e6).toFixed(1)} MB`} />}
-        {obj.description && <Field label="Description" value={obj.description} multi />}
-        {obj.notes && <Field label="Notes" value={obj.notes} multi />}
+        {obj.delivery_date && <Field label={t('acquisitions.delivery.deliveryDate')} value={obj.delivery_date} />}
+        {obj.received_at && <Field label={t('acquisitions.statusLabels.received')} value={t('acquisitions.delivery.receivedBy', { date: obj.received_at.slice(0,10), name: obj.received_by })} />}
+        {obj.item_count && <Field label={t('acquisitions.delivery.itemCount')} value={String(obj.item_count)} />}
+        {obj.physical_extent && <Field label={t('acquisitions.delivery.physicalExtent')} value={obj.physical_extent} />}
+        {obj.size_bytes && <Field label={t('acquisitions.delivery.digitalSize')} value={`${(obj.size_bytes / 1e6).toFixed(1)} MB`} />}
+        {obj.description && <Field label={t('resources.form.fields.description')} value={obj.description} multi />}
+        {obj.notes && <Field label={t('locations.notes')} value={obj.notes} multi />}
 
         <Checklist delivery={obj} />
       </div>
@@ -689,6 +707,7 @@ function AccessionForm({ initial, onSave, onCancel, isSaving }: {
   initial?: any; onSave: (d: Record<string, unknown>) => void
   onCancel: () => void; isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState({
     title:                initial?.title ?? '',
     delivery_id:          initial?.delivery_id ?? '' as any,
@@ -721,76 +740,76 @@ function AccessionForm({ initial, onSave, onCancel, isSaving }: {
     <div className={styles.form}>
       <div className={styles.formGrid2}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Title *</label>
+          <label>{t('resources.form.fields.title')}</label>
           <input value={form.title} onChange={set('title')} autoFocus />
         </div>
         <div className="form-group">
-          <label>Delivery</label>
+          <label>{t('acquisitions.accession.delivery')}</label>
           <RefTypeahead
             items={(deliveries as any[]) ?? []}
             value={form.delivery_id}
             onChange={id => setForm(p => ({ ...p, delivery_id: id ?? '' as any }))}
-            placeholder="Search deliveries…"
+            placeholder={t('acquisitions.delivery.searchDeliveries')}
             refKey="reference_number"
           />
         </div>
         <div className="form-group">
-          <label>Submission agreement</label>
+          <label>{t('acquisitions.delivery.submissionAgreement')}</label>
           <RefTypeahead
             items={(sas as any[]) ?? []}
             value={form.submission_agreement_id}
             onChange={id => setForm(p => ({ ...p, submission_agreement_id: id ?? '' as any }))}
-            placeholder="Search agreements…"
+            placeholder={t('acquisitions.delivery.searchAgreements')}
             refKey="reference_number"
           />
         </div>
         <div className="form-group">
-          <label>Creator (if different from depositor)</label>
+          <label>{t('acquisitions.accession.creatorLabel')}</label>
           <AgentTypeahead value={form.creator_agent_id} label={form.creator_agent_name}
             onChange={(id, name) => setForm(p => ({ ...p, creator_agent_id: id, creator_agent_name: name }))} />
         </div>
         <div className="form-group">
-          <label>Status</label>
+          <label>{t('flags.status')}</label>
           <select value={form.status} onChange={set('status')}>
-            <option value="open">Open</option>
-            <option value="closed">Closed</option>
+            <option value="open">{t('flags.open')}</option>
+            <option value="closed">{t('acquisitions.statusLabels.closed')}</option>
           </select>
         </div>
         <div className="form-group">
-          <label>Date received</label>
+          <label>{t('acquisitions.accession.dateReceived')}</label>
           <input type="date" value={form.date_received} onChange={set('date_received')} />
         </div>
         <div className="form-group">
-          <label>Date accessioned</label>
+          <label>{t('acquisitions.accession.dateAccessioned')}</label>
           <input type="date" value={form.date_accessioned} onChange={set('date_accessioned')} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Extent</label>
-          <input value={form.extent} onChange={set('extent')} placeholder="e.g. 2 boxes, 3.5 hm, 12 GB" />
+          <label>{t('acquisitions.accession.extent')}</label>
+          <input value={form.extent} onChange={set('extent')} placeholder={t('acquisitions.accession.extentPlaceholder')} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Description</label>
+          <label>{t('resources.form.fields.description')}</label>
           <textarea value={form.description} onChange={set('description')} rows={3} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Appraisal decision</label>
+          <label>{t('acquisitions.accession.appraisalDecision')}</label>
           <textarea value={form.appraisal_decision} onChange={set('appraisal_decision')} rows={2} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Access restrictions</label>
+          <label>{t('acquisitions.accession.accessRestrictions')}</label>
           <textarea value={form.access_restrictions} onChange={set('access_restrictions')} rows={2} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Processing notes</label>
+          <label>{t('acquisitions.accession.processingNotes')}</label>
           <textarea value={form.processing_notes} onChange={set('processing_notes')} rows={2} />
         </div>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Disposition notes</label>
+          <label>{t('acquisitions.accession.dispositionNotes')}</label>
           <textarea value={form.disposition_notes} onChange={set('disposition_notes')} rows={2} />
         </div>
       </div>
       <div className={styles.formActions}>
-        <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
         <button className="btn btn-primary" disabled={!form.title.trim() || isSaving}
           onClick={() => onSave({
             ...form,
@@ -799,7 +818,7 @@ function AccessionForm({ initial, onSave, onCancel, isSaving }: {
             submission_agreement_id: form.submission_agreement_id || null,
           })}>
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-          {initial ? 'Save changes' : 'Create accession'}
+          {initial ? t('resources.form.saveChanges') : t('acquisitions.accession.createAccession')}
         </button>
       </div>
     </div>
@@ -807,6 +826,7 @@ function AccessionForm({ initial, onSave, onCancel, isSaving }: {
 }
 
 function LinkedNodes({ accessionId }: { accessionId: number }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: nodes = [] } = useQuery({
     queryKey: ['accession-nodes', accessionId],
@@ -819,12 +839,11 @@ function LinkedNodes({ accessionId }: { accessionId: number }) {
   return (
     <div className={styles.attachSection}>
       <div className={styles.attachHeader}>
-        <span className={styles.attachTitle}><Link2 size={13} /> Linked resources</span>
+        <span className={styles.attachTitle}><Link2 size={13} /> {t('acquisitions.accession.linkedResources')}</span>
       </div>
       {(nodes as any[]).length === 0 && (
         <p className={styles.empty}>
-          No resources linked yet. Link resources from the Resources page — open a record,
-          go to the Accessions tab, and select this accession.
+          {t('acquisitions.accession.noneLinkedHint')}
         </p>
       )}
       {(nodes as any[]).map((n: any) => (
@@ -832,7 +851,7 @@ function LinkedNodes({ accessionId }: { accessionId: number }) {
           <a
             href={`/app/resources?node=${n.id}`}
             style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flex: 1, minWidth: 0, textDecoration: 'none' }}
-            title={`Open ${n.ref_code} in Resources`}
+            title={t('acquisitions.accession.openInResources', { ref: n.ref_code })}
           >
             <ExternalLink size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
             <code style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', flexShrink: 0 }}>{n.ref_code}</code>
@@ -852,6 +871,7 @@ function AccessionDetail({ accession, onEdit, onDeleted, onNavigate }: {
   accession: any; onEdit: () => void; onDeleted: () => void
   onNavigate: (section: string, id: number) => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const deleteMutation = useMutation({
     mutationFn: () => acquisitionsApi.deleteAccession(accession.id),
@@ -872,7 +892,7 @@ function AccessionDetail({ accession, onEdit, onDeleted, onNavigate }: {
         <div className={styles.detailActions}>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onEdit}><Pencil size={14} /></button>
           <button className="btn btn-ghost btn-sm btn-icon"
-            onClick={() => { if (confirm('Delete this accession?')) deleteMutation.mutate() }}>
+            onClick={() => { if (confirm(t('acquisitions.accession.deleteConfirm'))) deleteMutation.mutate() }}>
             <Trash2 size={14} />
           </button>
         </div>
@@ -880,7 +900,7 @@ function AccessionDetail({ accession, onEdit, onDeleted, onNavigate }: {
       <div className={styles.detailBody}>
         {obj.delivery_ref && (
           <div className={styles.field}>
-            <dt className={styles.fieldLabel}>Delivery</dt>
+            <dt className={styles.fieldLabel}>{t('acquisitions.accession.delivery')}</dt>
             <dd className={styles.fieldValue}>
               <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-sans)', color: 'var(--color-accent)', padding: 0, fontSize: 'var(--text-sm)' }}
                 onClick={() => onNavigate('deliveries', obj.delivery_id)}>
@@ -889,15 +909,15 @@ function AccessionDetail({ accession, onEdit, onDeleted, onNavigate }: {
             </dd>
           </div>
         )}
-        {obj.date_received && <Field label="Date received" value={obj.date_received} />}
-        {obj.date_accessioned && <Field label="Date accessioned" value={obj.date_accessioned} />}
-        {obj.extent && <Field label="Extent" value={obj.extent} />}
-        {obj.description && <Field label="Description" value={obj.description} multi />}
-        {obj.appraisal_decision && <Field label="Appraisal decision" value={obj.appraisal_decision} multi />}
-        {obj.access_restrictions && <Field label="Access restrictions" value={obj.access_restrictions} multi />}
-        {obj.processing_notes && <Field label="Processing notes" value={obj.processing_notes} multi />}
-        {obj.disposition_notes && <Field label="Disposition notes" value={obj.disposition_notes} multi />}
-        {obj.accessioned_by && <Field label="Accessioned by" value={obj.accessioned_by} />}
+        {obj.date_received && <Field label={t('acquisitions.accession.dateReceived')} value={obj.date_received} />}
+        {obj.date_accessioned && <Field label={t('acquisitions.accession.dateAccessioned')} value={obj.date_accessioned} />}
+        {obj.extent && <Field label={t('acquisitions.accession.extent')} value={obj.extent} />}
+        {obj.description && <Field label={t('resources.form.fields.description')} value={obj.description} multi />}
+        {obj.appraisal_decision && <Field label={t('acquisitions.accession.appraisalDecision')} value={obj.appraisal_decision} multi />}
+        {obj.access_restrictions && <Field label={t('acquisitions.accession.accessRestrictions')} value={obj.access_restrictions} multi />}
+        {obj.processing_notes && <Field label={t('acquisitions.accession.processingNotes')} value={obj.processing_notes} multi />}
+        {obj.disposition_notes && <Field label={t('acquisitions.accession.dispositionNotes')} value={obj.disposition_notes} multi />}
+        {obj.accessioned_by && <Field label={t('acquisitions.accession.accessionedBy')} value={obj.accessioned_by} />}
         <LinkedNodes accessionId={obj.id} />
       </div>
     </div>
@@ -934,6 +954,7 @@ function ListPanel<T extends { id: number; reference_number?: string; accession_
   onPresetFilterConsumed?: () => void
   accessions?: any[]
 }) {
+  const { t } = useTranslation()
   const [q, setQ] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [specialFilter, setSpecialFilter] = useState<string | null>(null)
@@ -966,8 +987,8 @@ function ListPanel<T extends { id: number; reference_number?: string; accession_
   })
 
   const SPECIAL_LABELS: Record<string, string> = {
-    unaccessioned: 'Not yet accessioned',
-    checklist_incomplete: 'Incomplete checklist',
+    unaccessioned: t('acquisitions.special.unaccessioned'),
+    checklist_incomplete: t('acquisitions.special.checklistIncomplete'),
   }
 
   return (
@@ -985,7 +1006,7 @@ function ListPanel<T extends { id: number; reference_number?: string; accession_
           className={styles.listSearchInput}
           value={q}
           onChange={e => setQ(e.target.value)}
-          placeholder="Search…"
+          placeholder={t('relations.picker.searchPlaceholder')}
         />
         {q && <button className={styles.listSearchClear} onClick={() => setQ('')}><X size={11} /></button>}
       </div>
@@ -1004,7 +1025,7 @@ function ListPanel<T extends { id: number; reference_number?: string; accession_
           <button
             className={`${styles.statusChip} ${statusFilter === '' ? styles.statusChipActive : ''}`}
             onClick={() => setStatusFilter('')}
-          >All</button>
+          >{t('flags.all')}</button>
           {statuses.map(s => (
             <button
               key={s.value}
@@ -1018,7 +1039,7 @@ function ListPanel<T extends { id: number; reference_number?: string; accession_
       <div className={styles.listScroll}>
         {isLoading && <div style={{ padding: 'var(--space-4)' }}><Spinner size={16} /></div>}
         {!isLoading && filtered.length === 0 && (
-          <p className={styles.empty}>{q || statusFilter ? 'No matches.' : 'Nothing here yet.'}</p>
+          <p className={styles.empty}>{q || statusFilter ? t('acquisitions.list.noMatches') : t('acquisitions.list.nothingYet')}</p>
         )}
         {filtered.map(item => (
           <button key={item.id} className={`${styles.listItem} ${item.id === selectedId ? styles.listItemActive : ''}`}
@@ -1052,6 +1073,7 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
   sas: any[]; deliveries: any[]; accessions: any[]
   onNavigate: (section: Section, id: number, presetFilter?: string) => void
 }) {
+  const { t } = useTranslation()
   const saCounts: Record<string, number> = {}
   for (const s of sas) saCounts[s.status] = (saCounts[s.status] ?? 0) + 1
 
@@ -1080,10 +1102,10 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
       {/* ── Status breakdowns ── */}
       <div className={styles.overviewGrid}>
         <div className={styles.overviewPanel}>
-          <h3 className={styles.overviewPanelTitle}>Agreements by status</h3>
+          <h3 className={styles.overviewPanelTitle}>{t('acquisitions.overview.agreementsByStatus')}</h3>
           {SA_STATUSES.map(s => (
             <div key={s} className={styles.statusBar}>
-              <span className={styles.statusBarLabel}>{s}</span>
+              <span className={styles.statusBarLabel}>{t(`acquisitions.statusLabels.${STATUS_KEY_MAP[s]}`, { defaultValue: s })}</span>
               <div className={styles.statusBarTrack}>
                 <div className={styles.statusBarFill}
                   style={{ width: sas.length ? `${((saCounts[s] ?? 0) / sas.length) * 100}%` : '0%' }} />
@@ -1094,10 +1116,10 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
         </div>
 
         <div className={styles.overviewPanel}>
-          <h3 className={styles.overviewPanelTitle}>Deliveries by status</h3>
+          <h3 className={styles.overviewPanelTitle}>{t('acquisitions.overview.deliveriesByStatus')}</h3>
           {DELIVERY_STATUSES.map(s => (
             <div key={s.value} className={styles.statusBar}>
-              <span className={styles.statusBarLabel}>{s.label}</span>
+              <span className={styles.statusBarLabel}>{t(`acquisitions.statusLabels.${STATUS_KEY_MAP[s.value]}`)}</span>
               <div className={styles.statusBarTrack}>
                 <div className={styles.statusBarFill}
                   style={{ width: deliveries.length ? `${((delCounts[s.value] ?? 0) / deliveries.length) * 100}%` : '0%' }} />
@@ -1110,22 +1132,22 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
 
       {/* ── Needs attention ── */}
       <div className={styles.overviewPanel}>
-        <h3 className={styles.overviewPanelTitle}>Needs attention</h3>
+        <h3 className={styles.overviewPanelTitle}>{t('acquisitions.overview.needsAttention')}</h3>
 
         {awaitingAccession.length === 0 && incompleteChecklists.length === 0 && (
-          <p className={styles.empty}>Nothing needs attention right now.</p>
+          <p className={styles.empty}>{t('acquisitions.overview.nothingNeeds')}</p>
         )}
 
         {awaitingAccession.length > 0 && (
           <div className={styles.attentionGroup}>
             <div className={styles.attentionGroupHeader}>
               <span className={styles.attentionGroupTitle}>
-                Received, not yet accessioned ({awaitingAccession.length})
+                {t('acquisitions.overview.receivedNotAccessioned', { count: awaitingAccession.length })}
               </span>
               {awaitingAccession.length > ATTENTION_PREVIEW && (
                 <button className={styles.attentionViewAll}
                   onClick={() => onNavigate('deliveries', 0, 'unaccessioned')}>
-                  View all {awaitingAccession.length} →
+                  {t('acquisitions.overview.viewAll', { count: awaitingAccession.length })}
                 </button>
               )}
             </div>
@@ -1134,7 +1156,7 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
                 <code className={styles.listItemRef}>{d.reference_number}</code>
                 <span className={styles.attentionRowTitle}>{d.title}</span>
                 <StatusBadge status={d.status}
-                  label={DELIVERY_STATUSES.find(x => x.value === d.status)?.label} />
+                  label={t(`acquisitions.statusLabels.${STATUS_KEY_MAP[d.status]}`, { defaultValue: d.status })} />
               </button>
             ))}
           </div>
@@ -1144,12 +1166,12 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
           <div className={styles.attentionGroup}>
             <div className={styles.attentionGroupHeader}>
               <span className={styles.attentionGroupTitle}>
-                Incomplete checklist ({incompleteChecklists.length})
+                {t('acquisitions.overview.incompleteChecklistCount', { count: incompleteChecklists.length })}
               </span>
               {incompleteChecklists.length > ATTENTION_PREVIEW && (
                 <button className={styles.attentionViewAll}
                   onClick={() => onNavigate('deliveries', 0, 'checklist_incomplete')}>
-                  View all {incompleteChecklists.length} →
+                  {t('acquisitions.overview.viewAll', { count: incompleteChecklists.length })}
                 </button>
               )}
             </div>
@@ -1160,7 +1182,7 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
                 <button key={d.id} className={styles.attentionRow} onClick={() => onNavigate('deliveries', d.id)}>
                   <code className={styles.listItemRef}>{d.reference_number}</code>
                   <span className={styles.attentionRowTitle}>{d.title}</span>
-                  <span className={styles.attentionRowProgress}>{done}/{items.length} done</span>
+                  <span className={styles.attentionRowProgress}>{done}/{items.length} {t('acquisitions.overview.doneSuffix')}</span>
                 </button>
               )
             })}
@@ -1172,6 +1194,7 @@ function OverviewSection({ sas, deliveries, accessions, onNavigate }: {
 }
 
 export default function AcquisitionsPage() {
+  const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const [section, setSection] = useState<Section>(
     (searchParams.get('section') as Section) ?? 'overview'
@@ -1255,10 +1278,10 @@ export default function AcquisitionsPage() {
   })
 
   const SECTION_TABS = [
-    { key: 'overview',    icon: <LayoutDashboard size={14} />, label: 'Overview' },
-    { key: 'agreements',  icon: <FileText size={14} />, label: `Agreements${sas.length ? ` (${(sas as any[]).length})` : ''}` },
-    { key: 'deliveries',  icon: <Truck size={14} />,    label: `Deliveries${deliveries.length ? ` (${(deliveries as any[]).length})` : ''}` },
-    { key: 'accessions',  icon: <Archive size={14} />,  label: `Accessions${accessions.length ? ` (${(accessions as any[]).length})` : ''}` },
+    { key: 'overview',    icon: <LayoutDashboard size={14} />, label: t('locations.detail.overview') },
+    { key: 'agreements',  icon: <FileText size={14} />, label: `${t('acquisitions.page.agreements')}${sas.length ? ` (${(sas as any[]).length})` : ''}` },
+    { key: 'deliveries',  icon: <Truck size={14} />,    label: `${t('acquisitions.page.deliveries')}${deliveries.length ? ` (${(deliveries as any[]).length})` : ''}` },
+    { key: 'accessions',  icon: <Archive size={14} />,  label: `${t('resources.tabs.accessions')}${accessions.length ? ` (${(accessions as any[]).length})` : ''}` },
   ]
 
   const selectedSA  = (sas as any[]).find((s: any) => s.id === selectedId)
@@ -1269,11 +1292,11 @@ export default function AcquisitionsPage() {
     <div className={styles.page}>
       {/* Section tabs */}
       <div className={styles.sectionTabs}>
-        {SECTION_TABS.map(t => (
-          <button key={t.key}
-            className={`${styles.sectionTab} ${section === t.key ? styles.sectionTabActive : ''}`}
-            onClick={() => switchSection(t.key as Section)}>
-            {t.icon} {t.label}
+        {SECTION_TABS.map(st => (
+          <button key={st.key}
+            className={`${styles.sectionTab} ${section === st.key ? styles.sectionTabActive : ''}`}
+            onClick={() => switchSection(st.key as Section)}>
+            {st.icon} {st.label}
           </button>
         ))}
       </div>
@@ -1290,19 +1313,19 @@ export default function AcquisitionsPage() {
           <ListPanel
             items={sas as any[]} isLoading={loadingSAs} selectedId={selectedId}
             onSelect={i => select(i.id)} onNew={() => { setSelectedId(null); setMode('create') }}
-            newLabel="New"
-            heading="Agreements"
-            statuses={SA_STATUSES.map(s => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))}
+            newLabel={t('resources.tree.newButton')}
+            heading={t('acquisitions.page.agreements')}
+            statuses={SA_STATUSES.map(s => ({ value: s, label: t(`acquisitions.statusLabels.${STATUS_KEY_MAP[s]}`, { defaultValue: s }) }))}
           />
         )}
         {section === 'deliveries' && (
           <ListPanel
             items={deliveries as any[]} isLoading={loadingDels} selectedId={selectedId}
             onSelect={i => select(i.id)} onNew={() => { setSelectedId(null); setMode('create') }}
-            newLabel="New"
-            heading="Deliveries"
-            statuses={DELIVERY_STATUSES}
-            statusLabel={s => DELIVERY_STATUSES.find(x => x.value === s)?.label ?? s}
+            newLabel={t('resources.tree.newButton')}
+            heading={t('acquisitions.page.deliveries')}
+            statuses={DELIVERY_STATUSES.map(s => ({ value: s.value, label: t(`acquisitions.statusLabels.${STATUS_KEY_MAP[s.value]}`) }))}
+            statusLabel={s => t(`acquisitions.statusLabels.${STATUS_KEY_MAP[s]}`, { defaultValue: s })}
             presetFilter={presetFilter}
             onPresetFilterConsumed={() => setPresetFilter(null)}
             accessions={accessions as any[]}
@@ -1313,8 +1336,8 @@ export default function AcquisitionsPage() {
             items={(accessions as any[]).map((a: any) => ({ ...a, reference_number: a.accession_number }))}
             isLoading={loadingAcc} selectedId={selectedId}
             onSelect={i => select(i.id)} onNew={() => { setSelectedId(null); setMode('create') }}
-            newLabel="New"
-            heading="Accessions"
+            newLabel={t('resources.tree.newButton')}
+            heading={t('resources.tabs.accessions')}
           />
         )}
 
@@ -1367,7 +1390,7 @@ export default function AcquisitionsPage() {
               {section === 'agreements' && <FileText size={40} style={{ opacity: 0.1, marginBottom: 'var(--space-4)' }} />}
               {section === 'deliveries' && <Truck size={40} style={{ opacity: 0.1, marginBottom: 'var(--space-4)' }} />}
               {section === 'accessions' && <Archive size={40} style={{ opacity: 0.1, marginBottom: 'var(--space-4)' }} />}
-              <p>Select an item or create a new one</p>
+              <p>{t('acquisitions.page.selectOrCreate')}</p>
             </div>
           )}
         </div>

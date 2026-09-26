@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { locationsApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import type { LocationStub } from '@/types'
+import { useTranslation } from 'react-i18next'
 import styles from './LocationTree.module.css'
 import { useAuthStore } from '@/store/auth'
 
@@ -41,6 +42,7 @@ function LevelIcon({ level }: { level: string }) {
 }
 
 function LocationRow({ location, depth, selectedId, onSelect }: LocationRowProps) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   const { data: children, isLoading } = useQuery({
@@ -91,7 +93,7 @@ function LocationRow({ location, depth, selectedId, onSelect }: LocationRowProps
               <>
                 <span className={styles.metaSep}>·</span>
                 <span className={styles.stored}>
-                  {location.stored_count} stored
+                  {t('locations.tree.storedShort', { count: location.stored_count })}
                   {location.capacity !== null && ` / ${location.capacity}`}
                 </span>
                 <CapacityBar stored={location.stored_count} capacity={location.capacity} />
@@ -114,7 +116,7 @@ function LocationRow({ location, depth, selectedId, onSelect }: LocationRowProps
           ))}
           {children.length === 0 && (
             <p className={styles.noChildren} style={{ paddingLeft: `${30 + (depth + 1) * 18}px` }}>
-              No sub-locations
+              {t('locations.tree.noSubLocations')}
             </p>
           )}
         </div>
@@ -124,6 +126,7 @@ function LocationRow({ location, depth, selectedId, onSelect }: LocationRowProps
 }
 
 export default function LocationTree({ selectedId, onSelect, search = '' }: LocationTreeProps) {
+  const { t } = useTranslation()
   // When search is active, show flat search results instead of the tree
   const { user } = useAuthStore()
   const institutionId = user?.active_institution?.id
@@ -140,8 +143,8 @@ export default function LocationTree({ selectedId, onSelect, search = '' }: Loca
   })
 
   if (search.trim().length > 1) {
-    if (searchLoading) return <div className={styles.state}><Spinner /><span>Searching…</span></div>
-    if (!searchResults?.length) return <div className={styles.empty}><p>No locations found.</p></div>
+    if (searchLoading) return <div className={styles.state}><Spinner /><span>{t('search.searching')}</span></div>
+    if (!searchResults?.length) return <div className={styles.empty}><p>{t('locations.tree.noneFound')}</p></div>
     return (
       <div className={styles.tree}>
         {searchResults.map((loc: any) => (
@@ -167,12 +170,12 @@ export default function LocationTree({ selectedId, onSelect, search = '' }: Loca
     )
   }
 
-  if (isLoading) return <div className={styles.state}><Spinner /><span>Loading…</span></div>
-  if (error) return <div className={styles.state}><span className="text-muted">Failed to load</span></div>
+  if (isLoading) return <div className={styles.state}><Spinner /><span>{t('common.loading')}</span></div>
+  if (error) return <div className={styles.state}><span className="text-muted">{t('locations.tree.failedToLoad')}</span></div>
   if (!data?.length) return (
     <div className={styles.empty}>
-      <p>No locations defined.</p>
-      <p className="text-faint">Add a root location to get started.</p>
+      <p>{t('locations.tree.noneDefined')}</p>
+      <p className="text-faint">{t('locations.tree.addRootHint')}</p>
     </div>
   )
 

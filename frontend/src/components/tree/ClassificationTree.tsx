@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { classificationsApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import type { ClassificationStub } from '@/types'
+import { useTranslation } from 'react-i18next'
 import styles from './ClassificationTree.module.css'
 import { useAuthStore } from '@/store/auth'
 
@@ -22,6 +23,7 @@ interface RowProps {
 }
 
 function Row({ node, depth, selectedId, onSelect }: RowProps) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   const { data: children, isLoading } = useQuery({
@@ -57,14 +59,14 @@ function Row({ node, depth, selectedId, onSelect }: RowProps) {
           <div className={styles.nameRow}>
             <span className={styles.code}>{node.full_code}</span>
             <span className={styles.name}>{node.name}</span>
-            {!node.is_active && <span className={styles.retiredBadge}>retired</span>}
+            {!node.is_active && <span className={styles.retiredBadge}>{t('classifications.status.retired')}</span>}
           </div>
           <div className={styles.meta}>
             <span className={styles.level}>{node.level_name}</span>
             {node.node_count > 0 && (
               <>
                 <span className={styles.metaSep}>·</span>
-                <span className={styles.nodeCount}>{node.node_count} linked</span>
+                <span className={styles.nodeCount}>{node.node_count} {t('classifications.detail.linkedSuffix')}</span>
               </>
             )}
           </div>
@@ -84,7 +86,7 @@ function Row({ node, depth, selectedId, onSelect }: RowProps) {
           ))}
           {children.length === 0 && (
             <p className={styles.noChildren} style={{ paddingLeft: `${30 + (depth + 1) * 18}px` }}>
-              No sub-classifications
+              {t('classifications.tree.noSubClassifications')}
             </p>
           )}
         </div>
@@ -94,7 +96,7 @@ function Row({ node, depth, selectedId, onSelect }: RowProps) {
 }
 
 export default function ClassificationTree({ selectedId, onSelect, hierarchyTypeId }: ClassificationTreeProps) {
-
+  const { t } = useTranslation()
   const { user } = useAuthStore()
   const institutionId = user?.active_institution?.id
   const { data, isLoading, error } = useQuery({
@@ -102,12 +104,12 @@ export default function ClassificationTree({ selectedId, onSelect, hierarchyType
     queryFn: () => classificationsApi.getTree(hierarchyTypeId).then(r => r.data.data),
   })
 
-  if (isLoading) return <div className={styles.state}><Spinner /><span>Loading…</span></div>
-  if (error)     return <div className={styles.state}><span className="text-muted">Failed to load</span></div>
+  if (isLoading) return <div className={styles.state}><Spinner /><span>{t('common.loading')}</span></div>
+  if (error)     return <div className={styles.state}><span className="text-muted">{t('locations.tree.failedToLoad')}</span></div>
   if (!data?.length) return (
     <div className={styles.empty}>
-      <p>No classifications defined.</p>
-      <p className="text-faint">Create one to get started.</p>
+      <p>{t('classifications.tree.noneDefined')}</p>
+      <p className="text-faint">{t('classifications.tree.createOneHint')}</p>
     </div>
   )
 

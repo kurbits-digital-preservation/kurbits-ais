@@ -6,32 +6,25 @@ import {
 } from 'lucide-react'
 import { labelTemplatesApi, searchApi } from '@/api'
 import { Spinner } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import styles from './LabelDesigner.module.css'
 
 // Physical label dimensions (mm) — must match labels.FORMATS on the backend.
-const FORMAT_DIMS: Record<string, { w: number; h: number; label: string }> = {
-  standard_90x45:       { w: 90,  h: 44.5, label: 'Standard arkivetikett 90×45 mm' },
-  avery_l7163:          { w: 99.1, h: 38.1, label: 'Avery L7163 99×38 mm' },
-  avery_l7160:          { w: 63.5, h: 38.1, label: 'Avery L7160 64×38 mm' },
-  box_portrait_70x100:  { w: 70,  h: 100, label: 'Archive box 70×100 mm' },
-  spine_portrait_40x150:{ w: 40,  h: 150, label: 'Spine 40×150 mm' },
-  single:               { w: 190, h: 277, label: 'Single A4' },
-  single_portrait:      { w: 190, h: 277, label: 'Single A4 (portrait sheet)' },
+// Display labels are resolved via printLabels.formats.<key> (shared with PrintLabelsButton).
+const FORMAT_DIMS: Record<string, { w: number; h: number }> = {
+  standard_90x45:       { w: 90,  h: 44.5 },
+  avery_l7163:          { w: 99.1, h: 38.1 },
+  avery_l7160:          { w: 63.5, h: 38.1 },
+  box_portrait_70x100:  { w: 70,  h: 100 },
+  spine_portrait_40x150:{ w: 40,  h: 150 },
+  single:               { w: 190, h: 277 },
+  single_portrait:      { w: 190, h: 277 },
 }
 
-const FIELD_LABELS: Record<string, string> = {
-  ref_code: 'Reference code', title: 'Title', level: 'Level', date: 'Date range',
-  local_ref: 'Local ref', location: 'Location', institution: 'Institution',
-  parent_ref_code: 'Parent ref code', parent_title: 'Parent title', parent_date: 'Parent date range',
-}
-
-// Generic placeholders shown by default — no misleading fake data.
-const PLACEHOLDER: Record<string, string> = {
-  ref_code: '{Reference code}', title: '{Title}', level: '{Level}',
-  date: '{Date range}', local_ref: '{Local ref}', location: '{Location}',
-  institution: '{Institution}',
-  parent_ref_code: '{Parent ref code}', parent_title: '{Parent title}', parent_date: '{Parent date range}',
-}
+const FIELD_KEYS = [
+  'ref_code', 'title', 'level', 'date', 'local_ref', 'location',
+  'institution', 'parent_ref_code', 'parent_title', 'parent_date',
+]
 
 interface El {
   id: string
@@ -50,21 +43,22 @@ interface El {
 let idCounter = 1
 const newId = () => `el_${idCounter++}_${Math.random().toString(36).slice(2, 6)}`
 
-function renderElContent(el: El, sample: Record<string, string> | null): string {
+function renderElContent(el: El, sample: Record<string, string> | null, t: (k: string) => string, defaultText: string): string {
   if (el.type === 'field') {
     const f = el.field || ''
-    if (sample) return sample[f] || PLACEHOLDER[f] || ''
-    return PLACEHOLDER[f] || FIELD_LABELS[f] || ''
+    if (sample) return sample[f] || (FIELD_KEYS.includes(f) ? t(`admin.labelDesigner.placeholders.${f}`) : '')
+    return FIELD_KEYS.includes(f) ? t(`admin.labelDesigner.placeholders.${f}`) : ''
   }
-  if (el.type === 'text') return el.text || 'Text'
+  if (el.type === 'text') return el.text || defaultText
   return ''
 }
 
 export default function LabelDesigner() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const canvasRef = useRef<HTMLDivElement>(null)
   const [templateId, setTemplateId] = useState<number | null>(null)
-  const [name, setName] = useState('New label')
+  const [name, setName] = useState(t('admin.labelDesigner.newLabelName'))
   const [formatKey, setFormatKey] = useState('standard_90x45')
   const [isDefault, setIsDefault] = useState(false)
   const [elements, setElements] = useState<El[]>([])
@@ -109,17 +103,17 @@ export default function LabelDesigner() {
     setPreviewQuery('')
   }
 
-  const loadTemplate = (t: any) => {
-    setTemplateId(t.id)
-    setName(t.name)
-    setFormatKey(t.format_key)
-    setIsDefault(t.is_default)
-    setElements((t.elements || []).map((e: any) => ({ ...e, id: e.id || newId() })))
+  const loadTemplate = (tmpl: any) => {
+    setTemplateId(tmpl.id)
+    setName(tmpl.name)
+    setFormatKey(tmpl.format_key)
+    setIsDefault(tmpl.is_default)
+    setElements((tmpl.elements || []).map((e: any) => ({ ...e, id: e.id || newId() })))
     setSelectedId(null)
   }
 
   const newTemplate = () => {
-    setTemplateId(null); setName('New label'); setElements([]); setSelectedId(null); setIsDefault(false)
+    setTemplateId(null); setName(t('admin.labelDesigner.newLabelName')); setElements([]); setSelectedId(null); setIsDefault(false)
   }
 
   // ── Element mutations ──
@@ -129,7 +123,7 @@ export default function LabelDesigner() {
       x: 0.1, y: 0.1, w: type === 'qr' ? 0.25 : 0.6, h: type === 'barcode' ? 0.2 : (type === 'qr' ? 0.4 : 0.12),
       font_size: type === 'field' && field === 'ref_code' ? 18 : 10,
       bold: field === 'ref_code', align: 'left', color: '#1a1a2e',
-      text: type === 'text' ? 'Text' : undefined,
+      text: type === 'text' ? t('admin.labelDesigner.text') : undefined,
     }
     setElements(prev => [...prev, el])
     setSelectedId(el.id)
@@ -208,7 +202,7 @@ export default function LabelDesigner() {
       queryClient.invalidateQueries({ queryKey: ['label-templates'] })
       if (!templateId && res.data?.data?.id) setTemplateId(res.data.data.id)
     },
-    onError: (err: any) => alert(err?.response?.data?.message ?? 'Save failed'),
+    onError: (err: any) => alert(err?.response?.data?.message ?? t('admin.labelDesigner.saveFailed')),
   })
 
   const deleteMutation = useMutation({
@@ -229,41 +223,41 @@ export default function LabelDesigner() {
       {/* ── Sidebar: templates + palette ── */}
       <aside className={styles.sidebar}>
         <div className={styles.sidebarSection}>
-          <div className={styles.sectionTitle}>Templates</div>
+          <div className={styles.sectionTitle}>{t('admin.labelDesigner.templates')}</div>
           <button className="btn btn-ghost btn-sm" onClick={newTemplate} style={{ width: '100%', justifyContent: 'flex-start' }}>
-            <Plus size={13} /> New template
+            <Plus size={13} /> {t('admin.labelDesigner.newTemplate')}
           </button>
           <div className={styles.templateList}>
-            {(templates ?? []).map((t: any) => (
-              <button key={t.id}
-                className={`${styles.templateItem} ${templateId === t.id ? styles.templateActive : ''}`}
-                onClick={() => loadTemplate(t)}>
-                {t.is_default && <Star size={10} className={styles.defaultStar} />}
-                <span>{t.name}</span>
+            {(templates ?? []).map((tmpl: any) => (
+              <button key={tmpl.id}
+                className={`${styles.templateItem} ${templateId === tmpl.id ? styles.templateActive : ''}`}
+                onClick={() => loadTemplate(tmpl)}>
+                {tmpl.is_default && <Star size={10} className={styles.defaultStar} />}
+                <span>{tmpl.name}</span>
               </button>
             ))}
           </div>
         </div>
 
         <div className={styles.sidebarSection}>
-          <div className={styles.sectionTitle}>Add field</div>
+          <div className={styles.sectionTitle}>{t('admin.labelDesigner.addField')}</div>
           <div className={styles.paletteGrid}>
-            {Object.entries(FIELD_LABELS).map(([f, lbl]) => (
+            {FIELD_KEYS.map(f => (
               <button key={f} className={styles.paletteBtn} onClick={() => addElement('field', f)}>
-                <Tag size={12} /> {lbl}
+                <Tag size={12} /> {t(`admin.labelDesigner.fields.${f}`)}
               </button>
             ))}
           </div>
         </div>
 
         <div className={styles.sidebarSection}>
-          <div className={styles.sectionTitle}>Add element</div>
+          <div className={styles.sectionTitle}>{t('admin.labelDesigner.addElement')}</div>
           <div className={styles.paletteGrid}>
-            <button className={styles.paletteBtn} onClick={() => addElement('text')}><Type size={12} /> Text</button>
-            <button className={styles.paletteBtn} onClick={() => addElement('barcode', 'ref_code')}><Barcode size={12} /> Barcode</button>
-            <button className={styles.paletteBtn} onClick={() => addElement('qr', 'ref_code')}><QrCode size={12} /> QR code</button>
+            <button className={styles.paletteBtn} onClick={() => addElement('text')}><Type size={12} /> {t('admin.labelDesigner.text')}</button>
+            <button className={styles.paletteBtn} onClick={() => addElement('barcode', 'ref_code')}><Barcode size={12} /> {t('admin.labelDesigner.barcode')}</button>
+            <button className={styles.paletteBtn} onClick={() => addElement('qr', 'ref_code')}><QrCode size={12} /> {t('admin.labelDesigner.qrCode')}</button>
             <label className={styles.paletteBtn}>
-              <ImageIcon size={12} /> Image
+              <ImageIcon size={12} /> {t('admin.labelDesigner.image')}
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleImage} />
             </label>
           </div>
@@ -273,30 +267,30 @@ export default function LabelDesigner() {
       {/* ── Canvas ── */}
       <div className={styles.canvasArea}>
         <div className={styles.canvasToolbar}>
-          <input className={styles.nameInput} value={name} onChange={e => setName(e.target.value)} placeholder="Template name" />
+          <input className={styles.nameInput} value={name} onChange={e => setName(e.target.value)} placeholder={t('admin.labelDesigner.templateNamePlaceholder')} />
           <select value={formatKey} onChange={e => setFormatKey(e.target.value)} className={styles.formatSelect}>
-            {Object.entries(FORMAT_DIMS).map(([k, d]) => <option key={k} value={k}>{d.label}</option>)}
+            {Object.keys(FORMAT_DIMS).map(k => <option key={k} value={k}>{t(`printLabels.formats.${k}`)}</option>)}
           </select>
           <label className={styles.defaultToggle}>
-            <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} /> Default
+            <input type="checkbox" checked={isDefault} onChange={e => setIsDefault(e.target.checked)} /> {t('admin.labelDesigner.defaultCheckbox')}
           </label>
           <label className={styles.defaultToggle}>
-            <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} /> Grid (mm)
+            <input type="checkbox" checked={showGrid} onChange={e => setShowGrid(e.target.checked)} /> {t('admin.labelDesigner.gridMm')}
           </label>
           <div className={styles.previewControl}>
             {previewSample ? (
               <button className="btn btn-ghost btn-sm" onClick={() => setPreviewSample(null)}>
-                Clear preview data
+                {t('admin.labelDesigner.clearPreviewData')}
               </button>
             ) : (
               <button className="btn btn-ghost btn-sm" onClick={() => setPreviewOpen(v => !v)}>
-                Preview with record…
+                {t('admin.labelDesigner.previewWithRecord')}
               </button>
             )}
             {previewOpen && !previewSample && (
               <div className={styles.previewPopover}>
                 <input autoFocus value={previewQuery} onChange={e => setPreviewQuery(e.target.value)}
-                  placeholder="Search a record…" />
+                  placeholder={t('admin.labelDesigner.searchRecordPlaceholder')} />
                 <div className={styles.previewResults}>
                   {(previewResults ?? []).slice(0, 8).map((n: any) => (
                     <button key={n.id} className={styles.previewResult} onClick={() => pickPreviewNode(n)}>
@@ -305,7 +299,7 @@ export default function LabelDesigner() {
                     </button>
                   ))}
                   {previewQuery.length >= 2 && previewResults && previewResults.length === 0 && (
-                    <span className={styles.previewHint}>No matches</span>
+                    <span className={styles.previewHint}>{t('acquisitions.list.noMatches')}</span>
                   )}
                 </div>
               </div>
@@ -313,12 +307,12 @@ export default function LabelDesigner() {
           </div>
           <div style={{ flex: 1 }} />
           {templateId && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm('Delete this template?')) deleteMutation.mutate(templateId) }}>
-              <Trash2 size={13} /> Delete
+            <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm(t('admin.labelDesigner.deleteTemplateConfirm'))) deleteMutation.mutate(templateId) }}>
+              <Trash2 size={13} /> {t('common.delete')}
             </button>
           )}
           <button className="btn btn-primary btn-sm" disabled={saveMutation.isPending || !name.trim()} onClick={() => saveMutation.mutate()}>
-            {saveMutation.isPending ? <Spinner size={13} /> : <Save size={13} />} Save
+            {saveMutation.isPending ? <Spinner size={13} /> : <Save size={13} />} {t('common.save')}
           </button>
         </div>
 
@@ -356,7 +350,7 @@ export default function LabelDesigner() {
                     textAlign: el.align,
                     width: '100%',
                     lineHeight: 1.2,
-                  }}>{renderElContent(el, previewSample)}</span>
+                  }}>{renderElContent(el, previewSample, t, t('admin.labelDesigner.text'))}</span>
                 )}
                 {selectedId === el.id && (
                   <span className={styles.resizeHandle} onPointerDown={e => onPointerDown(e, el.id, 'resize')} />
@@ -371,14 +365,18 @@ export default function LabelDesigner() {
       {selected && (
         <aside className={styles.props}>
           <div className={styles.sectionTitle}>
-            {selected.type === 'field' ? FIELD_LABELS[selected.field || ''] : selected.type}
-            <button className="btn btn-ghost btn-sm btn-icon" style={{ marginLeft: 'auto' }} onClick={() => duplicateEl(selected.id)} title="Duplicate"><Copy size={12} /></button>
-            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => deleteEl(selected.id)} title="Delete"><Trash2 size={12} /></button>
+            {selected.type === 'field' ? t(`admin.labelDesigner.fields.${selected.field || ''}`)
+              : selected.type === 'barcode' ? t('admin.labelDesigner.barcode')
+              : selected.type === 'qr' ? t('admin.labelDesigner.qrCode')
+              : selected.type === 'image' ? t('admin.labelDesigner.image')
+              : t('admin.labelDesigner.text')}
+            <button className="btn btn-ghost btn-sm btn-icon" style={{ marginLeft: 'auto' }} onClick={() => duplicateEl(selected.id)} title={t('admin.labelDesigner.duplicate')}><Copy size={12} /></button>
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => deleteEl(selected.id)} title={t('common.delete')}><Trash2 size={12} /></button>
           </div>
 
           {selected.type === 'text' && (
             <div className="form-group">
-              <label>Text</label>
+              <label>{t('admin.labelDesigner.text')}</label>
               <input value={selected.text || ''} onChange={e => updateEl(selected.id, { text: e.target.value })} />
             </div>
           )}
@@ -386,7 +384,7 @@ export default function LabelDesigner() {
           {(selected.type === 'field' || selected.type === 'text') && (
             <>
               <div className="form-group">
-                <label>Font size (pt)</label>
+                <label>{t('admin.labelDesigner.fontSize')}</label>
                 <input type="number" value={selected.font_size || 10} min={4} max={72}
                   onChange={e => updateEl(selected.id, { font_size: parseInt(e.target.value) || 10 })} />
               </div>
@@ -397,7 +395,7 @@ export default function LabelDesigner() {
                 <button className={`${styles.toggleBtn} ${selected.align === 'right' ? styles.toggleOn : ''}`} onClick={() => updateEl(selected.id, { align: 'right' })}><AlignRight size={13} /></button>
               </div>
               <div className="form-group">
-                <label>Colour</label>
+                <label>{t('admin.labelDesigner.colour')}</label>
                 <input type="color" value={selected.color || '#1a1a2e'} onChange={e => updateEl(selected.id, { color: e.target.value })} />
               </div>
             </>
@@ -405,9 +403,9 @@ export default function LabelDesigner() {
 
           {(selected.type === 'barcode' || selected.type === 'qr') && (
             <div className="form-group">
-              <label>Encodes field</label>
+              <label>{t('admin.labelDesigner.encodesField')}</label>
               <select value={selected.field || 'ref_code'} onChange={e => updateEl(selected.id, { field: e.target.value })}>
-                {['ref_code', 'local_ref'].map(f => <option key={f} value={f}>{FIELD_LABELS[f]}</option>)}
+                {['ref_code', 'local_ref'].map(f => <option key={f} value={f}>{t(`admin.labelDesigner.fields.${f}`)}</option>)}
               </select>
             </div>
           )}
@@ -423,7 +421,7 @@ export default function LabelDesigner() {
           </div>
 
           <div className="form-group">
-            <label>Rotation</label>
+            <label>{t('admin.labelDesigner.rotation')}</label>
             <div className={styles.btnRow}>
               {[0, 90, 180, 270].map(deg => (
                 <button key={deg}

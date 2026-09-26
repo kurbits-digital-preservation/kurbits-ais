@@ -9,21 +9,25 @@ import { templatesApi } from '@/api'
 import api from '@/api/client'
 import { Spinner } from '@/components/ui'
 import type { ExternalIntegration } from '@/types'
+import { useTranslation } from 'react-i18next'
 import styles from './MetadataTemplatesPage.module.css'
 
 // ─── Field type registry ──────────────────────────────────────────────
+// Display labels are resolved via fieldTypes.<key> so this registry stays
+// a stable, language-independent contract for other files that import it
+// (e.g. HierarchyPage.tsx).
 
 export const FIELD_TYPES = {
-  text:        { label: 'Text',         icon: Type,        hasOptions: false, hasPlaceholder: true },
-  textarea:    { label: 'Long text',    icon: AlignLeft,   hasOptions: false, hasPlaceholder: true },
-  number:      { label: 'Number',       icon: Hash,        hasOptions: false, hasPlaceholder: true },
-  date:        { label: 'Date',         icon: Calendar,    hasOptions: false, hasPlaceholder: false },
-  select:      { label: 'Dropdown',     icon: List,        hasOptions: true,  hasPlaceholder: true },
-  multiselect: { label: 'Multi-select', icon: Layers,      hasOptions: true,  hasPlaceholder: true },
-  boolean:     { label: 'Checkbox',     icon: CheckSquare, hasOptions: false, hasPlaceholder: false },
-  url:         { label: 'URL',          icon: Link2,       hasOptions: false, hasPlaceholder: true },
-  email:       { label: 'Email',        icon: Mail,        hasOptions: false, hasPlaceholder: true },
-  integration: { label: 'Vocabulary',   icon: Plug,        hasOptions: false, hasPlaceholder: true },
+  text:        { icon: Type,        hasOptions: false, hasPlaceholder: true },
+  textarea:    { icon: AlignLeft,   hasOptions: false, hasPlaceholder: true },
+  number:      { icon: Hash,        hasOptions: false, hasPlaceholder: true },
+  date:        { icon: Calendar,    hasOptions: false, hasPlaceholder: false },
+  select:      { icon: List,        hasOptions: true,  hasPlaceholder: true },
+  multiselect: { icon: Layers,      hasOptions: true,  hasPlaceholder: true },
+  boolean:     { icon: CheckSquare, hasOptions: false, hasPlaceholder: false },
+  url:         { icon: Link2,       hasOptions: false, hasPlaceholder: true },
+  email:       { icon: Mail,        hasOptions: false, hasPlaceholder: true },
+  integration: { icon: Plug,        hasOptions: false, hasPlaceholder: true },
 } as const
 
 export type FieldType = keyof typeof FIELD_TYPES
@@ -40,11 +44,10 @@ export interface MetadataField {
   integration_id?: number   // only used when type === 'integration'
 }
 
-const ENTITY_TYPES = [
-  { value: 'resource',       label: 'Resources' },
-  { value: 'location',       label: 'Locations' },
-  { value: 'classification', label: 'Classifications' },
-]
+const ENTITY_TYPE_VALUES = ['resource', 'location', 'classification']
+const ENTITY_TYPE_NAV_KEY: Record<string, string> = {
+  resource: 'nav.resources', location: 'nav.locations', classification: 'nav.classifications',
+}
 
 function emptyField(): MetadataField {
   return { name: '', label: '', type: 'text', required: false }
@@ -66,6 +69,7 @@ function IntegrationPicker({
   value: number | undefined
   onChange: (id: number | undefined) => void
 }) {
+  const { t } = useTranslation()
   const { data: integrations = [], isLoading } = useQuery<ExternalIntegration[]>({
     queryKey: ['integrations-all'],
     queryFn: () => api.get<{ status: string; data: ExternalIntegration[] }>('/integrations')
@@ -77,13 +81,13 @@ function IntegrationPicker({
 
   return (
     <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-      <label>Vocabulary integration *</label>
+      <label>{t('admin.metadataTemplates.vocabIntegration')}</label>
       <select
         value={value ?? ''}
         onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
         required
       >
-        <option value="">Select an integration…</option>
+        <option value="">{t('admin.metadataTemplates.selectIntegrationEllipsis')}</option>
         {integrations.map(intg => (
           <option key={intg.id} value={intg.id}>
             {intg.name} — {intg.base_url}
@@ -91,8 +95,7 @@ function IntegrationPicker({
         ))}
       </select>
       <span className="form-hint">
-        The integration must have a <code>name</code> field mapping for labels to appear in search results.
-        Configure integrations under Administration → Integrations.
+        {t('admin.metadataTemplates.integrationHint', { field: 'name' })}
       </span>
     </div>
   )
@@ -112,6 +115,7 @@ function FieldEditor({
   onMoveUp: () => void
   onMoveDown: () => void
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(!field.name)
   const def = FIELD_TYPES[field.type]
 
@@ -127,32 +131,32 @@ function FieldEditor({
       <div className={styles.fieldHeader} onClick={() => setExpanded(v => !v)}>
         <div className={styles.fieldHeaderLeft}>
           <button className={styles.dragHandle}
-            onClick={e => e.stopPropagation()} title="Reorder">
+            onClick={e => e.stopPropagation()} title={t('admin.metadataTemplates.reorderTitle')}>
             <GripVertical size={14} />
           </button>
           <div className={styles.fieldTypeTag}>
             <FieldTypeIcon type={field.type} size={12} />
           </div>
           <span className={styles.fieldLabel}>
-            {field.label || <em style={{ opacity: 0.5 }}>Untitled field</em>}
+            {field.label || <em style={{ opacity: 0.5 }}>{t('admin.metadataTemplates.untitledField')}</em>}
           </span>
           {field.name && (
             <code className={styles.fieldName}>{field.name}</code>
           )}
-          {field.required && <span className={styles.requiredBadge}>required</span>}
+          {field.required && <span className={styles.requiredBadge}>{t('admin.metadataTemplates.requiredBadge')}</span>}
           {field.type === 'integration' && field.integration_id && (
             <span className={styles.integrationBadge}>
-              <Plug size={10} /> vocab
+              <Plug size={10} /> {t('admin.metadataTemplates.vocabBadge')}
             </span>
           )}
         </div>
         <div className={styles.fieldHeaderRight} onClick={e => e.stopPropagation()}>
           <button className="btn btn-ghost btn-sm btn-icon" disabled={index === 0}
-            onClick={onMoveUp} title="Move up">↑</button>
+            onClick={onMoveUp} title={t('admin.metadataTemplates.moveUp')}>↑</button>
           <button className="btn btn-ghost btn-sm btn-icon" disabled={index === total - 1}
-            onClick={onMoveDown} title="Move down">↓</button>
+            onClick={onMoveDown} title={t('admin.metadataTemplates.moveDown')}>↓</button>
           <button className="btn btn-ghost btn-sm btn-icon"
-            onClick={onDelete} title="Delete field">
+            onClick={onDelete} title={t('admin.metadataTemplates.deleteField')}>
             <Trash2 size={13} />
           </button>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -163,24 +167,24 @@ function FieldEditor({
         <div className={styles.fieldBody}>
           <div className={styles.fieldGrid}>
             <div className="form-group">
-              <label>Label *</label>
+              <label>{t('admin.vocab.checklist.label')}</label>
               <input value={field.label} onChange={e => handleLabelChange(e.target.value)}
-                placeholder="e.g. Subject heading" autoFocus={!field.name} />
+                placeholder={t('admin.metadataTemplates.labelPlaceholder')} autoFocus={!field.name} />
             </div>
 
             <div className="form-group">
-              <label>Field key *</label>
+              <label>{t('admin.metadataTemplates.fieldKey')}</label>
               <input
                 value={field.name}
                 onChange={e => onChange({ name: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
-                placeholder="snake_case key"
+                placeholder={t('admin.metadataTemplates.fieldKeyPlaceholder')}
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-sm)' }}
               />
-              <span className="form-hint">Used as the data key — no spaces, auto-generated from label</span>
+              <span className="form-hint">{t('admin.metadataTemplates.fieldKeyHint')}</span>
             </div>
 
             <div className="form-group">
-              <label>Field type *</label>
+              <label>{t('admin.metadataTemplates.fieldType')}</label>
               <select
                 value={field.type}
                 onChange={e => onChange({
@@ -189,32 +193,32 @@ function FieldEditor({
                   integration_id: undefined,
                 })}
               >
-                {Object.entries(FIELD_TYPES).map(([val, { label }]) => (
-                  <option key={val} value={val}>{label}</option>
+                {Object.keys(FIELD_TYPES).map(val => (
+                  <option key={val} value={val}>{t(`fieldTypes.${val}`)}</option>
                 ))}
               </select>
             </div>
 
             {def.hasPlaceholder && (
               <div className="form-group">
-                <label>Placeholder</label>
+                <label>{t('admin.metadataTemplates.placeholder')}</label>
                 <input value={field.placeholder ?? ''} onChange={e => onChange({ placeholder: e.target.value })}
-                  placeholder="Shown when empty…" />
+                  placeholder={t('admin.metadataTemplates.placeholderHint')} />
               </div>
             )}
 
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label>Help text</label>
+              <label>{t('admin.metadataTemplates.helpText')}</label>
               <input value={field.help_text ?? ''} onChange={e => onChange({ help_text: e.target.value })}
-                placeholder="Shown below the field to guide users" />
+                placeholder={t('admin.metadataTemplates.helpTextPlaceholder')} />
             </div>
 
             {field.type !== 'boolean' && field.type !== 'integration' && (
               <div className="form-group">
-                <label>Default value</label>
+                <label>{t('admin.metadataTemplates.defaultValue')}</label>
                 <input value={field.default_value ?? ''}
                   onChange={e => onChange({ default_value: e.target.value })}
-                  placeholder="Pre-filled value" />
+                  placeholder={t('admin.metadataTemplates.defaultValuePlaceholder')} />
               </div>
             )}
 
@@ -222,7 +226,7 @@ function FieldEditor({
               <label className={styles.checkboxLabel}>
                 <input type="checkbox" checked={field.required}
                   onChange={e => onChange({ required: e.target.checked })} />
-                Required field
+                {t('admin.metadataTemplates.requiredField')}
               </label>
             </div>
 
@@ -239,14 +243,14 @@ function FieldEditor({
           {def.hasOptions && (
             <div className={styles.optionsSection}>
               <div className={styles.optionsSectionHeader}>
-                <span className={styles.optionsSectionTitle}>Options</span>
+                <span className={styles.optionsSectionTitle}>{t('admin.metadataTemplates.options')}</span>
                 <button className="btn btn-secondary btn-sm"
                   onClick={() => onChange({ options: [...(field.options ?? []), ''] })}>
-                  <Plus size={12} /> Add option
+                  <Plus size={12} /> {t('admin.metadataTemplates.addOption')}
                 </button>
               </div>
               {(!field.options || field.options.length === 0) && (
-                <p className={styles.optionsEmpty}>No options yet. Add at least one.</p>
+                <p className={styles.optionsEmpty}>{t('admin.metadataTemplates.noOptionsYet')}</p>
               )}
               {field.options?.map((opt, oi) => (
                 <div key={oi} className={styles.optionRow}>
@@ -258,7 +262,7 @@ function FieldEditor({
                       opts[oi] = e.target.value
                       onChange({ options: opts })
                     }}
-                    placeholder={`Option ${oi + 1}`}
+                    placeholder={t('admin.metadataTemplates.optionPlaceholder', { num: oi + 1 })}
                   />
                   <button className="btn btn-ghost btn-sm btn-icon"
                     onClick={() => {
@@ -290,6 +294,7 @@ function TemplateEditor({
   onCancel: () => void
   isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
   const [entityType, setEntityType] = useState(initial?.entity_type ?? 'resource')
@@ -319,7 +324,7 @@ function TemplateEditor({
     <div className={styles.editor}>
       <div className={styles.editorHeader}>
         <h2 className={styles.editorTitle}>
-          {initial ? 'Edit template' : 'New template'}
+          {initial ? t('admin.metadataTemplates.editTemplate') : t('admin.vocab.checklist.newTemplate')}
         </h2>
         <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel}>
           <X size={14} />
@@ -330,22 +335,22 @@ function TemplateEditor({
         <div className={styles.templateMeta}>
           <div className={styles.metaGrid}>
             <div className="form-group">
-              <label>Template name *</label>
+              <label>{t('admin.metadataTemplates.templateName')}</label>
               <input value={name} onChange={e => setName(e.target.value)}
-                placeholder="e.g. Standard archive item" autoFocus />
+                placeholder={t('admin.metadataTemplates.templateNamePlaceholder')} autoFocus />
             </div>
             <div className="form-group">
-              <label>Applies to *</label>
+              <label>{t('admin.metadataTemplates.appliesToRequired')}</label>
               <select value={entityType} onChange={e => setEntityType(e.target.value)}>
-                {ENTITY_TYPES.map(et => (
-                  <option key={et.value} value={et.value}>{et.label}</option>
+                {ENTITY_TYPE_VALUES.map(et => (
+                  <option key={et} value={et}>{t(ENTITY_TYPE_NAV_KEY[et])}</option>
                 ))}
               </select>
             </div>
             <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-              <label>Description</label>
+              <label>{t('resources.form.fields.description')}</label>
               <input value={description} onChange={e => setDescription(e.target.value)}
-                placeholder="What this template is for…" />
+                placeholder={t('admin.metadataTemplates.descriptionPlaceholder')} />
             </div>
           </div>
         </div>
@@ -353,23 +358,23 @@ function TemplateEditor({
         <div className={styles.fieldsSection}>
           <div className={styles.fieldsSectionHeader}>
             <div>
-              <h3 className={styles.fieldsSectionTitle}>Fields</h3>
+              <h3 className={styles.fieldsSectionTitle}>{t('admin.metadataTemplates.fields')}</h3>
               <p className={styles.fieldsSectionDesc}>
                 {fields.length === 0
-                  ? 'No fields yet. Add fields below.'
-                  : `${fields.length} field${fields.length !== 1 ? 's' : ''} defined`}
+                  ? t('admin.metadataTemplates.noFieldsYet')
+                  : t('admin.metadataTemplates.fieldsDefined', { count: fields.length })}
               </p>
             </div>
             <div className={styles.addFieldButtons}>
-              {Object.entries(FIELD_TYPES).map(([type, { label, icon: Icon }]) => (
+              {Object.entries(FIELD_TYPES).map(([type, { icon: Icon }]) => (
                 <button
                   key={type}
                   className={styles.addFieldBtn}
                   onClick={() => setFields(prev => [...prev, { ...emptyField(), type: type as FieldType }])}
-                  title={`Add ${label} field`}
+                  title={t('admin.metadataTemplates.addFieldTitle', { type: t(`fieldTypes.${type}`) })}
                 >
                   <Icon size={13} />
-                  {label}
+                  {t(`fieldTypes.${type}`)}
                 </button>
               ))}
             </div>
@@ -378,7 +383,7 @@ function TemplateEditor({
           {fields.length === 0 && (
             <div className={styles.emptyFields}>
               <Layers size={28} style={{ opacity: 0.2, marginBottom: 'var(--space-2)' }} />
-              <p>Click a field type above to add your first field</p>
+              <p>{t('admin.metadataTemplates.clickFieldTypeHint')}</p>
             </div>
           )}
 
@@ -400,16 +405,16 @@ function TemplateEditor({
       <div className={styles.editorFooter}>
         {!canSave && fields.length > 0 && (
           <span className={styles.validationHint}>
-            <AlertCircle size={13} /> All fields need a label, key
-            {fields.some(f => f.type === 'integration' && !f.integration_id) && ', and a vocabulary integration'}
+            <AlertCircle size={13} /> {t('admin.metadataTemplates.validationHint')}
+            {fields.some(f => f.type === 'integration' && !f.integration_id) && t('admin.metadataTemplates.andVocabIntegration')}
           </span>
         )}
         <div className={styles.editorFooterActions}>
-          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onCancel}>{t('common.cancel')}</button>
           <button className="btn btn-primary" disabled={!canSave || isSaving}
             onClick={() => onSave({ name: name.trim(), description: description.trim() || null, entity_type: entityType, fields })}>
             {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-            {initial ? 'Save changes' : 'Create template'}
+            {initial ? t('resources.form.saveChanges') : t('admin.vocab.checklist.createTemplate')}
           </button>
         </div>
       </div>
@@ -424,7 +429,8 @@ function TemplateCard({
 }: {
   template: any; onEdit: () => void; onDelete: () => void; onDuplicate: () => void
 }) {
-  const entityLabel = ENTITY_TYPES.find(e => e.value === template.entity_type)?.label ?? template.entity_type
+  const { t } = useTranslation()
+  const entityLabel = ENTITY_TYPE_NAV_KEY[template.entity_type] ? t(ENTITY_TYPE_NAV_KEY[template.entity_type]) : template.entity_type
 
   return (
     <div className={styles.templateCard}>
@@ -436,13 +442,13 @@ function TemplateCard({
           )}
         </div>
         <div className={styles.cardActions}>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onDuplicate} title="Duplicate">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onDuplicate} title={t('admin.labelDesigner.duplicate')}>
             <Copy size={13} />
           </button>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onEdit} title="Edit">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onEdit} title={t('common.edit')}>
             <Pencil size={13} />
           </button>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onDelete} title="Delete">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onDelete} title={t('common.delete')}>
             <Trash2 size={13} />
           </button>
         </div>
@@ -451,7 +457,7 @@ function TemplateCard({
       <div className={styles.cardMeta}>
         <span className={styles.entityTypeBadge}>{entityLabel}</span>
         <span className={styles.fieldCount}>
-          {template.fields?.length ?? 0} field{(template.fields?.length ?? 0) !== 1 ? 's' : ''}
+          {t('admin.hierarchy.fieldsCount', { count: template.fields?.length ?? 0 })}
         </span>
       </div>
 
@@ -461,7 +467,7 @@ function TemplateCard({
             <div key={f.name} className={styles.cardFieldPill}>
               <FieldTypeIcon type={f.type} size={11} />
               <span>{f.label}</span>
-              {f.required && <span className={styles.reqDot} title="Required">*</span>}
+              {f.required && <span className={styles.reqDot} title={t('admin.metadataTemplates.requiredTitle')}>*</span>}
             </div>
           ))}
         </div>
@@ -473,6 +479,7 @@ function TemplateCard({
 // ─── Import modal ─────────────────────────────────────────────────────
 
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [file, setFile] = useState<File | null>(null)
   const [result, setResult] = useState<any>(null)
@@ -486,7 +493,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
       queryClient.invalidateQueries({ queryKey: ['metadata-templates-all'] })
       onDone()
     },
-    onError: (e: any) => setImportError(e.response?.data?.message ?? 'Import failed'),
+    onError: (e: any) => setImportError(e.response?.data?.message ?? t('agents.import.failed')),
   })
 
   return (
@@ -496,7 +503,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
         onClick={e => e.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-5)', borderBottom: '1px solid var(--color-border)' }}>
           <h3 style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <Upload size={16} /> Import templates
+            <Upload size={16} /> {t('admin.metadataTemplates.importTemplates')}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><X size={14} /></button>
         </div>
@@ -504,14 +511,16 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
           {result ? (
             <div style={{ textAlign: 'center', padding: 'var(--space-4)' }}>
               <Check size={28} style={{ color: 'var(--color-success)', marginBottom: 'var(--space-3)' }} />
-              <div style={{ fontWeight: 600, fontSize: 'var(--text-lg)', marginBottom: 'var(--space-2)' }}>Import complete</div>
+              <div style={{ fontWeight: 600, fontSize: 'var(--text-lg)', marginBottom: 'var(--space-2)' }}>{t('admin.metadataTemplates.importComplete')}</div>
               <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-faint)' }}>
-                {result.imported?.filter((i: any) => i.action === 'created').length ?? 0} created,{' '}
-                {result.imported?.filter((i: any) => i.action === 'updated').length ?? 0} updated
+                {t('admin.metadataTemplates.createdUpdated', {
+                  created: result.imported?.filter((i: any) => i.action === 'created').length ?? 0,
+                  updated: result.imported?.filter((i: any) => i.action === 'updated').length ?? 0,
+                })}
               </div>
               {result.skipped?.length > 0 && (
                 <div style={{ marginTop: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--color-warning)' }}>
-                  {result.skipped.length} skipped
+                  {t('classifications.import.skippedCount', { count: result.skipped.length })}
                 </div>
               )}
             </div>
@@ -523,10 +532,10 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
                 </div>
               )}
               <div className="form-group">
-                <label>Kurbits template JSON file *</label>
+                <label>{t('admin.metadataTemplates.jsonFileLabel')}</label>
                 <input type="file" accept=".json" onChange={e => setFile(e.target.files?.[0] ?? null)} />
                 <span className="form-hint">
-                  JSON array of templates. Existing templates with the same name are updated.
+                  {t('admin.metadataTemplates.jsonFileHint')}
                 </span>
               </div>
               <div style={{ background: 'var(--color-bg-subtle)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)', fontFamily: 'var(--font-mono)' }}>
@@ -536,10 +545,10 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
           )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)', padding: 'var(--space-4) var(--space-5)', borderTop: '1px solid var(--color-border)', background: 'var(--color-bg-subtle)' }}>
-          <button className="btn btn-ghost" onClick={onClose}>{result ? 'Close' : 'Cancel'}</button>
+          <button className="btn btn-ghost" onClick={onClose}>{result ? t('common.close') : t('common.cancel')}</button>
           {!result && (
             <button className="btn btn-primary" disabled={!file || mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? 'Importing…' : <><Upload size={14} /> Import</>}
+              {mutation.isPending ? t('resources.modals.import.importing') : <><Upload size={14} /> {t('resources.modals.import.importButton')}</>}
             </button>
           )}
         </div>
@@ -551,6 +560,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
 // ─── Main page ────────────────────────────────────────────────────────
 
 export default function MetadataTemplatesPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<any | null>(null)
   const [showImport, setShowImport] = useState(false)
@@ -588,9 +598,9 @@ export default function MetadataTemplatesPage() {
   })
 
   const duplicateMutation = useMutation({
-    mutationFn: (t: any) => templatesApi.create({
-      ...t,
-      name: `${t.name} (copy)`,
+    mutationFn: (tmpl: any) => templatesApi.create({
+      ...tmpl,
+      name: `${tmpl.name} (copy)`,
       id: undefined,
     }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['metadata-templates-all'] }),
@@ -600,8 +610,8 @@ export default function MetadataTemplatesPage() {
     <>
       <div className={styles.page}>
         <div className={styles.pageHeader}>
-          <div><h1 className={styles.pageTitle}>Metadata templates</h1></div>
-          <button className="btn btn-ghost" onClick={() => setShowImport(false)}>← Back</button>
+          <div><h1 className={styles.pageTitle}>{t('admin.metadataTemplates.pageTitle')}</h1></div>
+          <button className="btn btn-ghost" onClick={() => setShowImport(false)}>{t('admin.metadataTemplates.back')}</button>
         </div>
       </div>
       <ImportModal onClose={() => setShowImport(false)} onDone={() => setShowImport(false)} />
@@ -623,39 +633,39 @@ export default function MetadataTemplatesPage() {
     )
   }
 
-  const filtered = (templates ?? []).filter((t: any) =>
-    !filterType || t.entity_type === filterType
+  const filtered = (templates ?? []).filter((tmpl: any) =>
+    !filterType || tmpl.entity_type === filterType
   )
 
   const grouped: Record<string, any[]> = {}
-  for (const t of filtered) {
-    const key = t.entity_type
+  for (const tmpl of filtered) {
+    const key = tmpl.entity_type
     if (!grouped[key]) grouped[key] = []
-    grouped[key].push(t)
+    grouped[key].push(tmpl)
   }
 
   return (
     <div className={styles.page}>
       <div className={styles.pageHeader}>
         <div>
-          <h1 className={styles.pageTitle}>Metadata templates</h1>
+          <h1 className={styles.pageTitle}>{t('admin.metadataTemplates.pageTitle')}</h1>
           <p className={styles.pageDesc}>
-            Reusable field schemas that can be applied to hierarchy levels. Define once, apply anywhere.
+            {t('admin.metadataTemplates.pageDesc')}
           </p>
         </div>
         <div className={styles.pageHeaderActions}>
           <select value={filterType} onChange={e => setFilterType(e.target.value)}
             className={styles.filterSelect}>
-            <option value="">All types</option>
-            {ENTITY_TYPES.map(et => (
-              <option key={et.value} value={et.value}>{et.label}</option>
+            <option value="">{t('admin.vocab.checklist.allTypes')}</option>
+            {ENTITY_TYPE_VALUES.map(et => (
+              <option key={et} value={et}>{t(ENTITY_TYPE_NAV_KEY[et])}</option>
             ))}
           </select>
           <button className="btn btn-secondary" onClick={() => setShowImport(true)}>
-            <Upload size={14} /> Import
+            <Upload size={14} /> {t('resources.modals.import.importButton')}
           </button>
           <button className="btn btn-primary" onClick={() => setEditing({})}>
-            <Plus size={14} /> New template
+            <Plus size={14} /> {t('admin.vocab.checklist.newTemplate')}
           </button>
         </div>
       </div>
@@ -665,31 +675,31 @@ export default function MetadataTemplatesPage() {
       ) : filtered.length === 0 ? (
         <div className={styles.emptyState}>
           <Layers size={40} style={{ opacity: 0.2, marginBottom: 'var(--space-4)' }} />
-          <h3>No templates yet</h3>
-          <p>Create a template to define reusable sets of metadata fields for your hierarchy levels.</p>
+          <h3>{t('admin.metadataTemplates.noTemplatesYet')}</h3>
+          <p>{t('admin.metadataTemplates.createTemplateHint')}</p>
           <button className="btn btn-primary" style={{ marginTop: 'var(--space-4)' }}
             onClick={() => setEditing({})}>
-            <Plus size={14} /> Create first template
+            <Plus size={14} /> {t('admin.metadataTemplates.createFirstTemplate')}
           </button>
         </div>
       ) : (
         <div className={styles.templateGroups}>
-          {ENTITY_TYPES.filter(et => grouped[et.value]?.length).map(et => (
-            <div key={et.value} className={styles.templateGroup}>
+          {ENTITY_TYPE_VALUES.filter(et => grouped[et]?.length).map(et => (
+            <div key={et} className={styles.templateGroup}>
               <div className={styles.groupHeader}>
-                <span className={styles.groupTitle}>{et.label}</span>
-                <span className={styles.groupCount}>{grouped[et.value].length}</span>
+                <span className={styles.groupTitle}>{t(ENTITY_TYPE_NAV_KEY[et])}</span>
+                <span className={styles.groupCount}>{grouped[et].length}</span>
               </div>
               <div className={styles.templateGrid}>
-                {grouped[et.value].map((t: any) => (
+                {grouped[et].map((tmpl: any) => (
                   <TemplateCard
-                    key={t.id}
-                    template={t}
-                    onEdit={() => setEditing(t)}
+                    key={tmpl.id}
+                    template={tmpl}
+                    onEdit={() => setEditing(tmpl)}
                     onDelete={() => {
-                      if (confirm(`Delete template "${t.name}"?`)) deleteMutation.mutate(t.id)
+                      if (confirm(t('admin.metadataTemplates.deleteTemplateConfirm', { name: tmpl.name }))) deleteMutation.mutate(tmpl.id)
                     }}
-                    onDuplicate={() => duplicateMutation.mutate(t)}
+                    onDuplicate={() => duplicateMutation.mutate(tmpl)}
                   />
                 ))}
               </div>

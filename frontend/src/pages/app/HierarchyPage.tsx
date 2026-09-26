@@ -9,13 +9,14 @@ import { hierarchyApi, templatesApi } from '@/api'
 import { Spinner, EmptyState } from '@/components/ui'
 import styles from './HierarchyPage.module.css'
 import api from '@/api/client'
+import { useTranslation } from 'react-i18next'
 
 // ─── Constants ────────────────────────────────────────────────────────
 
 const ENTITY_TYPE_META = {
-  resource:       { label: 'Resource',       icon: Database, colour: 'var(--color-accent)' },
-  location:       { label: 'Location',       icon: MapPin,   colour: 'var(--color-success)' },
-  classification: { label: 'Classification', icon: Tag,      colour: '#6B5B8B' },
+  resource:       { icon: Database, colour: 'var(--color-accent)' },
+  location:       { icon: MapPin,   colour: 'var(--color-success)' },
+  classification: { icon: Tag,      colour: '#6B5B8B' },
 }
 
 import { FIELD_TYPES, type FieldType, type MetadataField } from './MetadataTemplatesPage'
@@ -33,6 +34,7 @@ function InlineEdit({
   placeholder?: string
   className?: string
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(value)
 
@@ -60,7 +62,7 @@ function InlineEdit({
     <span
       className={`${styles.inlineText} ${className ?? ''}`}
       onClick={() => { setDraft(value); setEditing(true) }}
-      title="Click to edit"
+      title={t('admin.vocab.clickToEdit')}
     >
       {value || <span className={styles.placeholder}>{placeholder}</span>}
       <Pencil size={11} className={styles.inlineEditIcon} />
@@ -71,6 +73,7 @@ function InlineEdit({
 // ─── Template loader / saver ──────────────────────────────────────────
 
 function TemplateLoader({ entityType, onLoad }: { entityType: string; onLoad: (fields: MetadataField[]) => void }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const { data: templates } = useQuery({
     queryKey: ['metadata-templates', entityType],
@@ -79,8 +82,8 @@ function TemplateLoader({ entityType, onLoad }: { entityType: string; onLoad: (f
   })
   return (
     <div style={{ position: 'relative' }}>
-      <button className="btn btn-ghost btn-sm" onClick={() => setOpen(v => !v)} title="Load template">
-        <BookOpen size={13} /> Load template
+      <button className="btn btn-ghost btn-sm" onClick={() => setOpen(v => !v)} title={t('admin.hierarchy.loadTemplate')}>
+        <BookOpen size={13} /> {t('admin.hierarchy.loadTemplate')}
       </button>
       {open && (
         <>
@@ -93,18 +96,18 @@ function TemplateLoader({ entityType, onLoad }: { entityType: string; onLoad: (f
           }}>
             {!templates?.length ? (
               <p style={{ padding: 'var(--space-4)', fontSize: 'var(--text-sm)', color: 'var(--color-ink-faint)' }}>
-                No templates saved yet
+                {t('admin.hierarchy.noTemplatesSaved')}
               </p>
-            ) : templates.map((t: any) => (
-              <button key={t.id} style={{
+            ) : templates.map((tmpl: any) => (
+              <button key={tmpl.id} style={{
                 display: 'block', width: '100%', padding: '10px var(--space-4)',
                 background: 'none', border: 'none', borderBottom: '1px solid var(--color-border)',
                 cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font-sans)',
               }}
-              onClick={() => { onLoad(t.fields); setOpen(false) }}>
-                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{t.name}</div>
+              onClick={() => { onLoad(tmpl.fields); setOpen(false) }}>
+                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500 }}>{tmpl.name}</div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
-                  {t.fields.length} field{t.fields.length !== 1 ? 's' : ''}
+                  {t('admin.hierarchy.fieldsCount', { count: tmpl.fields.length })}
                 </div>
               </button>
             ))}
@@ -116,6 +119,7 @@ function TemplateLoader({ entityType, onLoad }: { entityType: string; onLoad: (f
 }
 
 function TemplateSaver({ fields, entityType }: { fields: MetadataField[]; entityType: string }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
@@ -130,16 +134,16 @@ function TemplateSaver({ fields, entityType }: { fields: MetadataField[]; entity
   return saving ? (
     <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
       <input value={name} onChange={e => setName(e.target.value)}
-        placeholder="Template name…" style={{ fontSize: 'var(--text-sm)', padding: '4px 8px', width: 160 }}
+        placeholder={t('admin.hierarchy.templateNamePlaceholder')} style={{ fontSize: 'var(--text-sm)', padding: '4px 8px', width: 160 }}
         onKeyDown={e => { if (e.key === 'Enter' && name.trim()) saveMutation.mutate(); if (e.key === 'Escape') setSaving(false) }}
         autoFocus />
       <button className="btn btn-primary btn-sm" disabled={!name.trim() || saveMutation.isPending}
-        onClick={() => saveMutation.mutate()}>Save</button>
-      <button className="btn btn-ghost btn-sm" onClick={() => setSaving(false)}>Cancel</button>
+        onClick={() => saveMutation.mutate()}>{t('common.save')}</button>
+      <button className="btn btn-ghost btn-sm" onClick={() => setSaving(false)}>{t('common.cancel')}</button>
     </div>
   ) : (
-    <button className="btn btn-ghost btn-sm" onClick={() => setSaving(true)} title="Save as template">
-      <Download size={13} /> Save as template
+    <button className="btn btn-ghost btn-sm" onClick={() => setSaving(true)} title={t('admin.hierarchy.saveAsTemplate')}>
+      <Download size={13} /> {t('admin.hierarchy.saveAsTemplate')}
     </button>
   )
 }
@@ -153,6 +157,7 @@ function InlineIntegrationPicker({
   value: number | undefined
   onChange: (id: number | undefined) => void
 }) {
+  const { t } = useTranslation()
   const { data: integrations = [] } = useQuery({
     queryKey:  ['integrations', 'metadata'],
     queryFn:   () => api
@@ -164,7 +169,7 @@ function InlineIntegrationPicker({
   if (integrations.length === 0) {
     return (
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)', fontStyle: 'italic' }}>
-        No vocabulary integrations — add one under Administration → Integrations
+        {t('admin.hierarchy.noVocabIntegrations')}
       </span>
     )
   }
@@ -175,7 +180,7 @@ function InlineIntegrationPicker({
       value={value ?? ''}
       onChange={e => onChange(e.target.value ? Number(e.target.value) : undefined)}
     >
-      <option value="">Select vocabulary…</option>
+      <option value="">{t('admin.hierarchy.selectVocabularyEllipsis')}</option>
       {integrations.map((intg: any) => (
         <option key={intg.id} value={intg.id}>{intg.name}</option>
       ))}
@@ -194,6 +199,7 @@ function MetadataSchemaEditor({
   onChange: (fields: MetadataField[]) => void
   entityType?: string
 }) {
+  const { t } = useTranslation()
   const addField = () => {
     onChange([...fields, { name: '', label: '', type: 'text', required: false }])
   }
@@ -213,27 +219,27 @@ function MetadataSchemaEditor({
   return (
     <div className={styles.schemaEditor}>
       <div className={styles.schemaHeader}>
-        <span className={styles.schemaTitle}>Custom metadata fields</span>
+        <span className={styles.schemaTitle}>{t('admin.hierarchy.customMetadataFields')}</span>
         <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
           <TemplateLoader entityType={entityType} onLoad={onChange} />
           <TemplateSaver fields={fields} entityType={entityType} />
           <button className="btn btn-secondary btn-sm" onClick={addField}>
-            <Plus size={13} /> Add field
+            <Plus size={13} /> {t('admin.hierarchy.addField')}
           </button>
         </div>
       </div>
 
       {fields.length === 0 ? (
         <p className={styles.schemaEmpty}>
-          No custom fields. Standard ISAD(G) fields are always available.
+          {t('admin.hierarchy.noCustomFields')}
         </p>
       ) : (
         <div className={styles.fieldList}>
           <div className={styles.fieldListHeader}>
-            <span>Label</span>
-            <span>Key (auto)</span>
-            <span>Type</span>
-            <span>Required</span>
+            <span>{t('admin.hierarchy.fieldListHeader.label')}</span>
+            <span>{t('admin.vocab.checklist.key')} (auto)</span>
+            <span>{t('admin.hierarchy.fieldListHeader.type')}</span>
+            <span>{t('admin.hierarchy.fieldListHeader.required')}</span>
             <span />
           </div>
           {fields.map((field, i) => (
@@ -242,7 +248,7 @@ function MetadataSchemaEditor({
                 <input
                   className={styles.fieldInput}
                   value={field.label}
-                  placeholder="Display label"
+                  placeholder={t('admin.hierarchy.displayLabelPlaceholder')}
                   onChange={e => {
                     const label = e.target.value
                     updateField(i, {
@@ -254,7 +260,7 @@ function MetadataSchemaEditor({
                 <input
                   className={`${styles.fieldInput} ${styles.fieldKey}`}
                   value={field.name}
-                  placeholder="field_key"
+                  placeholder={t('admin.hierarchy.fieldKeyPlaceholder')}
                   onChange={e => updateField(i, { name: e.target.value.toLowerCase().replace(/\s+/g, '_') })}
                 />
                 <select
@@ -265,8 +271,8 @@ function MetadataSchemaEditor({
                     integration_id: e.target.value === 'integration' ? field.integration_id : undefined,
                   })}
                 >
-                  {Object.entries(FIELD_TYPES).map(([val, def]) => (
-                    <option key={val} value={val}>{def.label}</option>
+                  {Object.keys(FIELD_TYPES).map(val => (
+                    <option key={val} value={val}>{t(`fieldTypes.${val}`)}</option>
                   ))}
                 </select>
                 <div className={styles.fieldRequired}>
@@ -284,7 +290,7 @@ function MetadataSchemaEditor({
               {field.type === 'integration' && (
                 <div className={styles.fieldIntegrationRow}>
                   <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-muted)', whiteSpace: 'nowrap' }}>
-                    Vocabulary source:
+                    {t('admin.hierarchy.vocabularySource')}
                   </span>
                   <InlineIntegrationPicker
                     value={field.integration_id}
@@ -315,6 +321,7 @@ function LevelRow({
   entityType: string
   onUpdated: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [expanded, setExpanded] = useState(false)
   const [schemaFields, setSchemaFields] = useState<MetadataField[]>(
@@ -372,22 +379,22 @@ function LevelRow({
           <InlineEdit
             value={level.name}
             onSave={name => updateMutation.mutate({ name })}
-            placeholder="Level name"
+            placeholder={t('admin.hierarchy.levelNamePlaceholder')}
             className={styles.levelName}
           />
           <span className={styles.levelOrder}>#{level.sort_order}</span>
           {level.allowed_parent_ids.length === 0 && (
-            <span className={styles.rootBadge}>root</span>
+            <span className={styles.rootBadge}>{t('admin.hierarchy.rootBadge')}</span>
           )}
           {entityType === 'resource' && level.can_have_location && (
-            <span className={styles.locationBadge}><MapPin size={10} /> stores items</span>
+            <span className={styles.locationBadge}><MapPin size={10} /> {t('admin.hierarchy.storesItemsBadge')}</span>
           )}
           {entityType === 'resource' && level.is_object_level && (
-            <span className={styles.objectBadge}><Layers size={10} /> object</span>
+            <span className={styles.objectBadge}><Layers size={10} /> {t('admin.hierarchy.objectBadge')}</span>
           )}
           {level.metadata_schema?.fields?.length > 0 && (
             <span className={styles.schemaBadge}>
-              <Settings size={10} /> {level.metadata_schema.fields.length} field{level.metadata_schema.fields.length !== 1 ? 's' : ''}
+              <Settings size={10} /> {t('admin.hierarchy.fieldsCount', { count: level.metadata_schema.fields.length })}
             </span>
           )}
         </div>
@@ -400,7 +407,7 @@ function LevelRow({
           <button
             className="btn btn-ghost btn-sm btn-icon"
             onClick={() => {
-              if (confirm(`Delete level "${level.name}"?`)) deleteMutation.mutate()
+              if (confirm(t('admin.hierarchy.deleteLevelConfirm', { name: level.name }))) deleteMutation.mutate()
             }}
           >
             <Trash2 size={13} />
@@ -414,7 +421,7 @@ function LevelRow({
           {/* Sort order + checkboxes */}
           <div className={styles.levelMeta}>
             <div className="form-group" style={{ width: 120 }}>
-              <label>Sort order</label>
+              <label>{t('admin.hierarchy.sortOrder')}</label>
               <input
                 type="number"
                 defaultValue={level.sort_order}
@@ -435,7 +442,7 @@ function LevelRow({
                   defaultChecked={level.can_have_location}
                   onChange={e => updateMutation.mutate({ can_have_location: e.target.checked })}
                 />
-                Can have physical location
+                {t('admin.hierarchy.canHaveLocation')}
               </label>
             )}
 
@@ -446,9 +453,9 @@ function LevelRow({
                   defaultChecked={level.is_object_level}
                   onChange={e => updateMutation.mutate({ is_object_level: e.target.checked })}
                 />
-                Is object level
+                {t('admin.hierarchy.isObjectLevel')}
                 <span style={{ fontWeight: 400, color: 'var(--color-ink-faint)', fontSize: 'var(--text-xs)' }}>
-                  — enables representations tab on nodes at this level
+                  {t('admin.hierarchy.isObjectLevelHint')}
                 </span>
               </label>
             )}
@@ -457,16 +464,16 @@ function LevelRow({
           {/* Parent relationships */}
           <div className={styles.parentsSection}>
             <div className={styles.parentsSectionHeader}>
-              <span className={styles.sectionLabel}>Allowed parent levels</span>
+              <span className={styles.sectionLabel}>{t('admin.hierarchy.allowedParentLevels')}</span>
               <span className={styles.sectionHint}>
                 {selectedParents.length === 0
-                  ? 'No parents selected — this is a root level'
-                  : `${selectedParents.length} parent(s) selected`}
+                  ? t('admin.hierarchy.noParentsRoot')
+                  : t('admin.hierarchy.parentsSelected', { count: selectedParents.length })}
               </span>
             </div>
 
             {otherLevels.length === 0 ? (
-              <p className={styles.noOtherLevels}>No other levels defined yet.</p>
+              <p className={styles.noOtherLevels}>{t('admin.hierarchy.noOtherLevels')}</p>
             ) : (
               <div className={styles.parentChips}>
                 {otherLevels.map(other => (
@@ -488,7 +495,7 @@ function LevelRow({
                   className="btn btn-ghost btn-sm"
                   onClick={() => { setSelectedParents(level.allowed_parent_ids); setParentDirty(false) }}
                 >
-                  Reset
+                  {t('admin.hierarchy.reset')}
                 </button>
                 <button
                   className="btn btn-primary btn-sm"
@@ -496,7 +503,7 @@ function LevelRow({
                   disabled={saveParentsMutation.isPending}
                 >
                   {saveParentsMutation.isPending ? <Spinner size={13} /> : <Save size={13} />}
-                  Save relationships
+                  {t('admin.hierarchy.saveRelationships')}
                 </button>
               </div>
             )}
@@ -515,7 +522,7 @@ function LevelRow({
                 setSchemaFields(level.metadata_schema?.fields ?? [])
                 setSchemaDirty(false)
               }}>
-                Reset
+                {t('admin.hierarchy.reset')}
               </button>
               <button
                 className="btn btn-primary btn-sm"
@@ -523,7 +530,7 @@ function LevelRow({
                 disabled={saveSchemaMutation.isPending}
               >
                 {saveSchemaMutation.isPending ? <Spinner size={13} /> : <Save size={13} />}
-                Save schema
+                {t('admin.hierarchy.saveSchema')}
               </button>
             </div>
           )}
@@ -542,6 +549,7 @@ function HierarchyTypePanel({
   typeId: number
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [addingLevel, setAddingLevel] = useState(false)
   const [newLevelName, setNewLevelName] = useState('')
@@ -549,7 +557,7 @@ function HierarchyTypePanel({
   const { data: type } = useQuery({
     queryKey: ['hierarchy-type', typeId],
     queryFn: () => hierarchyApi.listTypes().then(r =>
-      r.data.data.find((t: any) => t.id === typeId)
+      r.data.data.find((ht: any) => ht.id === typeId)
     ),
   })
 
@@ -591,7 +599,7 @@ function HierarchyTypePanel({
               onSave={name => updateTypeMutation.mutate({ name })}
               className={styles.typeName}
             />
-            <span className={styles.typeEntityType}>{meta?.label}</span>
+            <span className={styles.typeEntityType}>{t(`admin.hierarchy.entityTypes.${type.entity_type}`)}</span>
           </div>
         </div>
         <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
@@ -602,10 +610,10 @@ function HierarchyTypePanel({
       <div className={styles.typePanelBody}>
         <div className={styles.levelsHeader}>
           <h3 className={styles.levelsTitle}>
-            Levels <span className={styles.levelsCount}>{sorted.length}</span>
+            {t('admin.hierarchy.levelsTitle')} <span className={styles.levelsCount}>{sorted.length}</span>
           </h3>
           <button className="btn btn-secondary btn-sm" onClick={() => setAddingLevel(true)}>
-            <Plus size={13} /> Add level
+            <Plus size={13} /> {t('admin.hierarchy.addLevel')}
           </button>
         </div>
 
@@ -613,7 +621,7 @@ function HierarchyTypePanel({
           <div className={styles.addLevelForm}>
             <input
               autoFocus
-              placeholder="Level name (e.g. Fonds, Series, File)"
+              placeholder={t('admin.hierarchy.levelNamePlaceholderFull')}
               value={newLevelName}
               onChange={e => setNewLevelName(e.target.value)}
               onKeyDown={e => {
@@ -626,10 +634,10 @@ function HierarchyTypePanel({
               disabled={!newLevelName.trim() || createLevelMutation.isPending}
               onClick={() => createLevelMutation.mutate(newLevelName.trim())}
             >
-              {createLevelMutation.isPending ? <Spinner size={13} /> : 'Add'}
+              {createLevelMutation.isPending ? <Spinner size={13} /> : t('common.add')}
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => { setNewLevelName(''); setAddingLevel(false) }}>
-              Cancel
+              {t('common.cancel')}
             </button>
           </div>
         )}
@@ -639,7 +647,7 @@ function HierarchyTypePanel({
         ) : sorted.length === 0 ? (
           <div className={styles.noLevels}>
             <AlertCircle size={20} />
-            <p>No levels defined. Add at least one to use this hierarchy.</p>
+            <p>{t('admin.hierarchy.noLevelsDefined')}</p>
           </div>
         ) : (
           <div className={styles.levelList}>
@@ -657,11 +665,9 @@ function HierarchyTypePanel({
         )}
 
         <div className={styles.relationshipGuide}>
-          <p className={styles.guideTitle}>How parent-child relationships work</p>
+          <p className={styles.guideTitle}>{t('admin.hierarchy.relationshipGuideTitle')}</p>
           <p className={styles.guideText}>
-            Expand a level and select which levels are allowed above it.
-            A level with no parents is a <strong>root level</strong> — it can appear at the top of a tree.
-            A level can have multiple allowed parents, enabling flexible hierarchies.
+            {t('admin.hierarchy.relationshipGuideText')}
           </p>
         </div>
       </div>
@@ -672,6 +678,7 @@ function HierarchyTypePanel({
 // ─── Main page ────────────────────────────────────────────────────────
 
 export default function HierarchyPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null)
   const [addingType, setAddingType] = useState(false)
@@ -707,30 +714,30 @@ export default function HierarchyPage() {
   const types = data ?? []
 
   const grouped = {
-    resource:       types.filter((t: any) => t.entity_type === 'resource'),
-    location:       types.filter((t: any) => t.entity_type === 'location'),
-    classification: types.filter((t: any) => t.entity_type === 'classification'),
+    resource:       types.filter((ht: any) => ht.entity_type === 'resource'),
+    location:       types.filter((ht: any) => ht.entity_type === 'location'),
+    classification: types.filter((ht: any) => ht.entity_type === 'classification'),
   }
 
   return (
     <div className={styles.page}>
       <div className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
-          <h2 className={styles.sidebarTitle}>Hierarchy types</h2>
+          <h2 className={styles.sidebarTitle}>{t('admin.hierarchy.hierarchyTypes')}</h2>
           <button className="btn btn-primary btn-sm" onClick={() => setAddingType(v => !v)}>
-            <Plus size={14} /> New
+            <Plus size={14} /> {t('resources.tree.newButton')}
           </button>
         </div>
 
         {addingType && (
           <div className={styles.addTypeForm}>
             <div className="form-group">
-              <label>Name</label>
+              <label>{t('admin.vocab.name')}</label>
               <input
                 autoFocus
                 value={newTypeName}
                 onChange={e => setNewTypeName(e.target.value)}
-                placeholder="e.g. ISAD(G), Library catalogue"
+                placeholder={t('admin.hierarchy.typeNamePlaceholder')}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && newTypeName.trim()) createTypeMutation.mutate()
                   if (e.key === 'Escape') setAddingType(false)
@@ -738,21 +745,21 @@ export default function HierarchyPage() {
               />
             </div>
             <div className="form-group">
-              <label>Applies to</label>
+              <label>{t('admin.vocab.appliesTo')}</label>
               <select value={newTypeEntityType} onChange={e => setNewTypeEntityType(e.target.value)}>
-                <option value="resource">Resources (archival descriptions)</option>
-                <option value="location">Locations (physical storage)</option>
-                <option value="classification">Classifications (subject/function)</option>
+                <option value="resource">{t('admin.hierarchy.entityOptionResource')}</option>
+                <option value="location">{t('admin.hierarchy.entityOptionLocation')}</option>
+                <option value="classification">{t('admin.hierarchy.entityOptionClassification')}</option>
               </select>
             </div>
             <div className={styles.addTypeActions}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setAddingType(false)}>Cancel</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAddingType(false)}>{t('common.cancel')}</button>
               <button
                 className="btn btn-primary btn-sm"
                 disabled={!newTypeName.trim() || createTypeMutation.isPending}
                 onClick={() => createTypeMutation.mutate()}
               >
-                {createTypeMutation.isPending ? <Spinner size={13} /> : 'Create'}
+                {createTypeMutation.isPending ? <Spinner size={13} /> : t('admin.vocab.create')}
               </button>
             </div>
           </div>
@@ -763,8 +770,8 @@ export default function HierarchyPage() {
         ) : types.length === 0 ? (
           <EmptyState
             icon={<ArrowUpDown size={28} />}
-            title="No hierarchy types"
-            subtitle="Create one to define how your archival descriptions are structured"
+            title={t('admin.hierarchy.noHierarchyTypes')}
+            subtitle={t('admin.hierarchy.noHierarchyTypesSubtitle')}
           />
         ) : (
           <div className={styles.typeList}>
@@ -777,24 +784,24 @@ export default function HierarchyPage() {
                   <div key={entityType} className={styles.typeGroup}>
                     <div className={styles.typeGroupLabel}>
                       <GroupIcon size={12} style={{ color: meta.colour }} />
-                      {meta.label}
+                      {t(`admin.hierarchy.entityTypes.${entityType}`)}
                     </div>
-                    {items.map((t: any) => (
+                    {items.map((tp: any) => (
                       <div
-                        key={t.id}
-                        className={`${styles.typeItem} ${selectedTypeId === t.id ? styles.typeItemSelected : ''}`}
-                        onClick={() => setSelectedTypeId(t.id)}
+                        key={tp.id}
+                        className={`${styles.typeItem} ${selectedTypeId === tp.id ? styles.typeItemSelected : ''}`}
+                        onClick={() => setSelectedTypeId(tp.id)}
                       >
                         <div className={styles.typeItemMain}>
-                          <span className={styles.typeItemName}>{t.name}</span>
-                          <span className={styles.typeItemCount}>{t.level_count} level{t.level_count !== 1 ? 's' : ''}</span>
+                          <span className={styles.typeItemName}>{tp.name}</span>
+                          <span className={styles.typeItemCount}>{t('admin.hierarchy.levelsCount', { count: tp.level_count })}</span>
                         </div>
                         <button
                           className={`btn btn-ghost btn-sm btn-icon ${styles.typeDeleteBtn}`}
                           onClick={e => {
                             e.stopPropagation()
-                            if (confirm(`Delete "${t.name}"? This cannot be undone.`)) {
-                              deleteTypeMutation.mutate(t.id)
+                            if (confirm(t('admin.hierarchy.deleteTypeConfirm', { name: tp.name }))) {
+                              deleteTypeMutation.mutate(tp.id)
                             }
                           }}
                         >
@@ -819,8 +826,8 @@ export default function HierarchyPage() {
         ) : (
           <EmptyState
             icon={<ArrowUpDown size={36} />}
-            title="Select a hierarchy type to manage its levels"
-            subtitle="Levels define the structure of your archival descriptions"
+            title={t('admin.hierarchy.selectTypeToManage')}
+            subtitle={t('admin.hierarchy.selectTypeSubtitle')}
           />
         )}
       </div>

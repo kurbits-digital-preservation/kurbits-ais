@@ -21,6 +21,7 @@ import type { AuthorityResult } from '@/components/ui/AuthorityLookup'
 import BookmarkButton from '@/components/layout/BookmarkButton'
 import AgentIdentifiersTab from '@/components/agent/AgentIdentifiersTab'
 import AgentAttachmentsTab from '@/components/agent/AgentAttachmentsTab'
+import { useTranslation } from 'react-i18next'
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ function AgentForm({
   onCancel: () => void
   isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<AgentFormData>({ ...EMPTY_FORM, ...initial })
   const set = (field: keyof AgentFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -125,57 +127,57 @@ function AgentForm({
       <AuthorityLookup onApply={handleAuthorityApply} />
       <div className={styles.formGrid}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Name *</label>
-          <input value={form.name} onChange={set('name')} placeholder="Full name or corporate name" required />
+          <label>{t('agents.form.name')}</label>
+          <input value={form.name} onChange={set('name')} placeholder={t('agents.form.namePlaceholder')} required />
         </div>
 
         <div className="form-group">
-          <label>Type *</label>
+          <label>{t('agents.form.type')}</label>
           <select value={form.agent_type} onChange={set('agent_type')}>
-            {AGENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            {AGENT_TYPES.map(at => <option key={at} value={at}>{t(`agents.types.${at}`)}</option>)}
           </select>
         </div>
 
         <div className="form-group">
-          <label>Authorized form of name</label>
+          <label>{t('agents.form.authorizedForm')}</label>
           <input value={form.authorized_form} onChange={set('authorized_form')}
-            placeholder="As used in authority files" />
+            placeholder={t('agents.form.authorizedFormPlaceholder')} />
         </div>
 
         <div className="form-group">
-          <label>Date of existence (from)</label>
+          <label>{t('agents.form.dateFrom')}</label>
           <input value={form.date_from} onChange={set('date_from')}
-            placeholder="e.g. 1842 or 1842-03-15" />
+            placeholder={t('agents.form.dateFromPlaceholder')} />
         </div>
 
         <div className="form-group">
-          <label>Date of existence (to)</label>
+          <label>{t('agents.form.dateTo')}</label>
           <input value={form.date_to} onChange={set('date_to')}
-            placeholder="Leave empty if still active" />
+            placeholder={t('agents.form.dateToPlaceholder')} />
         </div>
 
         <div className="form-group">
-          <label>External identifier</label>
+          <label>{t('agents.form.externalId')}</label>
           <input value={form.identifier} onChange={set('identifier')}
-            placeholder="ISNI, VIAF, Wikidata QID…" />
+            placeholder={t('agents.form.externalIdPlaceholder')} />
         </div>
 
         <div className="form-group">
-          <label>Website</label>
+          <label>{t('agents.form.website')}</label>
           <input value={form.website} onChange={set('website')}
             placeholder="https://…" type="url" />
         </div>
 
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Description / biography</label>
+          <label>{t('agents.form.description')}</label>
           <textarea value={form.description} onChange={set('description')}
-            rows={5} placeholder="Biographical or organizational history…" />
+            rows={5} placeholder={t('agents.form.descriptionPlaceholder')} />
         </div>
       </div>
 
       <div className={styles.formActions}>
         <button className="btn btn-ghost" onClick={onCancel} disabled={isSaving}>
-          <X size={14} /> Cancel
+          <X size={14} /> {t('common.cancel')}
         </button>
         <button
           className="btn btn-primary"
@@ -183,7 +185,7 @@ function AgentForm({
           disabled={!form.name || isSaving}
         >
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-          {isSaving ? 'Saving…' : 'Save'}
+          {isSaving ? t('resources.form.saving') : t('common.save')}
         </button>
       </div>
     </div>
@@ -193,30 +195,32 @@ function AgentForm({
 // ─── Detail tabs ──────────────────────────────────────────────────────
 
 function DetailsTab({ agent }: { agent: AgentDetail }) {
+  const { t } = useTranslation()
   return (
     <div className={styles.tabContent}>
       <FieldList fields={[
-        { label: 'Authorized form', value: agent.authorized_form },
-        { label: 'Description / Biography', value: agent.description },
-        { label: 'Date of existence', value: agent.date_from || agent.date_to
-            ? `${agent.date_from ?? '?'}${agent.date_to ? ` – ${agent.date_to}` : ' – present'}`
+        { label: t('agents.details.authorizedForm'), value: agent.authorized_form },
+        { label: t('agents.details.descriptionBio'), value: agent.description },
+        { label: t('agents.details.dateOfExistence'), value: agent.date_from || agent.date_to
+            ? `${agent.date_from ?? '?'}${agent.date_to ? ` – ${agent.date_to}` : ` – ${t('agents.details.present')}`}`
             : null },
-        { label: 'External identifier', value: agent.identifier },
-        { label: 'Website', value: agent.website
+        { label: t('agents.details.externalIdentifier'), value: agent.identifier },
+        { label: t('agents.details.website'), value: agent.website
             ? <a href={agent.website} target="_blank" rel="noreferrer">
                 {agent.website} <ExternalLink size={11} />
               </a>
             : null },
       ]} />
       <div className={styles.detailFooter}>
-        <span>Created by {agent.created_by ?? '—'}</span>
-        <span>Updated {new Date(agent.updated_at).toLocaleDateString()}</span>
+        <span>{t('agents.details.createdBy', { name: agent.created_by || '—' })}</span>
+        <span>{t('agents.details.updated', { date: new Date(agent.updated_at).toLocaleDateString() })}</span>
       </div>
     </div>
   )
 }
 
 function RelationsTab({ agent }: { agent: AgentDetail }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [search, setSearch] = useState('')
@@ -254,27 +258,27 @@ function RelationsTab({ agent }: { agent: AgentDetail }) {
     <div className={styles.tabContent}>
       <div className={styles.tabActions}>
         <button className="btn btn-secondary btn-sm" onClick={() => setAdding(!adding)}>
-          <Plus size={13} /> Add relation
+          <Plus size={13} /> {t('agents.relations.addRelation')}
         </button>
       </div>
 
       {adding && (
         <div className={styles.addForm}>
           <div className="form-group">
-            <label>Relation type</label>
+            <label>{t('agents.relations.relationType')}</label>
             <select value={relationType} onChange={e => setRelationType(e.target.value)}>
-              <option value="">Select type…</option>
+              <option value="">{t('agents.relations.selectType')}</option>
               {relTypes?.map((rt: any) => (
                 <option key={rt.id} value={rt.name}>{rt.name}</option>
               ))}
             </select>
           </div>
           <div className="form-group">
-            <label>Search for agent</label>
+            <label>{t('agents.relations.searchForAgent')}</label>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Type to search agents…"
+              placeholder={t('agents.relations.searchPlaceholder')}
             />
           </div>
           {searchResults && search.length > 1 && (
@@ -294,20 +298,20 @@ function RelationsTab({ agent }: { agent: AgentDetail }) {
             </div>
           )}
           <div className={styles.addFormActions}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>{t('common.cancel')}</button>
             <button
               className="btn btn-primary btn-sm"
               disabled={!targetId || !relationType || addMutation.isPending}
               onClick={() => addMutation.mutate()}
             >
-              Add
+              {t('common.add')}
             </button>
           </div>
         </div>
       )}
 
       {agent.relations.length === 0 && !adding && (
-        <p className={styles.emptyText}>No relations recorded.</p>
+        <p className={styles.emptyText}>{t('agents.relations.noneRecorded')}</p>
       )}
 
       {agent.relations.map((rel, i) => (
@@ -333,6 +337,7 @@ function RelationsTab({ agent }: { agent: AgentDetail }) {
 }
 
 function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [rootFilter, setRootFilter] = useState<{ id: number; label: string } | null>(null)
@@ -405,7 +410,7 @@ function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
             <Search size={12} className={styles.linkedNodesSearchIcon} />
             <input
               className={styles.linkedNodesSearchInput}
-              placeholder={`Search ${data?.length} resource${data?.length !== 1 ? 's' : ''}…`}
+              placeholder={t('agents.linkedResources.searchCount', { count: data?.length ?? 0 })}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -421,7 +426,7 @@ function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
                 <input
                   className={styles.linkedNodesSearchInput}
                   style={{ fontSize: 'var(--text-xs)' }}
-                  placeholder="Filter by fonds…"
+                  placeholder={t('agents.linkedResources.filterByFonds')}
                   value={rootFilter ? rootFilter.label : rootInput}
                   readOnly={!!rootFilter}
                   onChange={e => { setRootInput(e.target.value); setRootOpen(true) }}
@@ -454,10 +459,10 @@ function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
 
       {(!data || data.length === 0) ? (
         <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>
-          No resources linked yet. Associate this agent from the Resources section.
+          {t('agents.linkedResources.noneLinked')}
         </p>
       ) : filtered.length === 0 ? (
-        <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>No results.</p>
+        <p className={styles.emptyText} style={{ padding: 'var(--space-5)' }}>{t('agents.linkedResources.noResults')}</p>
       ) : (
         filtered.map((node: any) => {
           const root = getRootNode(node)
@@ -494,6 +499,7 @@ function LinkedResourcesTab({ agent }: { agent: AgentDetail }) {
 // ─── Notes tab ────────────────────────────────────────────────────────
 
 function NotesTab({ agent }: { agent: AgentDetail }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [content, setContent] = useState('')
@@ -517,45 +523,45 @@ function NotesTab({ agent }: { agent: AgentDetail }) {
     <div className={styles.tabContent}>
       <div className={styles.tabActions}>
         <button className="btn btn-secondary btn-sm" onClick={() => setAdding(!adding)}>
-          <Plus size={13} /> Add note
+          <Plus size={13} /> {t('resources.notes.addNote')}
         </button>
       </div>
 
       {adding && (
         <div className={styles.addForm}>
           <div className="form-group">
-            <label>Note type</label>
+            <label>{t('agents.notes.noteType')}</label>
             <select value={noteType} onChange={e => setNoteType(e.target.value)}>
-              {['general', 'history', 'sources', 'maintenance', 'internal'].map(t => (
-                <option key={t} value={t}>{t}</option>
+              {['general', 'history', 'sources', 'maintenance', 'internal'].map(nt => (
+                <option key={nt} value={nt}>{nt === 'general' ? t('resources.notes.types.general') : t(`agents.notes.types.${nt}`)}</option>
               ))}
             </select>
           </div>
           <div className="form-group">
-            <label>Content</label>
+            <label>{t('resources.notes.content')}</label>
             <textarea value={content} onChange={e => setContent(e.target.value)} rows={4} />
           </div>
           <div className={styles.addFormActions}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>{t('common.cancel')}</button>
             <button
               className="btn btn-primary btn-sm"
               disabled={!content || addMutation.isPending}
               onClick={() => addMutation.mutate()}
             >
-              Save
+              {t('common.save')}
             </button>
           </div>
         </div>
       )}
 
       {agent.notes.length === 0 && !adding && (
-        <p className={styles.emptyText}>No notes yet.</p>
+        <p className={styles.emptyText}>{t('resources.notes.noneYet')}</p>
       )}
 
       {agent.notes.map(note => (
         <div key={note.id} className={styles.noteCard}>
           <div className={styles.noteCardHeader}>
-            <span className={styles.noteType}>{note.note_type}</span>
+            <span className={styles.noteType}>{note.note_type === 'general' ? t('resources.notes.types.general') : t(`agents.notes.types.${note.note_type}`, { defaultValue: note.note_type })}</span>
             <button
               className="btn btn-ghost btn-sm btn-icon"
               style={{ marginLeft: 'auto' }}
@@ -577,6 +583,7 @@ function NotesTab({ agent }: { agent: AgentDetail }) {
 // ─── Copy link button ─────────────────────────────────────────────────
 
 function CopyAgentLinkButton({ agentId, agentName }: { agentId: number; agentName: string }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
   return (
     <button
@@ -588,7 +595,7 @@ function CopyAgentLinkButton({ agentId, agentName }: { agentId: number; agentNam
           setTimeout(() => setCopied(false), 2000)
         })
       }}
-      title={copied ? 'Copied!' : `Copy direct link for ${agentName}`}
+      title={copied ? t('agents.copyLink.copied') : t('agents.copyLink.copyFor', { name: agentName })}
     >
       {copied ? <Check size={14} /> : <Link size={14} />}
     </button>
@@ -606,6 +613,7 @@ function AgentDetailPanel({
   onEdit: (agent: AgentDetail) => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const [tab, setTab] = useState('details')
   const queryClient = useQueryClient()
 
@@ -623,21 +631,21 @@ function AgentDetailPanel({
   })
 
   if (isLoading) return (
-    <div className={styles.loadingState}><Spinner /><span>Loading…</span></div>
+    <div className={styles.loadingState}><Spinner /><span>{t('common.loading')}</span></div>
   )
   if (!agent) return null
 
   const Icon = AGENT_TYPE_ICONS[agent.agent_type]
 
   const tabs = [
-    { key: 'details',     icon: <FileText size={13} />,    label: 'Details' },
-    { key: 'relations',   icon: <Link size={13} />,         label: `Relations${agent.relations.length ? ` (${agent.relations.length})` : ''}` },
-    { key: 'identifiers', icon: <Fingerprint size={13} />,  label: `Identifiers${(agent as any).identifiers?.length ? ` (${(agent as any).identifiers.length})` : ''}` },
-    { key: 'resources',   icon: <Globe size={13} />,        label: `Resources${agent.node_count ? ` (${agent.node_count})` : ''}` },
-    { key: 'places',      icon: <MapPin size={13} />,       label: 'Places' },
-    { key: 'tags',        icon: <Tag2 size={13} />,         label: 'Tags' },
-    { key: 'notes',       icon: <StickyNote size={13} />,   label: `Notes${agent.notes.length ? ` (${agent.notes.length})` : ''}` },
-    { key: 'files',       icon: <Paperclip size={13} />,    label: `Files${(agent as any).attachments?.length ? ` (${(agent as any).attachments.length})` : ''}` },
+    { key: 'details',     icon: <FileText size={13} />,    label: t('resources.tabs.details') },
+    { key: 'relations',   icon: <Link size={13} />,         label: `${t('agents.detail.tabs.relations')}${agent.relations.length ? ` (${agent.relations.length})` : ''}` },
+    { key: 'identifiers', icon: <Fingerprint size={13} />,  label: `${t('resources.tabs.identifiers')}${(agent as any).identifiers?.length ? ` (${(agent as any).identifiers.length})` : ''}` },
+    { key: 'resources',   icon: <Globe size={13} />,        label: `${t('agents.detail.tabs.resources')}${agent.node_count ? ` (${agent.node_count})` : ''}` },
+    { key: 'places',      icon: <MapPin size={13} />,       label: t('resources.tabs.places') },
+    { key: 'tags',        icon: <Tag2 size={13} />,         label: t('resources.tabs.tags') },
+    { key: 'notes',       icon: <StickyNote size={13} />,   label: `${t('resources.tabs.notes')}${agent.notes.length ? ` (${agent.notes.length})` : ''}` },
+    { key: 'files',       icon: <Paperclip size={13} />,    label: `${t('resources.tabs.files')}${(agent as any).attachments?.length ? ` (${(agent as any).attachments.length})` : ''}` },
   ]
 
   return (
@@ -667,18 +675,18 @@ function AgentDetailPanel({
               <a      className="btn btn-ghost btn-sm btn-icon"
               href={agentsApi.exportEacUrl(agentId)}
               download
-              title="Export as EAC-CPF"
+              title={t('agents.detail.exportEac')}
             >
               <Download size={14} />
             </a>
-            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(agent)} title="Edit">
+            <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(agent)} title={t('common.edit')}>
               <Pencil size={14} />
             </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
-              title="Delete"
+              title={t('common.delete')}
               onClick={() => {
-                if (confirm(`Delete agent "${agent.name}"?`)) deleteMutation.mutate()
+                if (confirm(t('agents.detail.deleteConfirm', { name: agent.name }))) deleteMutation.mutate()
               }}
             >
               <Trash2 size={14} />
@@ -712,6 +720,7 @@ type ViewMode = 'detail' | 'create' | 'edit'
 function EacCpfImportModal({ onClose, onImported }: {
   onClose: () => void; onImported: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [file, setFile] = useState<File | null>(null)
   const [updateExisting, setUpdateExisting] = useState(false)
@@ -726,7 +735,7 @@ function EacCpfImportModal({ onClose, onImported }: {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       onImported()
     },
-    onError: (e: any) => setImportError(e.response?.data?.message ?? 'Import failed'),
+    onError: (e: any) => setImportError(e.response?.data?.message ?? t('agents.import.failed')),
   })
 
   return (
@@ -737,7 +746,7 @@ function EacCpfImportModal({ onClose, onImported }: {
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--space-5)', borderBottom: '1px solid var(--color-border)' }}>
           <h3 style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <Upload size={16} /> Import EAC-CPF
+            <Upload size={16} /> {t('agents.list.importEacCpf')}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><X size={14} /></button>
         </div>
@@ -747,12 +756,12 @@ function EacCpfImportModal({ onClose, onImported }: {
             <div style={{ textAlign: 'center', padding: 'var(--space-4)' }}>
               <Check size={28} style={{ color: 'var(--color-success)', marginBottom: 'var(--space-3)' }} />
               <div style={{ fontWeight: 600, fontSize: 'var(--text-lg)', marginBottom: 'var(--space-2)' }}>
-                Import complete
+                {t('agents.import.complete')}
               </div>
               <div style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-faint)', display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                {result.total_created > 0 && <span>{result.total_created} agent{result.total_created !== 1 ? 's' : ''} created</span>}
-                {result.total_updated > 0 && <span>{result.total_updated} agent{result.total_updated !== 1 ? 's' : ''} updated</span>}
-                {result.skipped?.length > 0 && <span>{result.skipped.length} skipped (already exist)</span>}
+                {result.total_created > 0 && <span>{t('agents.import.created', { count: result.total_created })}</span>}
+                {result.total_updated > 0 && <span>{t('agents.import.updated', { count: result.total_updated })}</span>}
+                {result.skipped?.length > 0 && <span>{t('agents.import.skipped', { count: result.skipped.length })}</span>}
               </div>
               {result.warnings?.length > 0 && (
                 <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-3)', background: 'var(--color-warning-bg)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', color: 'var(--color-warning)', textAlign: 'left' }}>
@@ -768,23 +777,23 @@ function EacCpfImportModal({ onClose, onImported }: {
                 </div>
               )}
               <div className="form-group">
-                <label>EAC-CPF XML file *</label>
+                <label>{t('agents.import.fileLabel')}</label>
                 <input type="file" accept=".xml" onChange={e => setFile(e.target.files?.[0] ?? null)} />
-                <span className="form-hint">Single record or collection file. Supports EAC-CPF 2010 and 2022.</span>
+                <span className="form-hint">{t('agents.import.fileHint')}</span>
               </div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={updateExisting} onChange={e => setUpdateExisting(e.target.checked)} />
-                Update existing agents matched by identifier or name
+                {t('agents.import.updateExisting')}
               </label>
             </>
           )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)', padding: 'var(--space-4) var(--space-5)', borderTop: '1px solid var(--color-border)', background: 'var(--color-bg-subtle)' }}>
-          <button className="btn btn-ghost" onClick={onClose}>{result ? 'Close' : 'Cancel'}</button>
+          <button className="btn btn-ghost" onClick={onClose}>{result ? t('common.close') : t('common.cancel')}</button>
           {!result && (
             <button className="btn btn-primary" disabled={!file || mutation.isPending} onClick={() => mutation.mutate()}>
-              {mutation.isPending ? 'Importing…' : <><Upload size={14} /> Import</>}
+              {mutation.isPending ? t('resources.modals.import.importing') : <><Upload size={14} /> {t('resources.modals.import.importButton')}</>}
             </button>
           )}
         </div>
@@ -794,6 +803,7 @@ function EacCpfImportModal({ onClose, onImported }: {
 }
 
 export default function AgentsPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -815,8 +825,8 @@ export default function AgentsPage() {
 
   const [debouncedSearch, setDebouncedSearch] = useState('')
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
   }, [search])
 
   const { data, isLoading } = useQuery({
@@ -860,13 +870,13 @@ export default function AgentsPage() {
     <PageShell
       sidebar={
         <SidebarPanel
-          title="Agents"
+          title={t('nav.agents')}
           actions={
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <button
                 className="btn btn-ghost btn-sm btn-icon"
                 onClick={() => setShowImport(true)}
-                title="Import EAC-CPF"
+                title={t('agents.list.importEacCpf')}
               >
                 <Upload size={14} />
               </button>
@@ -874,24 +884,24 @@ export default function AgentsPage() {
                 className="btn btn-primary btn-sm"
                 onClick={() => { setViewMode('create'); setSelectedId(null) }}
               >
-                <Plus size={14} /> New
+                <Plus size={14} /> {t('resources.tree.newButton')}
               </button>
             </div>
           }
         >
-          <SearchInput value={search} onChange={setSearch} placeholder="Search agents…" />
+          <SearchInput value={search} onChange={setSearch} placeholder={t('agents.list.searchPlaceholder')} />
           <div className={styles.typeFilter}>
             <button
               className={`${styles.typeFilterBtn} ${typeFilter === '' ? styles.typeFilterActive : ''}`}
               onClick={() => setTypeFilter('')}
-            >All</button>
-            {AGENT_TYPES.map(t => (
+            >{t('flags.all')}</button>
+            {AGENT_TYPES.map(at => (
               <button
-                key={t}
-                className={`${styles.typeFilterBtn} ${typeFilter === t ? styles.typeFilterActive : ''}`}
-                onClick={() => setTypeFilter(t === typeFilter ? '' : t)}
+                key={at}
+                className={`${styles.typeFilterBtn} ${typeFilter === at ? styles.typeFilterActive : ''}`}
+                onClick={() => setTypeFilter(at === typeFilter ? '' : at)}
               >
-                {t}
+                {t(`agents.types.${at}`)}
               </button>
             ))}
           </div>
@@ -900,11 +910,11 @@ export default function AgentsPage() {
             <div className={styles.loadingList}><Spinner /></div>
           ) : agents.length === 0 ? (
             <div className={styles.listEmpty}>
-              <p>No agents found.</p>
+              <p>{t('agents.list.noneFound')}</p>
             </div>
           ) : (
             <>
-              <div className={styles.listCount}>{total} agent{total !== 1 ? 's' : ''}</div>
+              <div className={styles.listCount}>{t('agents.list.countLabel', { count: total })}</div>
               {agents.map(agent => (
                 <AgentListItem
                   key={agent.id}
@@ -923,7 +933,7 @@ export default function AgentsPage() {
           <div className={styles.formPanel}>
             <div className={styles.formPanelHeader}>
               <h2 className={styles.formPanelTitle}>
-                {viewMode === 'create' ? 'New agent' : `Edit: ${editingAgent?.name}`}
+                {viewMode === 'create' ? t('agents.form.newAgent') : t('agents.form.editAgent', { name: editingAgent?.name })}
               </h2>
             </div>
             <div className={styles.formPanelBody}>
@@ -960,8 +970,8 @@ export default function AgentsPage() {
         ) : (
           <EmptyState
             icon={<Users size={36} />}
-            title="Select an agent to view details"
-            subtitle="or create a new one"
+            title={t('agents.emptyState.title')}
+            subtitle={t('resources.emptyState.subtitle')}
           />
         )
       }

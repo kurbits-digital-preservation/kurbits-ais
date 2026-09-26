@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import styles from './SearchFacets.module.css'
 
 interface FacetValue {
@@ -23,22 +24,25 @@ const FACET_PARAM: Record<string, string> = {
   status: 'status',
 }
 
-const FACET_TITLES: Record<string, string> = {
-  agent_type: 'Agent type',
-  classification: 'Classification',
-  hierarchy_type: 'Hierarchy',
-  level: 'Level',
-  status: 'Status',
+// The facet key -> translation key under search.facets.*
+const FACET_TITLE_KEYS: Record<string, string> = {
+  agent_type: 'search.facets.agentType',
+  classification: 'search.facets.classification',
+  hierarchy_type: 'search.facets.hierarchy',
+  level: 'search.facets.level',
+  status: 'flags.status',
 }
 
 const FACET_ORDER = ['classification', 'agent_type', 'hierarchy_type', 'level', 'status']
 
-const RECORD_TYPES = [
-  { value: 'nodes,agents', label: 'All' },
-  { value: 'nodes',        label: 'Resources' },
-  { value: 'agents',       label: 'Agents' },
-  { value: 'files',        label: 'Files' },
-]
+// value -> translation key under search.facets.* / nav.* / resources.tabs.*
+const RECORD_TYPE_KEYS: Record<string, string> = {
+  'nodes,agents': 'flags.all',
+  'nodes': 'search.facets.resources',
+  'agents': 'nav.agents',
+  'files': 'resources.tabs.files',
+}
+const RECORD_TYPES = ['nodes,agents', 'nodes', 'agents', 'files']
 
 export default function SearchFacets({ facets, params, setParam, clearParam }: {
   facets: Facets | undefined
@@ -46,21 +50,22 @@ export default function SearchFacets({ facets, params, setParam, clearParam }: {
   setParam: (k: string, v: string) => void
   clearParam: (k: string) => void
 }) {
+  const { t } = useTranslation()
   const currentType = params.get('types') ?? 'nodes,agents'
 
   return (
     <div className={styles.facets}>
       {/* Record type — decides which facets are relevant, so it lives here */}
       <div className={styles.facetGroup}>
-        <div className={styles.facetTitle}>Record type</div>
+        <div className={styles.facetTitle}>{t('search.facets.recordType')}</div>
         <div className={styles.recordTypeRow}>
           {RECORD_TYPES.map(rt => (
             <button
-              key={rt.value}
-              className={`${styles.recordTypeBtn} ${currentType === rt.value ? styles.recordTypeActive : ''}`}
-              onClick={() => setParam('types', rt.value)}
+              key={rt}
+              className={`${styles.recordTypeBtn} ${currentType === rt ? styles.recordTypeActive : ''}`}
+              onClick={() => setParam('types', rt)}
             >
-              {rt.label}
+              {t(RECORD_TYPE_KEYS[rt])}
             </button>
           ))}
         </div>
@@ -76,10 +81,10 @@ export default function SearchFacets({ facets, params, setParam, clearParam }: {
         return (
           <div key={facetKey} className={styles.facetGroup}>
             <div className={styles.facetTitle}>
-              {FACET_TITLES[facetKey]}
+              {t(FACET_TITLE_KEYS[facetKey])}
               {active && (
                 <button className={styles.facetClear} onClick={() => clearParam(paramKey)}>
-                  clear
+                  {t('search.facets.clear')}
                 </button>
               )}
             </div>

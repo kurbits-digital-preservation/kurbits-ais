@@ -3,17 +3,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ListChecks, Plus, Trash2 } from 'lucide-react'
 import { classificationsApi } from '@/api'
 import { Spinner } from '@/components/ui'
+import { useTranslation } from 'react-i18next'
 import styles from './RecordsVocabularyTab.module.css'
 
-const FIELDS: { key: string; label: string; hint: string }[] = [
-  { key: 'disposal', label: 'Disposal actions', hint: 'What happens to the records at end of retention.' },
-  { key: 'security', label: 'Security classifications', hint: 'Access / confidentiality levels.' },
-  { key: 'medium', label: 'Medium / format', hint: 'Physical or digital carrier types.' },
-]
+const FIELD_KEYS = ['disposal', 'security', 'medium']
 
 function VocabColumn({ field, label, hint, terms }: {
   field: string; label: string; hint: string; terms: any[]
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [value, setValue] = useState('')
 
@@ -22,7 +20,7 @@ function VocabColumn({ field, label, hint, terms }: {
   const addMutation = useMutation({
     mutationFn: () => classificationsApi.addRecordsVocabTerm(field, value.trim()),
     onSuccess: () => { invalidate(); setValue('') },
-    onError: (err: any) => alert(err?.response?.data?.message ?? 'Could not add'),
+    onError: (err: any) => alert(err?.response?.data?.message ?? t('admin.recordsVocab.couldNotAdd')),
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => classificationsApi.deleteRecordsVocabTerm(id),
@@ -41,7 +39,7 @@ function VocabColumn({ field, label, hint, terms }: {
           value={value}
           onChange={e => setValue(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && value.trim()) addMutation.mutate() }}
-          placeholder="Add value…"
+          placeholder={t('admin.recordsVocab.addValuePlaceholder')}
         />
         <button className="btn btn-secondary btn-sm btn-icon"
           disabled={!value.trim() || addMutation.isPending}
@@ -51,12 +49,12 @@ function VocabColumn({ field, label, hint, terms }: {
       </div>
 
       <div className={styles.terms}>
-        {terms.length === 0 && <p className={styles.empty}>No values yet.</p>}
-        {terms.map(t => (
-          <div key={t.id} className={styles.term}>
-            <span>{t.value}</span>
+        {terms.length === 0 && <p className={styles.empty}>{t('admin.recordsVocab.noValuesYet')}</p>}
+        {terms.map(term => (
+          <div key={term.id} className={styles.term}>
+            <span>{term.value}</span>
             <button className="btn btn-ghost btn-sm btn-icon"
-              onClick={() => { if (confirm(`Delete "${t.value}"?`)) deleteMutation.mutate(t.id) }}>
+              onClick={() => { if (confirm(t('admin.recordsVocab.deleteConfirm', { value: term.value }))) deleteMutation.mutate(term.id) }}>
               <Trash2 size={12} />
             </button>
           </div>
@@ -67,6 +65,7 @@ function VocabColumn({ field, label, hint, terms }: {
 }
 
 export default function RecordsVocabularyTab() {
+  const { t } = useTranslation()
   const { data, isLoading } = useQuery({
     queryKey: ['records-vocabulary-admin'],
     queryFn: () => classificationsApi.getRecordsVocabulary().then(r => r.data.data),
@@ -77,19 +76,19 @@ export default function RecordsVocabularyTab() {
   return (
     <div className={styles.tab}>
       <div className={styles.header}>
-        <h3 className={styles.heading}><ListChecks size={16} /> Records-management values</h3>
+        <h3 className={styles.heading}><ListChecks size={16} /> {t('admin.recordsVocab.heading')}</h3>
         <p className={styles.sub}>
-          Dropdown values used when documenting records produced by a process.
+          {t('admin.recordsVocab.subheading')}
         </p>
       </div>
       <div className={styles.columns}>
-        {FIELDS.map(f => (
+        {FIELD_KEYS.map(key => (
           <VocabColumn
-            key={f.key}
-            field={f.key}
-            label={f.label}
-            hint={f.hint}
-            terms={(data?.[f.key] ?? [])}
+            key={key}
+            field={key}
+            label={t(`admin.recordsVocab.fields.${key}.label`)}
+            hint={t(`admin.recordsVocab.fields.${key}.hint`)}
+            terms={(data?.[key] ?? [])}
           />
         ))}
       </div>

@@ -12,6 +12,7 @@ import LocationTree from '@/components/tree/LocationTree'
 import { PageShell, SidebarPanel, EmptyState, Tabs, FieldList, Spinner, PrintLabelsButton } from '@/components/ui'
 import HierarchyLevelSelect from '@/components/ui/HierarchyLevelSelect'
 import type { LocationDetail, LocationStub } from '@/types'
+import { useTranslation } from 'react-i18next'
 import styles from './LocationsPage.module.css'
 
 // ─── Location form ────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ function LocationForm({
   onCancel: () => void
   isSaving: boolean
 }) {
+  const { t } = useTranslation()
   const [form, setForm] = useState<LocationFormData>({ ...EMPTY_FORM, ...initial })
 
   const set = (field: keyof LocationFormData) =>
@@ -56,20 +58,20 @@ function LocationForm({
       {parentLocation && (
         <div className={styles.parentNote}>
           <ChevronRight size={13} />
-          <span>Child of <strong>{parentLocation.full_path}</strong></span>
+          <span>{t('locations.form.childOf')} <strong>{parentLocation.full_path}</strong></span>
         </div>
       )}
 
       <div className={styles.formGrid}>
         <div className="form-group">
-          <label>Name *</label>
-          <input value={form.name} onChange={set('name')} placeholder="e.g. Reading Room A" required />
+          <label>{t('locations.form.name')}</label>
+          <input value={form.name} onChange={set('name')} placeholder={t('locations.form.namePlaceholder')} required />
         </div>
 
         <div className="form-group">
-          <label>Code *</label>
-          <input value={form.code} onChange={set('code')} placeholder="e.g. RRA" />
-          <span className="form-hint">Unique identifier within parent</span>
+          <label>{t('locations.form.code')}</label>
+          <input value={form.code} onChange={set('code')} placeholder={t('locations.form.codePlaceholder')} />
+          <span className="form-hint">{t('locations.form.codeHint')}</span>
         </div>
 
         <HierarchyLevelSelect
@@ -81,7 +83,7 @@ function LocationForm({
         />
 
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-          <label>Description</label>
+          <label>{t('resources.form.fields.description')}</label>
           <textarea value={form.description} onChange={set('description')} rows={2} />
         </div>
 
@@ -92,19 +94,19 @@ function LocationForm({
               checked={form.can_store_nodes}
               onChange={e => setForm(f => ({ ...f, can_store_nodes: e.target.checked }))}
             />
-            Can store archival materials
+            {t('locations.form.canStoreMaterials')}
           </label>
         </div>
 
         {form.can_store_nodes && (
           <div className="form-group">
-            <label>Capacity (items)</label>
+            <label>{t('locations.form.capacity')}</label>
             <input
               value={form.capacity}
               onChange={set('capacity')}
               type="number"
               min="1"
-              placeholder="Leave empty for unlimited"
+              placeholder={t('locations.form.capacityPlaceholder')}
             />
           </div>
         )}
@@ -112,7 +114,7 @@ function LocationForm({
 
       <div className={styles.formActions}>
         <button className="btn btn-ghost" onClick={onCancel} disabled={isSaving}>
-          <X size={14} /> Cancel
+          <X size={14} /> {t('common.cancel')}
         </button>
         <button
           className="btn btn-primary"
@@ -120,7 +122,7 @@ function LocationForm({
           disabled={!form.name || !form.code || !form.level_name || !form.hierarchy_type_id || isSaving}
         >
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
-          {isSaving ? 'Saving…' : 'Save location'}
+          {isSaving ? t('resources.form.saving') : t('locations.form.saveLocation')}
         </button>
       </div>
     </div>
@@ -130,6 +132,7 @@ function LocationForm({
 // ─── Overview tab ─────────────────────────────────────────────────────
 
 function OverviewTab({ location }: { location: LocationDetail }) {
+  const { t } = useTranslation()
   const capacityPct = location.capacity && location.stored_count != null
     ? Math.min((location.stored_count / location.capacity) * 100, 100)
     : null
@@ -139,11 +142,11 @@ function OverviewTab({ location }: { location: LocationDetail }) {
       {location.can_store_nodes && (
         <div className={styles.capacityCard}>
           <div className={styles.capacityCardHeader}>
-            <span className={styles.capacityLabel}>Storage capacity</span>
+            <span className={styles.capacityLabel}>{t('locations.overview.storageCapacity')}</span>
             <span className={styles.capacityNumbers}>
               <strong>{location.stored_count}</strong>
               {location.capacity !== null && <span> / {location.capacity}</span>}
-              <span className={styles.capacityUnit}> items</span>
+              <span className={styles.capacityUnit}> {t('locations.overview.items')}</span>
             </span>
           </div>
           {capacityPct !== null && (
@@ -163,18 +166,18 @@ function OverviewTab({ location }: { location: LocationDetail }) {
           )}
           {location.available_capacity !== null && (
             <p className={styles.capacityAvail}>
-              {location.available_capacity} spaces available
+              {t('locations.overview.spacesAvailable', { count: location.available_capacity })}
             </p>
           )}
         </div>
       )}
 
       <FieldList fields={[
-        { label: 'Full path',    value: location.full_path },
-        { label: 'Level',        value: location.level_name },
-        { label: 'Code',         value: location.code },
-        { label: 'Description',  value: location.description },
-        { label: 'Created',      value: new Date(location.created_at).toLocaleDateString() },
+        { label: t('locations.overview.fullPath'), value: location.full_path },
+        { label: t('locations.overview.level'),     value: location.level_name },
+        { label: t('locations.overview.code'),      value: location.code },
+        { label: t('resources.form.fields.description'), value: location.description },
+        { label: t('locations.overview.created'),   value: new Date(location.created_at).toLocaleDateString() },
       ]} />
     </div>
   )
@@ -192,6 +195,7 @@ function MoveToModal({
   node: { id: number; title: string; ref_code: string }
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [targetId, setTargetId] = useState('')
   const [notes, setNotes] = useState('')
@@ -221,7 +225,7 @@ function MoveToModal({
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>
-            <ArrowRightLeft size={16} /> Move to another location
+            <ArrowRightLeft size={16} /> {t('locations.moveTo.title')}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
             <X size={14} />
@@ -229,14 +233,14 @@ function MoveToModal({
         </div>
         <div className={styles.modalBody}>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)', marginBottom: 'var(--space-3)' }}>
-            Moving <strong>{node.ref_code}</strong> — {node.title}
+            {t('locations.moveTo.moving')} <strong>{node.ref_code}</strong> — {node.title}
           </p>
           <div className="form-group">
-            <label>Search target location</label>
+            <label>{t('locations.moveTo.searchTarget')}</label>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Type to search storable locations…"
+              placeholder={t('locations.moveTo.searchPlaceholder')}
               autoFocus
             />
           </div>
@@ -259,18 +263,18 @@ function MoveToModal({
             </div>
           )}
           <div className="form-group" style={{ marginTop: 'var(--space-3)' }}>
-            <label>Notes</label>
+            <label>{t('locations.notes')}</label>
             <input value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Reason for move, condition, etc." />
+              placeholder={t('locations.moveTo.notesReasonPlaceholder')} />
           </div>
         </div>
         <div className={styles.modalFooter}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button className="btn btn-primary"
             disabled={!targetId || moveMutation.isPending}
             onClick={() => moveMutation.mutate()}>
             {moveMutation.isPending ? <Spinner size={14} /> : <ArrowRightLeft size={14} />}
-            Move
+            {t('resources.modals.move.moveButton')}
           </button>
         </div>
       </div>
@@ -289,6 +293,7 @@ function StoredItemsTab({
   onCheckOut: (nodeId: number) => void
   onMove: (node: {id:number;title:string;ref_code:string}) => void
 }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
@@ -303,7 +308,7 @@ function StoredItemsTab({
       queryClient.invalidateQueries({ queryKey: ['node'] })
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.message ?? 'Return failed')
+      alert(err?.response?.data?.message ?? t('relations.locations.returnFailed'))
     },
   })
   const { data, isLoading } = useQuery({
@@ -314,7 +319,7 @@ function StoredItemsTab({
 
   if (!location.can_store_nodes) return (
     <div className={styles.tabContent}>
-      <p className={styles.infoNote}>This location cannot directly store archival materials.</p>
+      <p className={styles.infoNote}>{t('locations.storedItems.cannotStore')}</p>
     </div>
   )
 
@@ -326,7 +331,7 @@ function StoredItemsTab({
   return (
     <div className={styles.tabContent}>
       {(!data || data.length === 0) ? (
-        <p className={styles.emptyText}>No items stored here.</p>
+        <p className={styles.emptyText}>{t('locations.storedItems.noneStored')}</p>
       ) : (
         data.map((node: any) => (
           <div key={node.id} className={styles.storedItem}>
@@ -338,25 +343,25 @@ function StoredItemsTab({
               <button
                 className="btn btn-ghost btn-sm btn-icon"
                 onClick={() => navigate(`/app/resources?node=${node.id}`)}
-                title="Open resource"
+                title={t('search.fileResults.openResource')}
               >
                 <ExternalLink size={13} />
               </button>
-              <PrintLabelsButton nodeIds={[node.id]} label="Label" />
+              <PrintLabelsButton nodeIds={[node.id]} label={t('locations.storedItems.label')} />
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => onMove({ id: node.id, title: node.title, ref_code: node.ref_code })}
-                title="Move to another location"
+                title={t('locations.storedItems.moveToAnother')}
               >
-                <ArrowRightLeft size={13} /> Move
+                <ArrowRightLeft size={13} /> {t('resources.modals.move.moveButton')}
               </button>
               {!isCheckedOutVirtual && (
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() => onCheckOut(node.id)}
-                  title="Check out"
+                  title={t('relations.locations.checkOut')}
                 >
-                  <ArrowUpFromLine size={13} /> Check out
+                  <ArrowUpFromLine size={13} /> {t('relations.locations.checkOut')}
                 </button>
               )}
               {isCheckedOutVirtual && (
@@ -364,9 +369,9 @@ function StoredItemsTab({
                   className="btn btn-ghost btn-sm"
                   disabled={returnMutation.isPending}
                   onClick={() => returnMutation.mutate(node.id)}
-                  title="Check back in to where it was checked out from"
+                  title={t('relations.locations.returnHint')}
                 >
-                  <ArrowDownToLine size={13} /> Return
+                  <ArrowDownToLine size={13} /> {t('relations.locations.returnButton')}
                 </button>
               )}
               {isCheckedOutVirtual && (
@@ -375,7 +380,7 @@ function StoredItemsTab({
                   background: 'color-mix(in srgb, var(--color-warning) 10%, transparent)',
                   borderRadius: 'var(--radius-sm)',
                   border: '1px solid color-mix(in srgb, var(--color-warning) 25%, transparent)' }}>
-                  Checked out
+                  {t('relations.locations.checkedOutBadge')}
                 </span>
               )}
             </div>
@@ -401,6 +406,7 @@ const MOVEMENT_COLOURS = {
 }
 
 function MovementsTab({ locationId }: { locationId: number }) {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
 
   const { data, isLoading } = useQuery({
@@ -416,7 +422,7 @@ function MovementsTab({ locationId }: { locationId: number }) {
   return (
     <div className={styles.tabContent}>
       {movements.length === 0 ? (
-        <p className={styles.emptyText}>No movement history yet.</p>
+        <p className={styles.emptyText}>{t('locations.movements.noneYet')}</p>
       ) : (
         <>
           {movements.map((m: any) => {
@@ -429,7 +435,7 @@ function MovementsTab({ locationId }: { locationId: number }) {
                 </div>
                 <div className={styles.movementInfo}>
                   <div className={styles.movementHeader}>
-                    <span className={styles.movementType}>{m.movement_type.replace('_', ' ')}</span>
+                    <span className={styles.movementType}>{t(`locations.movements.types.${m.movement_type}`, { defaultValue: m.movement_type.replace('_', ' ') })}</span>
                     <span className={styles.movementNode}>{m.node_title ?? `Node #${m.node_id}`}</span>
                     <span className="ref-code">{m.node_ref_code}</span>
                   </div>
@@ -444,11 +450,11 @@ function MovementsTab({ locationId }: { locationId: number }) {
           {meta && meta.pages > 1 && (
             <div className={styles.pagination}>
               <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>
-                ← Previous
+                {t('locations.movements.previous')}
               </button>
-              <span className={styles.pageInfo}>Page {page} of {meta.pages}</span>
+              <span className={styles.pageInfo}>{t('locations.movements.pageOf', { page, pages: meta.pages })}</span>
               <button className="btn btn-ghost btn-sm" disabled={page >= meta.pages} onClick={() => setPage(p => p + 1)}>
-                Next →
+                {t('locations.movements.next')}
               </button>
             </div>
           )}
@@ -467,6 +473,7 @@ function CheckInModal({
   location: LocationDetail
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [nodeId, setNodeId] = useState('')
   const [notes, setNotes] = useState('')
@@ -496,7 +503,7 @@ function CheckInModal({
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>
-            <ArrowDownToLine size={16} /> Check in to {location.name}
+            <ArrowDownToLine size={16} /> {t('locations.checkIn.title', { name: location.name })}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
             <X size={14} />
@@ -506,16 +513,16 @@ function CheckInModal({
         <div className={styles.modalBody}>
           {location.available_capacity === 0 && (
             <div className={styles.warningBanner}>
-              This location is at full capacity ({location.capacity} items).
+              {t('locations.checkIn.atCapacity', { count: location.capacity })}
             </div>
           )}
 
           <div className="form-group">
-            <label>Search for resource</label>
+            <label>{t('locations.checkIn.searchForResource')}</label>
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Type to search…"
+              placeholder={t('locations.checkIn.typeToSearchGeneric')}
               autoFocus
             />
           </div>
@@ -532,27 +539,27 @@ function CheckInModal({
                     <span className={styles.searchResultTitle}>{node.title}</span>
                     <span className="ref-code">{node.ref_code}</span>
                   </div>
-                  <span className={`badge badge-${node.status}`}>{node.status}</span>
+                  <span className={`badge badge-${node.status}`}>{t(`resources.status.${node.status}`, { defaultValue: node.status })}</span>
                 </button>
               ))}
             </div>
           )}
 
           <div className="form-group">
-            <label>Notes</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+            <label>{t('locations.notes')}</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('identifiers.notePlaceholder')} />
           </div>
         </div>
 
         <div className={styles.modalFooter}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="btn btn-primary"
             disabled={!nodeId || checkInMutation.isPending || location.available_capacity === 0}
             onClick={() => checkInMutation.mutate()}
           >
             {checkInMutation.isPending ? <Spinner size={14} /> : <ArrowDownToLine size={14} />}
-            Check in
+            {t('relations.locations.checkIn')}
           </button>
         </div>
       </div>
@@ -571,6 +578,7 @@ function TransferModal({
   nodeId: number
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [targetId, setTargetId] = useState('')
   const [notes, setNotes] = useState('')
@@ -603,15 +611,15 @@ function TransferModal({
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>
-            <ArrowLeftRight size={16} /> Transfer item
+            <ArrowLeftRight size={16} /> {t('locations.transfer.title')}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}><X size={14} /></button>
         </div>
 
         <div className={styles.modalBody}>
           <div className="form-group">
-            <label>Filter target locations</label>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search…" autoFocus />
+            <label>{t('locations.transfer.filterTargets')}</label>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('locations.transfer.searchPlaceholder')} autoFocus />
           </div>
 
           <div className={styles.searchResults}>
@@ -623,32 +631,32 @@ function TransferModal({
               >
                 <span className={styles.searchResultTitle}>{loc.name}</span>
                 <span className={styles.searchResultMeta}>
-                  {loc.stored_count}{loc.capacity !== null ? `/${loc.capacity}` : ''} items
+                  {loc.stored_count}{loc.capacity !== null ? `/${loc.capacity}` : ''} {t('locations.transfer.itemsUnit')}
                 </span>
               </button>
             ))}
             {filtered.length === 0 && (
               <p className={styles.emptyText} style={{ padding: 'var(--space-3)' }}>
-                No storage locations found
+                {t('locations.transfer.noneFound')}
               </p>
             )}
           </div>
 
           <div className="form-group">
-            <label>Notes</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+            <label>{t('locations.notes')}</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('identifiers.notePlaceholder')} />
           </div>
         </div>
 
         <div className={styles.modalFooter}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="btn btn-primary"
             disabled={!targetId || transferMutation.isPending}
             onClick={() => transferMutation.mutate()}
           >
             {transferMutation.isPending ? <Spinner size={14} /> : <ArrowLeftRight size={14} />}
-            Transfer
+            {t('locations.transfer.transferButton')}
           </button>
         </div>
       </div>
@@ -670,6 +678,7 @@ function LocationDetailPanel({
   onAddChild: (parentId: number) => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('overview')
   const [showCheckIn, setShowCheckIn] = useState(false)
@@ -691,13 +700,13 @@ function LocationDetailPanel({
     },
   })
 
-  if (isLoading) return <div className={styles.loadingState}><Spinner /><span>Loading…</span></div>
+  if (isLoading) return <div className={styles.loadingState}><Spinner /><span>{t('common.loading')}</span></div>
   if (!location) return null
 
   const tabs = [
-    { key: 'overview',  icon: <BarChart3 size={13} />,      label: 'Overview' },
-    { key: 'items',     icon: <Package size={13} />,        label: `Items${location.stored_count ? ` (${location.stored_count})` : ''}` },
-    { key: 'movements', icon: <Clock size={13} />,          label: 'History' },
+    { key: 'overview',  icon: <BarChart3 size={13} />,      label: t('locations.detail.overview') },
+    { key: 'items',     icon: <Package size={13} />,        label: `${t('locations.detail.itemsTab')}${location.stored_count ? ` (${location.stored_count})` : ''}` },
+    { key: 'movements', icon: <Clock size={13} />,          label: t('resources.tabs.history') },
   ]
 
   return (
@@ -716,8 +725,8 @@ function LocationDetailPanel({
                   <>
                     <span className={styles.metaSep}>·</span>
                     <span className={styles.detailCapacity}>
-                      {location.stored_count} stored
-                      {location.capacity !== null && ` / ${location.capacity} capacity`}
+                      {location.stored_count} {t('locations.detail.stored')}
+                      {location.capacity !== null && ` / ${location.capacity} ${t('locations.detail.capacity')}`}
                     </span>
                   </>
                 )}
@@ -730,16 +739,16 @@ function LocationDetailPanel({
                   onClick={() => setShowCheckIn(true)}
                   disabled={location.available_capacity === 0}
                 >
-                  <ArrowDownToLine size={13} /> Check in
+                  <ArrowDownToLine size={13} /> {t('relations.locations.checkIn')}
                 </button>
               )}
               {location.can_store_nodes && location.stored_count > 0 && (
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => setShowMoveContents(true)}
-                  title="Relocate all stored items to another location"
+                  title={t('locations.detail.moveContentsTitle')}
                 >
-                  <ArrowLeftRight size={13} /> Move contents
+                  <ArrowLeftRight size={13} /> {t('locations.detail.moveContents')}
                 </button>
               )}
               <button className="btn btn-ghost btn-sm" onClick={async () => {
@@ -750,19 +759,19 @@ function LocationDetailPanel({
                   const a = document.createElement('a')
                   a.href = url; a.download = `inventory_${locationId}.pdf`; a.click()
                   setTimeout(() => URL.revokeObjectURL(url), 2000)
-                } catch (e) { alert('Failed to generate inventory') }
+                } catch (e) { alert(t('locations.detail.inventoryFailed')) }
               }}>
-                <FileText size={13} /> Inventory
+                <FileText size={13} /> {t('locations.detail.inventory')}
               </button>
               <button className="btn btn-secondary btn-sm" onClick={() => onAddChild(locationId)}>
-                <Plus size={13} /> Add child
+                <Plus size={13} /> {t('locations.detail.addChild')}
               </button>
               <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(location)}>
                 <Pencil size={14} />
               </button>
               <button
                 className="btn btn-ghost btn-sm btn-icon"
-                onClick={() => { if (confirm(`Delete "${location.name}"?`)) deleteMutation.mutate() }}
+                onClick={() => { if (confirm(t('locations.detail.deleteConfirm', { name: location.name }))) deleteMutation.mutate() }}
               >
                 <Trash2 size={14} />
               </button>
@@ -817,6 +826,7 @@ function LocationDetailPanel({
 type ViewMode = 'detail' | 'create' | 'edit'
 
 export default function LocationsPage() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const routerLocation = useLocation()
   const [selectedId, setSelectedId] = useState<number | null>(null)
@@ -887,21 +897,21 @@ export default function LocationsPage() {
     <PageShell
       sidebar={
         <SidebarPanel
-          title="Locations"
+          title={t('nav.locations')}
           actions={
             <>
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => setShowQuickMove(true)}
-                title="Move items by scanning location and item codes"
+                title={t('locations.page.quickMoveTitle')}
               >
-                <ScanLine size={14} /> Quick move
+                <ScanLine size={14} /> {t('locations.page.quickMove')}
               </button>
               <button
                 className="btn btn-primary btn-sm"
                 onClick={() => { setAddingChildOf(null); setViewMode('create') }}
               >
-                <Plus size={14} /> New
+                <Plus size={14} /> {t('resources.tree.newButton')}
               </button>
             </>
           }
@@ -917,7 +927,7 @@ export default function LocationsPage() {
         style={{ paddingLeft: 28, width: '100%', fontSize: 'var(--text-sm)' }}
         value={treeSearch}
         onChange={e => setTreeSearch(e.target.value)}
-        placeholder="Filter locations…"
+        placeholder={t('locations.page.filterPlaceholder')}
       />
       {treeSearch && (
         <button
@@ -948,8 +958,8 @@ export default function LocationsPage() {
             <div className={styles.formPanelHeader}>
               <h2 className={styles.formPanelTitle}>
                 {viewMode === 'create'
-                  ? addingChildOf ? `Add child location` : 'New root location'
-                  : `Edit: ${editingLocation?.name}`}
+                  ? addingChildOf ? t('locations.page.addChildLocation') : t('locations.page.newRootLocation')
+                  : t('locations.page.editLocation', { name: editingLocation?.name })}
               </h2>
             </div>
             <div className={styles.formPanelBody}>
@@ -988,8 +998,8 @@ export default function LocationsPage() {
         ) : (
           <EmptyState
             icon={<MapPin size={36} />}
-            title="Select a location to view details"
-            subtitle="or create a new one"
+            title={t('locations.page.emptyTitle')}
+            subtitle={t('resources.emptyState.subtitle')}
           />
         )
       }
@@ -1010,6 +1020,7 @@ function MoveContentsModal({ location, onClose }: {
   location: LocationDetail
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [target, setTarget] = useState<any>(null)
@@ -1034,7 +1045,7 @@ function MoveContentsModal({ location, onClose }: {
       onClose()
     },
     onError: (err: any) => {
-      setErrorMsg(err?.response?.data?.message ?? 'Move failed')
+      setErrorMsg(err?.response?.data?.message ?? t('resources.modals.move.moveFailed'))
     },
   })
 
@@ -1046,7 +1057,7 @@ function MoveContentsModal({ location, onClose }: {
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>
-            <ArrowLeftRight size={16} /> Move all contents of {location.name}
+            <ArrowLeftRight size={16} /> {t('locations.moveContents.title', { name: location.name })}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
             <X size={14} />
@@ -1055,16 +1066,15 @@ function MoveContentsModal({ location, onClose }: {
 
         <div className={styles.modalBody}>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)' }}>
-            {location.stored_count} item{location.stored_count !== 1 ? 's' : ''} will be
-            relocated in one operation. Each item gets a movement record.
+            {t('locations.moveContents.willRelocate', { count: location.stored_count })}
           </p>
 
           <div className="form-group">
-            <label>Target location</label>
+            <label>{t('locations.moveContents.targetLocation')}</label>
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setTarget(null) }}
-              placeholder="Search storage locations…"
+              placeholder={t('locations.moveContents.searchPlaceholder')}
               autoFocus
             />
           </div>
@@ -1085,7 +1095,7 @@ function MoveContentsModal({ location, onClose }: {
                   </div>
                   {l.available_capacity != null && (
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-ink-faint)' }}>
-                      {l.available_capacity} free
+                      {l.available_capacity} {t('locations.moveContents.freeSuffix')}
                     </span>
                   )}
                 </button>
@@ -1095,29 +1105,28 @@ function MoveContentsModal({ location, onClose }: {
 
           {overCapacity && (
             <div className={styles.warningBanner}>
-              Target only has {target.available_capacity} free of {target.capacity} —
-              not enough for {location.stored_count} items.
+              {t('locations.moveContents.overCapacity', { free: target.available_capacity, capacity: target.capacity, count: location.stored_count })}
             </div>
           )}
 
           {errorMsg && <div className={styles.warningBanner}>{errorMsg}</div>}
 
           <div className="form-group">
-            <label>Notes</label>
+            <label>{t('locations.notes')}</label>
             <input value={notes} onChange={e => setNotes(e.target.value)}
-              placeholder="Optional — recorded on every movement" />
+              placeholder={t('locations.moveContents.notesHint')} />
           </div>
         </div>
 
         <div className={styles.modalFooter}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="btn btn-primary"
             disabled={!target || overCapacity || moveMutation.isPending}
             onClick={() => moveMutation.mutate()}
           >
             {moveMutation.isPending ? <Spinner size={14} /> : <ArrowLeftRight size={14} />}
-            Move {location.stored_count} item{location.stored_count !== 1 ? 's' : ''}
+            {t('locations.moveContents.moveItems', { count: location.stored_count })}
           </button>
         </div>
       </div>
@@ -1138,6 +1147,7 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
   onClose: () => void
   onOpenLocation: (locationId: number) => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [locationCode, setLocationCode] = useState('')
   const [codeLocked, setCodeLocked] = useState(false)
@@ -1160,7 +1170,7 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
       queryClient.invalidateQueries({ queryKey: ['node'] })
     },
     onError: (err: any) => {
-      setErrorMsg(err?.response?.data?.message ?? 'Move failed')
+      setErrorMsg(err?.response?.data?.message ?? t('resources.modals.move.moveFailed'))
     },
   })
 
@@ -1172,10 +1182,10 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
   }
 
   const STATUS_META: Record<QuickMoveResult['status'], { icon: any; colour: string; label: string }> = {
-    moved:        { icon: CheckCircle2, colour: 'var(--color-success)', label: 'Moved' },
-    not_found:    { icon: AlertCircle,  colour: 'var(--color-error)',   label: 'Not found' },
-    already_here: { icon: CheckCircle2, colour: 'var(--color-ink-faint)', label: 'Already here' },
-    at_capacity:  { icon: AlertCircle,  colour: 'var(--color-warning)', label: 'At capacity' },
+    moved:        { icon: CheckCircle2, colour: 'var(--color-success)', label: t('locations.quickMove.status.moved') },
+    not_found:    { icon: AlertCircle,  colour: 'var(--color-error)',   label: t('locations.quickMove.status.notFound') },
+    already_here: { icon: CheckCircle2, colour: 'var(--color-ink-faint)', label: t('locations.quickMove.status.alreadyHere') },
+    at_capacity:  { icon: AlertCircle,  colour: 'var(--color-warning)', label: t('locations.quickMove.status.atCapacity') },
   }
 
   return (
@@ -1183,7 +1193,7 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>
-            <ScanLine size={16} /> Quick move
+            <ScanLine size={16} /> {t('locations.quickMove.title')}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
             <X size={14} />
@@ -1192,18 +1202,17 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
 
         <div className={styles.modalBody}>
           <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-ink-muted)' }}>
-            Scan or type the target location code once, then scan item reference
-            codes one after another. Checked-out items are checked back in.
+            {t('locations.quickMove.instructions')}
           </p>
 
           <div className="form-group">
-            <label>Location code</label>
+            <label>{t('locations.quickMove.locationCode')}</label>
             <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
               <input
                 value={locationCode}
                 onChange={e => { setLocationCode(e.target.value); setTargetInfo(null) }}
                 onKeyDown={e => { if (e.key === 'Enter') setCodeLocked(true) }}
-                placeholder="e.g. SHELF-A3"
+                placeholder={t('locations.quickMove.locationCodePlaceholder')}
                 disabled={codeLocked}
                 autoFocus
                 style={{ flex: 1 }}
@@ -1211,7 +1220,7 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
               {codeLocked && (
                 <button className="btn btn-ghost btn-sm"
                   onClick={() => { setCodeLocked(false); setTargetInfo(null) }}>
-                  Change
+                  {t('locations.quickMove.change')}
                 </button>
               )}
             </div>
@@ -1223,12 +1232,12 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
           </div>
 
           <div className="form-group">
-            <label>Item reference code</label>
+            <label>{t('locations.quickMove.itemRefCode')}</label>
             <input
               value={itemCode}
               onChange={e => setItemCode(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleItemScan() }}
-              placeholder="Scan or type ref code, press Enter"
+              placeholder={t('locations.quickMove.itemRefPlaceholder')}
               autoFocus={codeLocked}
               disabled={!locationCode.trim()}
             />
@@ -1270,10 +1279,10 @@ function QuickMoveModal({ onClose, onOpenLocation }: {
           {targetInfo && (
             <button className="btn btn-ghost"
               onClick={() => onOpenLocation(targetInfo.id)}>
-              Open location
+              {t('locations.quickMove.openLocation')}
             </button>
           )}
-          <button className="btn btn-primary" onClick={onClose}>Done</button>
+          <button className="btn btn-primary" onClick={onClose}>{t('locations.quickMove.done')}</button>
         </div>
       </div>
     </div>
@@ -1288,6 +1297,7 @@ function CheckOutCategoryModal({ location, nodeId, onClose }: {
   nodeId: number
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [categoryId, setCategoryId] = useState<string>('')
   const [notes, setNotes] = useState('')
@@ -1318,7 +1328,7 @@ function CheckOutCategoryModal({ location, nodeId, onClose }: {
       <div className={styles.modal} onClick={e => e.stopPropagation()}>
         <div className={styles.modalHeader}>
           <h3 className={styles.modalTitle}>
-            <ArrowUpFromLine size={16} /> Check out
+            <ArrowUpFromLine size={16} /> {t('relations.locations.checkOut')}
           </h3>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onClose}>
             <X size={14} />
@@ -1327,32 +1337,32 @@ function CheckOutCategoryModal({ location, nodeId, onClose }: {
 
         <div className={styles.modalBody}>
           <div className="form-group">
-            <label>Reason</label>
+            <label>{t('locations.checkOutCategory.reason')}</label>
             <select value={categoryId} onChange={e => setCategoryId(e.target.value)} autoFocus>
-              <option value="">Uncategorised</option>
+              <option value="">{t('relations.locations.uncategorised')}</option>
               {(cats as any)?.categories?.map((c: any) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
             <span className="form-hint">
-              Categories are managed as locations under "Checked out".
+              {t('locations.checkOutCategory.categoriesHint')}
             </span>
           </div>
           <div className="form-group">
-            <label>Notes</label>
-            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional" />
+            <label>{t('locations.notes')}</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder={t('identifiers.notePlaceholder')} />
           </div>
         </div>
 
         <div className={styles.modalFooter}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <button
             className="btn btn-primary"
             disabled={checkOutMutation.isPending}
             onClick={() => checkOutMutation.mutate()}
           >
             {checkOutMutation.isPending ? <Spinner size={14} /> : <ArrowUpFromLine size={14} />}
-            Check out
+            {t('relations.locations.checkOut')}
           </button>
         </div>
       </div>

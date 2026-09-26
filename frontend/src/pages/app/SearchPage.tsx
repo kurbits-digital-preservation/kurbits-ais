@@ -12,6 +12,7 @@ import styles from './SearchPage.module.css'
 import SearchFacets from './SearchFacets'
 import FileFilters from './FileFilters'
 import FileResults from './FileResults'
+import { useTranslation } from 'react-i18next'
 // ─── Constants ────────────────────────────────────────────────────────
 
 const AGENT_ICONS: Record<string, typeof User> = {
@@ -31,13 +32,13 @@ function paramsToObject(params: URLSearchParams): Record<string, string> {
   return obj
 }
 
-function summariseParams(params: Record<string, string>): string {
+function summariseParams(params: Record<string, string>, t?: (key: string, opts?: any) => string): string {
   const parts: string[] = []
   if (params.q) parts.push(`"${params.q}"`)
-  if (params.status) parts.push(params.status)
+  if (params.status) parts.push(t ? t(`resources.status.${params.status}`, { defaultValue: params.status }) : params.status)
   if (params.level) parts.push(params.level)
   if (params.date_from || params.date_to) parts.push(`${params.date_from ?? '…'}–${params.date_to ?? '…'}`)
-  if (params.agent_type) parts.push(params.agent_type)
+  if (params.agent_type) parts.push(t ? t(`agents.types.${params.agent_type}`, { defaultValue: params.agent_type }) : params.agent_type)
   if (params.types && params.types !== 'nodes,agents') parts.push(params.types.replace(',', ' & '))
   return parts.join(', ')
 }
@@ -45,6 +46,7 @@ function summariseParams(params: Record<string, string>): string {
 // ─── Result rows ──────────────────────────────────────────────────────
 
 function NodeRow({ item, onClick }: { item: any; onClick: () => void }) {
+  const { t } = useTranslation()
   return (
     <button className={styles.resultRow} onClick={onClick}>
       <div className={styles.resultIconWrap}><FileText size={15} /></div>
@@ -56,16 +58,17 @@ function NodeRow({ item, onClick }: { item: any; onClick: () => void }) {
           {item.level && <span className={styles.resultLevel}>{item.level}</span>}
           {item.status && item.status !== 'published' && (
             <><span className={styles.dot}>·</span>
-            <span className={styles.statusBadge} data-status={item.status}>{item.status}</span></>
+            <span className={styles.statusBadge} data-status={item.status}>{t(`resources.status.${item.status}`, { defaultValue: item.status })}</span></>
           )}
         </div>
       </div>
-      <span className={styles.resultType}>Resource</span>
+      <span className={styles.resultType}>{t('search.resource')}</span>
     </button>
   )
 }
 
 function AgentRow({ item, onClick }: { item: any; onClick: () => void }) {
+  const { t } = useTranslation()
   const Icon = AGENT_ICONS[item.agent_type] ?? User
   return (
     <button className={styles.resultRow} onClick={onClick}>
@@ -73,14 +76,14 @@ function AgentRow({ item, onClick }: { item: any; onClick: () => void }) {
       <div className={styles.resultBody}>
         <div className={styles.resultTitle}>{item.name ?? item.authorized_form}</div>
         <div className={styles.resultMeta}>
-          <span className={styles.resultLevel}>{item.agent_type}</span>
+          <span className={styles.resultLevel}>{t(`agents.types.${item.agent_type}`, { defaultValue: item.agent_type })}</span>
           {item.date_from && (
             <><span className={styles.dot}>·</span>
             <span>{item.date_from}{item.date_to ? `–${item.date_to}` : ''}</span></>
           )}
         </div>
       </div>
-      <span className={styles.resultType}>Agent</span>
+      <span className={styles.resultType}>{t('search.agent')}</span>
     </button>
   )
 }
@@ -92,6 +95,7 @@ function FilterPanel({ params, setParam, clearParam }: {
   setParam: (k: string, v: string) => void
   clearParam: (k: string) => void
 }) {
+  const { t } = useTranslation()
   const types = params.get('types') ?? 'nodes,agents'
   const showNodeFilters = types.includes('nodes')
   const hasDateFilter = params.has('date_from') || params.has('date_to')
@@ -99,12 +103,12 @@ function FilterPanel({ params, setParam, clearParam }: {
     <div className={styles.filters}>
       {showNodeFilters && (
         <div className={styles.filterGroup}>
-          <label className={styles.filterLabel}>Date range</label>
+          <label className={styles.filterLabel}>{t('search.dateRange')}</label>
           <div className={styles.dateRow}>
-            <label className={styles.filterLabel} style={{ textTransform: 'none', fontWeight: 400 }}>From</label>
+            <label className={styles.filterLabel} style={{ textTransform: 'none', fontWeight: 400 }}>{t('search.from')}</label>
             <input type="date" value={params.get('date_from') ?? ''}
               onChange={e => e.target.value ? setParam('date_from', e.target.value) : clearParam('date_from')} />
-            <label className={styles.filterLabel} style={{ textTransform: 'none', fontWeight: 400 }}>To</label>
+            <label className={styles.filterLabel} style={{ textTransform: 'none', fontWeight: 400 }}>{t('search.to')}</label>
             <input type="date" value={params.get('date_to') ?? ''}
               onChange={e => e.target.value ? setParam('date_to', e.target.value) : clearParam('date_to')} />
           </div>
@@ -113,7 +117,7 @@ function FilterPanel({ params, setParam, clearParam }: {
       {hasDateFilter && (
         <button className={styles.clearFilters}
           onClick={() => { clearParam('date_from'); clearParam('date_to') }}>
-          <X size={12} /> Clear dates
+          <X size={12} /> {t('search.clearDates')}
         </button>
       )}
     </div>
@@ -124,6 +128,7 @@ function FilterPanel({ params, setParam, clearParam }: {
 // ─── Saved searches panel ─────────────────────────────────────────────
 
 function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string>) => void }) {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [saving, setSaving]     = useState(false)
   const [nameInput, setNameInput] = useState('')
@@ -145,7 +150,7 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
       queryClient.invalidateQueries({ queryKey: ['saved-searches'] })
       setSaving(false); setNameInput(''); setNameError('')
     },
-    onError: (err: any) => setNameError(err?.response?.data?.message ?? 'Could not save'),
+    onError: (err: any) => setNameError(err?.response?.data?.message ?? t('search.couldNotSave')),
   })
 
   const deleteMutation = useMutation({
@@ -155,14 +160,14 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
 
   const handleSave = () => {
     const name = nameInput.trim()
-    if (!name) { setNameError('Enter a name'); return }
+    if (!name) { setNameError(t('search.enterName')); return }
     setNameError('')
     createMutation.mutate({ name, params: currentParams })
   }
 
   return (
     <div className={styles.savedPanel}>
-      <div className={styles.savedHeader}><Bookmark size={13} /> Saved searches</div>
+      <div className={styles.savedHeader}><Bookmark size={13} /> {t('search.savedSearches')}</div>
 
       {hasAnything && (
         saving ? (
@@ -172,20 +177,20 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
               value={nameInput}
               onChange={e => setNameInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setSaving(false) }}
-              placeholder="Name this search…"
+              placeholder={t('search.namePlaceholder')}
               autoFocus
             />
             {nameError && <span className={styles.saveError}>{nameError}</span>}
             <div className={styles.saveActions}>
               <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={createMutation.isPending}>
-                {createMutation.isPending ? <Spinner size={12} /> : 'Save'}
+                {createMutation.isPending ? <Spinner size={12} /> : t('common.save')}
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setSaving(false); setNameError('') }}>Cancel</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setSaving(false); setNameError('') }}>{t('common.cancel')}</button>
             </div>
           </div>
         ) : (
           <button className={styles.saveCurrentBtn} onClick={() => setSaving(true)}>
-            <BookmarkCheck size={13} /> Save current search
+            <BookmarkCheck size={13} /> {t('search.saveCurrentSearch')}
           </button>
         )
       )}
@@ -193,18 +198,18 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
       <div className={styles.savedList}>
         {isLoading && <span className={styles.savedEmpty}><Spinner size={13} /></span>}
         {!isLoading && savedSearches.length === 0 && (
-          <span className={styles.savedEmpty}>No saved searches yet</span>
+          <span className={styles.savedEmpty}>{t('search.noSavedYet')}</span>
         )}
         {savedSearches.map((s: any) => (
           <div key={s.id} className={styles.savedItem}>
-            <button className={styles.savedItemBtn} onClick={() => onLoad(s.params)} title={summariseParams(s.params)}>
+            <button className={styles.savedItemBtn} onClick={() => onLoad(s.params)} title={summariseParams(s.params, t)}>
               <span className={styles.savedItemName}>{s.name}</span>
-              <span className={styles.savedItemSummary}>{summariseParams(s.params)}</span>
+              <span className={styles.savedItemSummary}>{summariseParams(s.params, t)}</span>
             </button>
             <button
               className={styles.savedItemDelete}
-              onClick={() => { if (confirm(`Delete "${s.name}"?`)) deleteMutation.mutate(s.id) }}
-              title="Delete"
+              onClick={() => { if (confirm(t('search.deleteConfirm', { name: s.name }))) deleteMutation.mutate(s.id) }}
+              title={t('common.delete')}
             >
               <Trash2 size={12} />
             </button>
@@ -220,12 +225,13 @@ function SavedSearchesPanel({ onLoad }: { onLoad: (params: Record<string, string
 function Pagination({ page, pages, total, perPage, onPage }: {
   page: number; pages: number; total: number; perPage: number; onPage: (p: number) => void
 }) {
+  const { t } = useTranslation()
   if (pages <= 1) return null
   const from = (page - 1) * perPage + 1
   const to   = Math.min(page * perPage, total)
   return (
     <div className={styles.pagination}>
-      <span className={styles.paginationInfo}>{from}–{to} of {total}</span>
+      <span className={styles.paginationInfo}>{t('search.paginationInfo', { from, to, total })}</span>
       <div className={styles.paginationBtns}>
         <button className="btn btn-ghost btn-sm btn-icon" disabled={page <= 1} onClick={() => onPage(page - 1)}><ChevronLeft size={16} /></button>
         {Array.from({ length: Math.min(pages, 7) }, (_, i) => {
@@ -241,6 +247,7 @@ function Pagination({ page, pages, total, perPage, onPage }: {
 // ─── Page ─────────────────────────────────────────────────────────────
 
 export default function SearchPage() {
+  const { t } = useTranslation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate    = useNavigate()
   const [inputValue, setInputValue] = useState(searchParams.get('q') ?? '')
@@ -326,18 +333,18 @@ export default function SearchPage() {
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-            placeholder="Search resources and agents…"
+            placeholder={t('search.searchPlaceholder')}
             autoFocus
           />
           {isFetching && <Spinner size={14} />}
         </div>
-        <button type="button" onClick={handleSearch} className="btn btn-primary">Search</button>
+        <button type="button" onClick={handleSearch} className="btn btn-primary">{t('search.searchButton')}</button>
         <button
           className={`btn btn-secondary ${hasFilters ? styles.filterBtnActive : ''}`}
           onClick={() => setShowFilters(v => !v)}
         >
           <SlidersHorizontal size={14} />
-          Filters
+          {t('search.filters')}
           {hasFilters && (
             <span className={styles.filterCount}>
               {FILTER_KEYS.filter(k => searchParams.has(k)).length}
@@ -373,17 +380,17 @@ export default function SearchPage() {
           {q.length >= 2 && (
             <div className={styles.statsBar}>
               {isFetching ? (
-                <span className={styles.searching}><Spinner size={13} /> Searching…</span>
+                <span className={styles.searching}><Spinner size={13} /> {t('search.searching')}</span>
               ) : data ? (
                 <div className={styles.statsLeft}>
                   <span className={styles.totalCount}>
-                    {total === 0 ? 'No results' : `${total.toLocaleString()} result${total !== 1 ? 's' : ''}`}
-                    {' for '}<strong>"{q}"</strong>
+                    {total === 0 ? t('search.noResults') : t('search.resultsCount', { count: total })}
+                    {' '}{t('search.for')} <strong>"{q}"</strong>
                   </span>
                   {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
-                  {data.node_total > 0 && <span className={styles.typeStat}>{data.node_total} resource{data.node_total !== 1 ? 's' : ''}</span>}
-                  {data.agent_total > 0 && <span className={styles.typeStat}>{data.agent_total} agent{data.agent_total !== 1 ? 's' : ''}</span>}
-                  {data.file_total > 0 && <span className={styles.typeStat}>{data.file_total} with matching file{data.file_total !== 1 ? 's' : ''}</span>}
+                  {data.node_total > 0 && <span className={styles.typeStat}>{t('search.resourcesCount', { count: data.node_total })}</span>}
+                  {data.agent_total > 0 && <span className={styles.typeStat}>{t('search.agentsCount', { count: data.agent_total })}</span>}
+                  {data.file_total > 0 && <span className={styles.typeStat}>{t('search.filesMatchCount', { count: data.file_total })}</span>}
                 </div>
               ) : null}
             </div>
@@ -395,24 +402,24 @@ export default function SearchPage() {
               className={styles.filesHint}
               onClick={() => setParam('types', 'files')}
             >
-              {data.file_match_hint} record{data.file_match_hint !== 1 ? 's have' : ' has'} a matching file — view in Files
+              {t('search.fileHintRecords', { count: data.file_match_hint })}
             </button>
           )}
 
           {!q && (
             <div className={styles.emptyState}>
               <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
-              <p>Enter a search term above to get started</p>
-              <p className={styles.emptyHint}>Searches across titles, descriptions, scope notes, and custom metadata fields</p>
+              <p>{t('search.startPrompt')}</p>
+              <p className={styles.emptyHint}>{t('search.startHint')}</p>
             </div>
           )}
 
-          {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>Type at least 2 characters…</p></div>}
+          {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>{t('search.typeMoreChars')}</p></div>}
 
           {q.length >= 2 && !isFetching && results.length === 0 && (data?.files?.length ?? 0) === 0 && (
             <div className={styles.emptyState}>
-              <p>No results for <strong>"{q}"</strong></p>
-              <p className={styles.emptyHint}>Try different keywords or adjust your filters.</p>
+              <p>{t('search.noResultsForPrefix')} <strong>"{q}"</strong></p>
+              <p className={styles.emptyHint}>{t('search.tryDifferentKeywords')}</p>
             </div>
           )}
 
