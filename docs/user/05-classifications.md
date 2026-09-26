@@ -36,7 +36,6 @@ Classification nodes can carry a **BPMN process diagram** that documents the bus
 
 In short: the Process tab lets you draw the activities, decisions, and records of a process using standard BPMN 2.0 notation, link the records produced to a records classification, and record retention and other records-management metadata on each one.
 
-![05_diagram.png](assets/05_diagram.png)
 
 ## The History tab
 
