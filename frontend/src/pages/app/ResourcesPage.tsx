@@ -7,7 +7,7 @@ import {
   Calendar, Globe, Lock, Archive, RotateCcw,
   Paperclip, StickyNote, History, Link,
   Download, Upload, X, Save, AlertCircle, MoveRight, Zap, MapPin, Tag, Link2, Check, Flag, Search, RefreshCw,
-  CheckSquare, Square
+  CheckSquare, Square, Quote
 } from 'lucide-react'
 import { nodesApi, exportApi, oaiApi, hierarchyApi, eadApi } from '@/api'
 import NodeTree from '@/components/tree/NodeTree'
@@ -490,6 +490,68 @@ function CopyLinkButton({ nodeId, refCode }: { nodeId: number; refCode: string }
   )
 }
 
+// ─── Citation button ────────────────────────────────────────────────
+
+function CitationButton({ nodeId }: { nodeId: number }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [copiedStyle, setCopiedStyle] = useState<string | null>(null)
+
+  const { data: citation, isLoading } = useQuery({
+    queryKey: ['node-citation', nodeId],
+    queryFn: () => nodesApi.citation(nodeId).then(r => r.data.data),
+    enabled: open,
+  })
+
+  const copy = (styleKey: string, text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedStyle(styleKey)
+      setTimeout(() => setCopiedStyle(null), 2000)
+    })
+  }
+
+  const STYLES: { key: 'chicago' | 'apa' | 'isad'; label: string }[] = [
+    { key: 'chicago', label: t('resources.citation.chicago') },
+    { key: 'apa', label: t('resources.citation.apa') },
+    { key: 'isad', label: t('resources.citation.isad') },
+  ]
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        className="btn btn-ghost btn-sm btn-icon"
+        onClick={() => setOpen(v => !v)}
+        title={t('resources.citation.button')}
+      >
+        <Quote size={14} />
+      </button>
+      {open && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 100 }} onClick={() => setOpen(false)} />
+          <div className={styles.eadMenu} style={{ minWidth: 320 }}>
+            <div className={styles.eadMenuSection}>
+              <div className={styles.eadMenuSectionTitle}>{t('resources.citation.title')}</div>
+              {isLoading && <div className={styles.eadMenuItemDesc}>{t('common.loading')}</div>}
+              {citation && STYLES.map(s => (
+                <div key={s.key} style={{ padding: '6px 10px' }}>
+                  <div className={styles.eadMenuItemTitle}>{s.label}</div>
+                  <p style={{ fontSize: 12, margin: '4px 0', color: 'var(--text-secondary)' }}>
+                    {citation[s.key]}
+                  </p>
+                  <button className="btn btn-ghost btn-sm" onClick={() => copy(s.key, citation[s.key])}>
+                    <Copy size={12} />
+                    {copiedStyle === s.key ? t('resources.citation.copied') : t('resources.citation.copy')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 
 // ─── NodeAccessionsTab ────────────────────────────────────────────────
 
@@ -773,6 +835,7 @@ function NodeDetailPanel({
               subtitle={data.ref_code}
             />
             <CopyLinkButton nodeId={nodeId} refCode={data?.ref_code ?? ''} />
+            <CitationButton nodeId={nodeId} />
             <ExportMenu nodeId={nodeId} />
             <PrintLabelsButton nodeIds={[nodeId]} />
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => setShowMove(true)} title={t('resources.moveToParent')}>
