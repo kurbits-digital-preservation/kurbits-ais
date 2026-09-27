@@ -13,6 +13,8 @@
 Kurbits is an archival information system built for institutions that need to describe, organise, locate, and track their holdings — whether archival records, library special collections, or museum objects.
  
 It follows established standards (ISAD(G), ISAAR(CPF), EAD 2002, EAC-CPF, OAI-PMH) while remaining practical for smaller institutions without dedicated IT departments.
+
+Try out a [Demo](demo.md)!
  
 ### Features
  
