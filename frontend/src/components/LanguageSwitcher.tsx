@@ -5,7 +5,7 @@ import { LANGUAGES } from '@/i18n'
 import styles from './LanguageSwitcher.module.css'
 
 export default function LanguageSwitcher() {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [open, setOpen] = useState(false)
 
   const current = LANGUAGES.find(l => l.code === i18n.resolvedLanguage) ?? LANGUAGES[0]
@@ -17,7 +17,7 @@ export default function LanguageSwitcher() {
 
   return (
     <div className={styles.wrap}>
-      <button className={styles.btn} onClick={() => setOpen(v => !v)} title="Language">
+      <button className={styles.btn} onClick={() => setOpen(v => !v)} title={t('nav.language')}>
         <Languages size={13} />
         <span className={styles.code}>{current.code.toUpperCase()}</span>
         <ChevronDown size={12} />
