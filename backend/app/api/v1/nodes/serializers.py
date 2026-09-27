@@ -2,7 +2,7 @@ import sqlalchemy as sa
 
 from app.extensions import db
 from app.models.node import Node, NodeChange, NodeAttachment, NodeNote
-
+from app.models.agent import Agent, agent_node_association
 
 def compute_has_children(nodes) -> set:
     """Return the set of node ids (from `nodes`) that have at least one child.
@@ -52,7 +52,7 @@ def serialize_node_detail(node: Node) -> dict:
         .select_from(Node)
         .where(Node.parent_id == node.id)
     ).scalar()
-
+    agent_roles = get_node_agent_roles(node)
     return {
         'id': node.id,
         'institution_id': node.institution_id,
@@ -79,6 +79,9 @@ def serialize_node_detail(node: Node) -> dict:
         'open_flag_count': sum(1 for f in node.flags if f.status != 'resolved'),
         'places': [p.to_dict() for p in node.places],
         'tags': [t.to_dict() for t in node.tags],
+        'agents': agent_roles,
+        'creators': [a['name'] for a in agent_roles
+                     if a['relation_type'].lower() in CREATOR_RELATION_TYPES],
         'parent_id': node.parent_id,
         'breadcrumb': node.get_breadcrumb(),
         'has_children': children_count > 0,
@@ -167,3 +170,15 @@ def serialize_note(note: NodeNote) -> dict:
         'updated_at': note.updated_at.isoformat(),
         'created_by': note.created_by.username if note.created_by else None,
     }
+
+def get_node_agent_roles(node: Node) -> list[dict]:
+    """All agents linked to this node with their relation_type, one query."""
+    rows = db.session.execute(
+        sa.select(Agent.name, agent_node_association.c.relation_type)
+        .join(agent_node_association, Agent.id == agent_node_association.c.agent_id)
+        .where(agent_node_association.c.node_id == node.id)
+    ).all()
+    return [{'name': name, 'relation_type': relation_type} for name, relation_type in rows]
+
+
+CREATOR_RELATION_TYPES = ('creator', 'author', 'originator')

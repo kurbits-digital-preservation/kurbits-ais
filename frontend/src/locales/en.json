@@ -91,6 +91,15 @@
     "setStatus": "Set {{status}}",
     "copyDirectLink": "Copy direct link ({{ref}})",
     "copiedLinkFor": "Copied link for {{ref}}",
+    "citation": {
+      "button": "Cite this record",
+      "title": "Citation",
+      "chicago": "Chicago (archival)",
+      "apa": "APA",
+      "isad": "ISAD(G) reference",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
     "moveToParent": "Move to different parent",
     "deleteConfirmSimple": "Delete \"{{title}}\"? This cannot be undone.",
     "deleteConfirmWithDescendants_one": "\"{{title}}\" has {{count}} descendant record.\n\nDeleting it will permanently delete this node AND that record ({{total}} records in total). This cannot be undone.\n\nAre you absolutely sure?",
@@ -779,9 +788,18 @@
       "deleteConfirm": "Delete \"{{value}}\"?",
       "couldNotAdd": "Could not add",
       "fields": {
-        "disposal": { "label": "Disposal actions", "hint": "What happens to the records at end of retention." },
-        "security": { "label": "Security classifications", "hint": "Access / confidentiality levels." },
-        "medium": { "label": "Medium / format", "hint": "Physical or digital carrier types." }
+        "disposal": {
+          "label": "Disposal actions",
+          "hint": "What happens to the records at end of retention."
+        },
+        "security": {
+          "label": "Security classifications",
+          "hint": "Access / confidentiality levels."
+        },
+        "medium": {
+          "label": "Medium / format",
+          "hint": "Physical or digital carrier types."
+        }
       }
     },
     "page": {
