@@ -20,6 +20,11 @@ from app.models.agent import agent_node_association, AgentIdentifier, AgentAttac
 from app.models.node import IdentifierScheme, NodeIdentifier, Node
 from app.eaccpf.exporter import export_agent_eac
 
+BUILTIN_SCHEME_DEFAULTS = {
+    'wikidata': {'name': 'Wikidata', 'url_template': 'https://www.wikidata.org/wiki/{value}'},
+    'viaf':     {'name': 'VIAF',     'url_template': 'https://viaf.org/viaf/{value}'},
+    'orcid':    {'name': 'ORCID',    'url_template': 'https://orcid.org/{value}'},
+}
 
 def _get_agent_or_404(agent_id: int, institution_id: int):
     return Agent.query.filter_by(id=agent_id, institution_id=institution_id).first()
@@ -49,7 +54,10 @@ def list_agents():
             sa.or_(
                 Agent.name.ilike(f'%{search}%'),
                 Agent.authorized_form.ilike(f'%{search}%'),
-                Agent.identifier.ilike(f'%{search}%'),
+                sa.exists(sa.select(AgentIdentifier.id).where(
+                    AgentIdentifier.agent_id == Agent.id,
+                    AgentIdentifier.value.ilike(f'%{search}%'),
+                )),
             )
         )
     if type_filter:
@@ -59,9 +67,13 @@ def list_agents():
     if has_website == 'false':
         query = query.where(sa.or_(Agent.website.is_(None), Agent.website == ''))
     if has_identifier == 'true':
-        query = query.where(Agent.identifier.isnot(None), Agent.identifier != '')
+        query = query.where(
+            sa.exists(sa.select(AgentIdentifier.id).where(AgentIdentifier.agent_id == Agent.id))
+        )
     if has_identifier == 'false':
-        query = query.where(sa.or_(Agent.identifier.is_(None), Agent.identifier == ''))
+        query = query.where(
+            ~sa.exists(sa.select(AgentIdentifier.id).where(AgentIdentifier.agent_id == Agent.id))
+        )
     if has_description == 'true':
         query = query.where(Agent.description.isnot(None), Agent.description != '')
     if has_description == 'false':
@@ -120,7 +132,6 @@ def create_agent():
         description=data.get('description'),
         date_from=data.get('date_from'),
         date_to=data.get('date_to'),
-        identifier=data.get('identifier'),
         website=data.get('website'),
         created_by_id=current_user.id,
     )
@@ -139,7 +150,7 @@ def update_agent(agent_id):
         return error('Agent not found', 404)
 
     data = request.get_json(silent=True) or {}
-    updatable = ['name', 'authorized_form', 'description', 'date_from', 'date_to', 'identifier', 'website']
+    updatable = ['name', 'authorized_form', 'description', 'date_from', 'date_to', 'website']
     for field in updatable:
         if field in data:
             setattr(agent, field, data[field])
@@ -742,19 +753,32 @@ def add_agent_identifier(agent_id):
 
     data = request.get_json(silent=True) or {}
     scheme_id = data.get('scheme_id')
+    scheme_name = (data.get('scheme_name') or '').strip()
     value = (data.get('value') or '').strip()
-    if not scheme_id:
-        return error('scheme_id is required', 400)
+
+    if not scheme_id and not scheme_name:
+        return error('scheme_id or scheme_name is required', 400)
     if not value:
         return error('value is required', 400)
 
-    scheme = IdentifierScheme.query.filter_by(
-        id=scheme_id, institution_id=institution_id).first()
-    if not scheme:
-        return error('Identifier scheme not found', 404)
+    if scheme_id:
+        scheme = IdentifierScheme.query.filter_by(
+            id=scheme_id, institution_id=institution_id).first()
+        if not scheme:
+            return error('Identifier scheme not found', 404)
+    else:
+        # Applied from an authority-lookup source (Wikidata/VIAF/ORCID/an
+        # integration) rather than picked from the admin-managed list —
+        # get-or-create so the first use of a source configures it.
+        defaults = BUILTIN_SCHEME_DEFAULTS.get(scheme_name.lower(), {})
+        scheme = IdentifierScheme.get_or_create(
+            institution_id,
+            name=defaults.get('name', scheme_name),
+            url_template=defaults.get('url_template'),
+        )
 
-    clash_agent = AgentIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    clash_node = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
+    clash_agent = AgentIdentifier.query.filter_by(scheme_id=scheme.id, value=value).first()
+    clash_node = NodeIdentifier.query.filter_by(scheme_id=scheme.id, value=value).first()
     if clash_agent or clash_node:
         return error(
             f'That {scheme.name} identifier is already used by another record.', 409)
@@ -762,12 +786,12 @@ def add_agent_identifier(agent_id):
     make_primary = data.get('is_primary', False)
     if make_primary:
         for existing in agent.identifiers:
-            if existing.scheme_id == scheme_id:
+            if existing.scheme_id == scheme.id:
                 existing.is_primary = False
 
     ident = AgentIdentifier(
         agent_id=agent_id,
-        scheme_id=scheme_id,
+        scheme_id=scheme.id,
         value=value,
         is_primary=make_primary,
         note=data.get('note'),

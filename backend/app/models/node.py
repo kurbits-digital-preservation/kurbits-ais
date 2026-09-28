@@ -520,6 +520,26 @@ class IdentifierScheme(db.Model):
     def __repr__(self):
         return f'<IdentifierScheme {self.name}>'
 
+    @classmethod
+    def get_or_create(cls, institution_id: int, name: str,
+                       description: str | None = None,
+                       url_template: str | None = None) -> 'IdentifierScheme':
+        """Get the institution's scheme by name, creating it (with the given
+        defaults) if it doesn't exist. Used when an identifier is attached
+        from an external source (authority lookup, import) rather than
+        picked from the admin-managed list by a user.
+        """
+        scheme = db.session.execute(
+            sa.select(cls).where(cls.institution_id == institution_id, cls.name == name)
+        ).scalars().first()
+        if scheme:
+            return scheme
+        scheme = cls(institution_id=institution_id, name=name,
+                      description=description, url_template=url_template)
+        db.session.add(scheme)
+        db.session.flush()
+        return scheme
+
     def to_dict(self) -> dict:
         return {
             'id': self.id,

@@ -63,14 +63,12 @@ function AgentListItem({
               {agent.date_from ?? '?'}{agent.date_to ? ` – ${agent.date_to}` : ''}
             </span>
           )}
-          {agent.identifier && (
-            <span className={styles.listItemId}>{agent.identifier}</span>
-          )}
         </div>
       </div>
     </div>
   )
 }
+// ─── Agent form ───────────────────────────────────────────────────────
 
 // ─── Agent form ───────────────────────────────────────────────────────
 
@@ -81,14 +79,18 @@ interface AgentFormData {
   description: string
   date_from: string
   date_to: string
-  identifier: string
   website: string
+}
+
+interface PendingIdentifier {
+  scheme: string
+  value: string
+  source_url?: string
 }
 
 const EMPTY_FORM: AgentFormData = {
   name: '', agent_type: 'person', authorized_form: '',
-  description: '', date_from: '', date_to: '',
-  identifier: '', website: '',
+  description: '', date_from: '', date_to: '', website: '',
 }
 
 function AgentForm({
@@ -98,12 +100,13 @@ function AgentForm({
   isSaving,
 }: {
   initial?: Partial<AgentFormData>
-  onSave: (data: AgentFormData) => void
+  onSave: (data: AgentFormData, pendingIdentifiers: PendingIdentifier[]) => void
   onCancel: () => void
   isSaving: boolean
 }) {
   const { t } = useTranslation()
   const [form, setForm] = useState<AgentFormData>({ ...EMPTY_FORM, ...initial })
+  const [pendingIdentifiers, setPendingIdentifiers] = useState<PendingIdentifier[]>([])
   const set = (field: keyof AgentFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [field]: e.target.value }))
@@ -117,14 +120,44 @@ function AgentForm({
       date_from:        result.date_from || f.date_from,
       date_to:          result.date_to || f.date_to,
       description:      result.description || f.description,
-      identifier:       result.identifier || f.identifier,
       website:          result.website || f.website,
     }))
+
+    if (result.identifier_value) {
+      // One pending identifier per scheme — re-applying the same source
+      // replaces rather than duplicates.
+      setPendingIdentifiers(prev => [
+        ...prev.filter(p => p.scheme !== result.identifier_scheme),
+        { scheme: result.identifier_scheme, value: result.identifier_value, source_url: result.source_url },
+      ])
+    }
   }
+
+  const removePendingIdentifier = (scheme: string) =>
+    setPendingIdentifiers(prev => prev.filter(p => p.scheme !== scheme))
 
   return (
     <div className={styles.form}>
       <AuthorityLookup onApply={handleAuthorityApply} />
+
+      {pendingIdentifiers.length > 0 && (
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', margin: 'var(--space-2) 0 var(--space-3)' }}>
+          {pendingIdentifiers.map(p => (
+            <span key={p.scheme} className="ref-code" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+              <Fingerprint size={11} /> {p.scheme}: {p.value}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-icon"
+                onClick={() => removePendingIdentifier(p.scheme)}
+                aria-label={`Remove ${p.scheme} identifier`}
+              >
+                <X size={11} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className={styles.formGrid}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
           <label>{t('agents.form.name')}</label>
@@ -157,12 +190,6 @@ function AgentForm({
         </div>
 
         <div className="form-group">
-          <label>{t('agents.form.externalId')}</label>
-          <input value={form.identifier} onChange={set('identifier')}
-            placeholder={t('agents.form.externalIdPlaceholder')} />
-        </div>
-
-        <div className="form-group">
           <label>{t('agents.form.website')}</label>
           <input value={form.website} onChange={set('website')}
             placeholder="https://…" type="url" />
@@ -181,7 +208,7 @@ function AgentForm({
         </button>
         <button
           className="btn btn-primary"
-          onClick={() => onSave(form)}
+          onClick={() => onSave(form, pendingIdentifiers)}
           disabled={!form.name || isSaving}
         >
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
@@ -204,7 +231,6 @@ function DetailsTab({ agent }: { agent: AgentDetail }) {
         { label: t('agents.details.dateOfExistence'), value: agent.date_from || agent.date_to
             ? `${agent.date_from ?? '?'}${agent.date_to ? ` – ${agent.date_to}` : ` – ${t('agents.details.present')}`}`
             : null },
-        { label: t('agents.details.externalIdentifier'), value: agent.identifier },
         { label: t('agents.details.website'), value: agent.website
             ? <a href={agent.website} target="_blank" rel="noreferrer">
                 {agent.website} <ExternalLink size={11} />
@@ -801,6 +827,12 @@ function EacCpfImportModal({ onClose, onImported }: {
     </div>
   )
 }
+async function attachPendingIdentifiers(agentId: number, pending: PendingIdentifier[]) {
+  if (pending.length === 0) return
+  await Promise.allSettled(
+    pending.map(p => agentsApi.addIdentifier(agentId, { scheme_name: p.scheme, value: p.value }))
+  )
+}
 
 export default function AgentsPage() {
   const { t } = useTranslation()
@@ -839,20 +871,27 @@ export default function AgentsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (formData: AgentFormData) => agentsApi.create(formData as any),
-    onSuccess: (res) => {
+    mutationFn: ({ formData }: { formData: AgentFormData; pendingIdentifiers: PendingIdentifier[] }) =>
+      agentsApi.create(formData as any),
+    onSuccess: async (res, variables) => {
+      const agentId = res.data.data.id
+      await attachPendingIdentifiers(agentId, variables.pendingIdentifiers)
       queryClient.invalidateQueries({ queryKey: ['agents'] })
-      setSelectedId(res.data.data.id)
+      setSelectedId(agentId)
       setViewMode('detail')
     },
   })
 
   const updateMutation = useMutation({
-    mutationFn: (formData: AgentFormData) => agentsApi.update(editingAgent!.id, formData as any),
-    onSuccess: (res) => {
+    mutationFn: ({ formData }: { formData: AgentFormData; pendingIdentifiers: PendingIdentifier[] }) =>
+      agentsApi.update(editingAgent!.id, formData as any),
+    onSuccess: async (res, variables) => {
+      const agentId = res.data.data.id
+      await attachPendingIdentifiers(agentId, variables.pendingIdentifiers)
       queryClient.invalidateQueries({ queryKey: ['agents'] })
-      queryClient.invalidateQueries({ queryKey: ['agent', editingAgent!.id] })
-      setSelectedId(res.data.data.id)
+      queryClient.invalidateQueries({ queryKey: ['agent', agentId] })
+      queryClient.invalidateQueries({ queryKey: ['agent-identifiers', agentId] })
+      setSelectedId(agentId)
       setViewMode('detail')
       setEditingAgent(null)
     },
@@ -937,7 +976,7 @@ export default function AgentsPage() {
               </h2>
             </div>
             <div className={styles.formPanelBody}>
-              <AgentForm
+                            <AgentForm
                 initial={editingAgent ? {
                   name: editingAgent.name,
                   agent_type: editingAgent.agent_type,
@@ -945,12 +984,11 @@ export default function AgentsPage() {
                   description: editingAgent.description ?? '',
                   date_from: editingAgent.date_from ?? '',
                   date_to: editingAgent.date_to ?? '',
-                  identifier: editingAgent.identifier ?? '',
                   website: editingAgent.website ?? '',
                 } : undefined}
-                onSave={(formData) => {
-                  if (viewMode === 'create') createMutation.mutate(formData)
-                  else updateMutation.mutate(formData)
+                onSave={(formData, pendingIdentifiers) => {
+                  if (viewMode === 'create') createMutation.mutate({ formData, pendingIdentifiers })
+                  else updateMutation.mutate({ formData, pendingIdentifiers })
                 }}
                 onCancel={() => {
                   setViewMode('detail')

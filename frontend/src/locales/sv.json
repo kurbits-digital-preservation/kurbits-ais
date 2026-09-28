@@ -91,6 +91,16 @@
     "setStatus": "Sätt {{status}}",
     "copyDirectLink": "Kopiera direktlänk ({{ref}})",
     "copiedLinkFor": "Länk kopierad för {{ref}}",
+    "citation": {
+      "button": "Citera denna post",
+      "title": "Referens",
+      "chicago": "Chicago (arkiv)",
+      "apa": "APA",
+      "isad": "ISAD(G)-referens",
+      "copy": "Kopiera",
+      "copied": "Kopierad"
+    },
+    "moveToParent": "Flytta till annan överordnad post",
     "moveToParent": "Flytta till annan överordnad post",
     "deleteConfirmSimple": "Ta bort \"{{title}}\"? Detta kan inte ångras.",
     "deleteConfirmWithDescendants_one": "\"{{title}}\" har {{count}} underordnad post.\n\nOm du tar bort den raderas denna post OCH den underordnade posten permanent ({{total}} poster totalt). Detta kan inte ångras.\n\nÄr du helt säker?",
@@ -779,9 +789,18 @@
       "deleteConfirm": "Ta bort \"{{value}}\"?",
       "couldNotAdd": "Det gick inte att lägga till",
       "fields": {
-        "disposal": { "label": "Gallringsåtgärder", "hint": "Vad som händer med handlingarna vid gallringsfristens slut." },
-        "security": { "label": "Sekretessklassificeringar", "hint": "Åtkomst- / sekretessnivåer." },
-        "medium": { "label": "Medium / format", "hint": "Fysiska eller digitala bärartyper." }
+        "disposal": {
+          "label": "Gallringsåtgärder",
+          "hint": "Vad som händer med handlingarna vid gallringsfristens slut."
+        },
+        "security": {
+          "label": "Sekretessklassificeringar",
+          "hint": "Åtkomst- / sekretessnivåer."
+        },
+        "medium": {
+          "label": "Medium / format",
+          "hint": "Fysiska eller digitala bärartyper."
+        }
       }
     },
     "page": {

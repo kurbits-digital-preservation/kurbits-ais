@@ -4,7 +4,8 @@ Converts EAC-CPF into Kurbits Agent model instances.
 """
 from __future__ import annotations
 from app.extensions import db
-from app.models.agent import Agent, AgentType, AgentNote, AgentRelationType
+from app.models.agent import Agent, AgentType, AgentNote, AgentRelationType, AgentIdentifier
+from app.models.node import IdentifierScheme
 from app.eaccpf.parser import ParsedAgent, ParseResult
 
 
@@ -14,6 +15,8 @@ _AGENT_TYPE_MAP = {
     'family':       AgentType.FAMILY,
     'software':     AgentType.SOFTWARE,
 }
+
+_EAC_RECORD_SCHEME_NAME = 'EAC-CPF Record ID'
 
 
 class ImportResult:
@@ -42,15 +45,34 @@ class ImportResult:
         }
 
 
-def _find_existing(institution_id: int, parsed: ParsedAgent) -> Agent | None:
-    """Try to find an existing agent matching by identifier or authorized_form."""
-    if parsed.identifier:
-        existing = Agent.query.filter_by(
-            institution_id=institution_id,
-            identifier=parsed.identifier,
-        ).first()
-        if existing:
-            return existing
+def _get_eac_scheme(institution_id: int) -> IdentifierScheme:
+    return IdentifierScheme.get_or_create(
+        institution_id, _EAC_RECORD_SCHEME_NAME,
+        description='<recordId>/<otherRecordId> from an imported EAC-CPF file — '
+                     'used to recognise the same record on a later re-import.',
+    )
+
+
+def _set_source_id_identifier(agent: Agent, eac_scheme: IdentifierScheme, source_id: str) -> None:
+    if not source_id:
+        return
+    existing = AgentIdentifier.query.filter_by(agent_id=agent.id, scheme_id=eac_scheme.id).first()
+    if existing:
+        existing.value = source_id
+        return
+    clash = AgentIdentifier.query.filter_by(scheme_id=eac_scheme.id, value=source_id).first()
+    if clash:
+        return
+    db.session.add(AgentIdentifier(agent_id=agent.id, scheme_id=eac_scheme.id, value=source_id))
+
+
+def _find_existing(institution_id: int, parsed: ParsedAgent, eac_scheme: IdentifierScheme) -> Agent | None:
+    """Try to find an existing agent matching by EAC-CPF record id, then authorized_form."""
+    if parsed.source_id:
+        ident = AgentIdentifier.query.filter_by(
+            scheme_id=eac_scheme.id, value=parsed.source_id).first()
+        if ident:
+            return ident.agent
 
     if parsed.authorized_form:
         existing = Agent.query.filter_by(
@@ -76,17 +98,19 @@ def agents_from_eaccpf(
         parse_result: output from eaccpf.parser.parse_file()
         institution_id: target institution
         created_by_id: user performing the import
-        update_existing: if True, update agents matched by identifier/name;
+        update_existing: if True, update agents matched by record id/name;
                          if False, skip them
     """
     result = ImportResult()
     result.warnings.extend(parse_result.warnings)
 
+    eac_scheme = _get_eac_scheme(institution_id)
+
     # First pass: create/update all agents (without relations, to avoid FK issues)
     id_map: dict[str, int] = {}  # source_id → agent.id
 
     for parsed in parse_result.agents:
-        existing = _find_existing(institution_id, parsed)
+        existing = _find_existing(institution_id, parsed, eac_scheme)
 
         if existing and not update_existing:
             result.skipped.append(f'{parsed.name} (already exists)')
@@ -106,8 +130,6 @@ def agents_from_eaccpf(
                 agent.date_from = parsed.date_from
             if parsed.date_to:
                 agent.date_to = parsed.date_to
-            if parsed.identifier:
-                agent.identifier = parsed.identifier
             db.session.flush()
             result.updated.append({'id': agent.id, 'name': agent.name})
         else:
@@ -119,7 +141,6 @@ def agents_from_eaccpf(
                 description=parsed.description,
                 date_from=parsed.date_from,
                 date_to=parsed.date_to,
-                identifier=parsed.identifier or None,
                 created_by_id=created_by_id,
             )
             db.session.add(agent)
@@ -131,13 +152,13 @@ def agents_from_eaccpf(
                     agent_id=agent.id,
                     note_type='parallel_names',
                     content='Parallel name forms: ' + '; '.join(parsed.parallel_names),
-                    is_public=True,
                     created_by_id=created_by_id,
                 )
                 db.session.add(note)
 
             result.created.append({'id': agent.id, 'name': agent.name})
 
+        _set_source_id_identifier(agent, eac_scheme, parsed.source_id)
         id_map[parsed.source_id] = agent.id
 
     # Second pass: wire up cpfRelation → agent_to_agent_association
@@ -153,10 +174,10 @@ def agents_from_eaccpf(
         for rel in parsed.relations:
             target = None
             if rel['identifier']:
-                target = Agent.query.filter_by(
-                    institution_id=institution_id,
-                    identifier=rel['identifier'],
-                ).first()
+                ident = AgentIdentifier.query.filter_by(
+                    scheme_id=eac_scheme.id, value=rel['identifier']).first()
+                if ident:
+                    target = ident.agent
             if not target and rel['name']:
                 target = Agent.query.filter_by(
                     institution_id=institution_id,

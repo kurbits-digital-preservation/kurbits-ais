@@ -12,10 +12,14 @@ export interface AuthorityResult {
   date_from?: string
   date_to?: string
   description?: string
-  identifier: string
   website?: string
   source: string
   source_url?: string
+  // Custom-identifier target: scheme display name (e.g. 'Wikidata') + raw
+  // value with no prefix (e.g. 'Q42'). Consumers add these as an
+  // AgentIdentifier rather than writing them into a plain text field.
+  identifier_scheme: string
+  identifier_value: string
 }
 
 interface SearchHit {
@@ -133,9 +137,10 @@ async function resolveWikidata(qid: string): Promise<AuthorityResult> {
     name: label, authorized_form: label, agent_type,
     date_from: toYear(claims[isOrg ? 'P571' : 'P569']?.[0]?.mainsnak?.datavalue?.value),
     date_to:   toYear(claims[isOrg ? 'P576' : 'P570']?.[0]?.mainsnak?.datavalue?.value),
-    description, identifier: `wikidata:${qid}`,
+    description,
     website: claims.P856?.[0]?.mainsnak?.datavalue?.value ?? '',
     source: 'wikidata', source_url: `https://www.wikidata.org/wiki/${qid}`,
+    identifier_scheme: 'Wikidata', identifier_value: qid,
   }
 }
 
@@ -152,7 +157,8 @@ async function resolveVIAF(viafId: string): Promise<AuthorityResult> {
   return {
     name: name || `VIAF ${viafId}`, authorized_form: name || undefined, agent_type,
     date_from: data.birthDate || undefined, date_to: data.deathDate || undefined,
-    identifier: `viaf:${viafId}`, source: 'viaf', source_url: `https://viaf.org/viaf/${viafId}`,
+    source: 'viaf', source_url: `https://viaf.org/viaf/${viafId}`,
+    identifier_scheme: 'VIAF', identifier_value: viafId,
   }
 }
 
@@ -167,21 +173,21 @@ async function resolveORCID(orcidId: string): Promise<AuthorityResult> {
     name: name || orcidId,
     authorized_form: data.name?.['credit-name']?.value || name || undefined,
     agent_type: 'person', description: data.biography?.content ?? undefined,
-    identifier: `orcid:${orcidId}`,
     website: data['researcher-urls']?.['researcher-url']?.[0]?.url?.value ?? undefined,
     source: 'orcid', source_url: `https://orcid.org/${orcidId}`,
+    identifier_scheme: 'ORCID', identifier_value: orcidId,
   }
 }
 
 function resolveIntegration(payload: Record<string, any>): AuthorityResult {
-  const integrationName = payload['_integration_name'] != null ? String(payload['_integration_name']) : 'custom'
+  const integrationName = payload['_integration_name'] != null ? String(payload['_integration_name']) : 'Custom'
   const str = (key: string) => { const v = payload[key]; return v != null ? String(v) : undefined }
   return {
     name: str('name') ?? '(unnamed)', authorized_form: str('authorized_form'),
     agent_type: payload['agent_type'] as AuthorityResult['agent_type'] | undefined,
     date_from: str('date_from'), date_to: str('date_to'), description: str('description'),
-    identifier: str('identifier') ?? `${integrationName}:unknown`,
     website: str('website'), source: integrationName, source_url: str('source_url'),
+    identifier_scheme: integrationName, identifier_value: str('identifier') ?? '',
   }
 }
 

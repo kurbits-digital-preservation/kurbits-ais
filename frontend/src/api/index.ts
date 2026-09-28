@@ -105,6 +105,20 @@ bulkDelete: (node_ids: number[], force = false) =>
   findingAid: (nodeId: number) =>
     api.get(`/nodes/${nodeId}/finding-aid`, { responseType: 'blob' }),
 
+    citation: (nodeId: number, accessDate = false) =>
+    api.get<{ status: string; data: {
+      chicago: string
+      apa: string
+      isad: string
+      fields: {
+        title: string
+        ref_code: string
+        institution_name: string
+        date_display: string
+        creators: string[]
+      }
+    } }>(`/nodes/${nodeId}/citation`, { params: { access_date: accessDate } }),
+
   reextractMetadata: (nodeId: number, attachmentId: number) =>
     api.post(`/nodes/${nodeId}/attachments/${attachmentId}/extract`),
 

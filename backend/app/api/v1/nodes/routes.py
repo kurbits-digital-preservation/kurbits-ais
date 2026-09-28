@@ -28,7 +28,11 @@ from app.models.flag import NodeFlag
 from app.models.representation import NodeRepresentation
 from app.models.background_task import BackgroundTask
 from app.models.label_template import LabelTemplate
-
+from app.api.v1.nodes.serializers import (
+    serialize_node_stub, serialize_node_detail, serialize_change,
+    serialize_attachment, serialize_note, compute_has_children,
+    get_node_agent_roles, CREATOR_RELATION_TYPES,   # new
+)
 
 def _get_node_or_404(node_id: int, institution_id: int):
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
@@ -2664,3 +2668,38 @@ def delete_label_template(template_id):
     db.session.delete(t)
     db.session.commit()
     return success({'message': 'Deleted'})
+
+@bp.route('/nodes/<int:node_id>/citation', methods=['GET'])
+@login_required
+def get_node_citation(node_id):
+    from app.citation import build_citation
+
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    agent_roles = get_node_agent_roles(node)
+    creators = [a['name'] for a in agent_roles
+                if a['relation_type'].lower() in CREATOR_RELATION_TYPES]
+
+    breadcrumb = node.get_breadcrumb()
+    collection_title = breadcrumb[0]['title'] if len(breadcrumb) > 1 else None
+
+    institution = node.institution
+    include_access_date = request.args.get('access_date', 'false').lower() == 'true'
+
+    citation = build_citation({
+        'title': node.title,
+        'ref_code': node.ref_code,
+        'institution_name': institution.name if institution else '',
+        'country_code': institution.country_code if institution else '',
+        'date_start': node.date_start.isoformat() if node.date_start else None,
+        'date_end': node.date_end.isoformat() if node.date_end else None,
+        'collection_title': collection_title,
+        'creators': creators,
+    }, include_access_date=include_access_date)
+
+    return success(citation)

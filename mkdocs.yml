@@ -38,6 +38,7 @@ nav:
       - Import / Export / Lookups: user/10-lookups-import-export.md
       - Process descriptions: user/11-process-descriptions.md
       - Label designer: user/12-labels.md
-      - Deploy with docker: user/13-docker.md
+      - Deploy with docker: installation/docker.md
       - Visual-Arkiv: user/visual-arkiv-import.md
   - Installation: installation/docker.md
+  - Demo: demo.md
