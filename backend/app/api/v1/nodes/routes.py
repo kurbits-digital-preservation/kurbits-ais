@@ -20,7 +20,7 @@ from app.models import (
     NodeRelationType,
 )
 from app.models.node import node_association, NodeIdentifier, IdentifierScheme
-from app.models.agent import agent_node_association
+from app.models.agent import agent_node_association, AgentIdentifier
 from app.models.location import location_node_association
 from app.models.classification import classification_node_association
 from app.models.geo import NodePlace, Tag, PlaceType, TagCategory
@@ -33,6 +33,8 @@ from app.api.v1.nodes.serializers import (
     serialize_attachment, serialize_note, compute_has_children,
     get_node_agent_roles, CREATOR_RELATION_TYPES,   # new
 )
+
+from app.services.identifier_minting import MintError, build_context, mint_value, value_in_use
 
 def _get_node_or_404(node_id: int, institution_id: int):
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
@@ -2350,84 +2352,13 @@ def generate_node_identifier(node_id):
         id=scheme_id, institution_id=institution_id).first()
     if not scheme:
         return error('Identifier scheme not found', 404)
-    if not scheme.generator_url:
-        return error(f'{scheme.name} has no generator service configured.', 422)
 
-    target_url = ''
-    if scheme.target_url_template:
-        target_url = (scheme.target_url_template
-                      .replace('{ref_code}', node.ref_code or '')
-                      .replace('{node_id}', str(node.id)))
-    ctx = {
-        'node_id': str(node.id),
-        'ref_code': node.ref_code or '',
-        'title': node.title or '',
-        'target_url': target_url,
-        'shoulder': scheme.generator_shoulder or '',
-    }
-
-    def _subst(obj):
-        if isinstance(obj, str):
-            out = obj
-            for k, v in ctx.items():
-                out = out.replace('{' + k + '}', v)
-            return out
-        if isinstance(obj, dict):
-            return {k: _subst(v) for k, v in obj.items()}
-        if isinstance(obj, list):
-            return [_subst(v) for v in obj]
-        return obj
-
-    if scheme.generator_body_template:
-        body = _subst(scheme.generator_body_template)
-    else:
-        body = {'node_id': node.id, 'ref_code': node.ref_code, 'title': node.title}
-
-    headers = {'Content-Type': 'application/json'}
-    if scheme.generator_headers:
-        headers.update(scheme.generator_headers)
-
-    import requests
     try:
-        resp = requests.post(
-            scheme.generator_url,
-            json=body,
-            headers=headers,
-            timeout=15,
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    except requests.HTTPError as e:
-        detail = ''
-        try:
-            detail = f' — {e.response.text[:200]}'
-        except Exception:
-            pass
-        return error(f'Generator service returned {e.response.status_code}{detail}', 502)
-    except Exception as e:
-        return error(f'Generator service error: {str(e)}', 502)
+        value = mint_value(scheme, build_context(scheme, node, 'node'))
+    except MintError as e:
+        return error(e.message, e.status)
 
-    def _resolve(obj, path):
-        if not path:
-            return obj
-        for key in path.split('.'):
-            if isinstance(obj, dict):
-                obj = obj.get(key)
-            elif isinstance(obj, list) and key.isdigit():
-                obj = obj[int(key)] if int(key) < len(obj) else None
-            else:
-                return None
-        return obj
-
-    raw = _resolve(payload, scheme.generator_response_path or 'value')
-    value = (str(raw).strip() if raw is not None else '')
-    if not value:
-        path_hint = scheme.generator_response_path or 'value'
-        return error(
-            f'Could not find the identifier at "{path_hint}" in the service response.', 502)
-
-    clash = NodeIdentifier.query.filter_by(scheme_id=scheme_id, value=value).first()
-    if clash:
+    if value_in_use(db.session, scheme.id, value):
         return error(
             f'Generator returned a {scheme.name} value that is already in use.', 409)
 
@@ -2442,6 +2373,14 @@ def generate_node_identifier(node_id):
     db.session.add(ident)
     db.session.commit()
     return success(ident.to_dict(), 201)
+
+def _clean_levels(raw):
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        raw = raw.split(',')
+    levels = [str(l).strip() for l in raw if str(l).strip()]
+    return levels or None
 
 
 @bp.route('/identifier-schemes', methods=['GET'])
@@ -2477,23 +2416,34 @@ def create_identifier_scheme():
     if exists:
         return error(f'A scheme named "{name}" already exists.', 409)
 
+    generator_url = (data.get('generator_url') or '').strip() or None
+    auto_nodes = bool(data.get('auto_assign_nodes'))
+    auto_agents = bool(data.get('auto_assign_agents'))
+    if (auto_nodes or auto_agents) and not generator_url:
+        return error('Automatic assignment requires a generator service URL.', 422)
+
     scheme = IdentifierScheme(
         institution_id=institution_id,
         name=name,
         description=data.get('description'),
         url_template=(data.get('url_template') or '').strip() or None,
-        generator_url=(data.get('generator_url') or '').strip() or None,
+        generator_url=generator_url,
         generator_headers=data.get('generator_headers') or None,
         generator_body_template=data.get('generator_body_template') or None,
         generator_response_path=(data.get('generator_response_path') or '').strip() or None,
         generator_shoulder=(data.get('generator_shoulder') or '').strip() or None,
         target_url_template=(data.get('target_url_template') or '').strip() or None,
+        agent_target_url_template=(data.get('agent_target_url_template') or '').strip() or None,
+        auto_assign_nodes=auto_nodes,
+        auto_assign_agents=auto_agents,
+        auto_assign_levels=_clean_levels(data.get('auto_assign_levels')),
         is_active=data.get('is_active', True),
         sort_order=data.get('sort_order', 0),
     )
     db.session.add(scheme)
     db.session.commit()
     return success(scheme.to_dict(), 201)
+
 
 
 @bp.route('/identifier-schemes/<int:scheme_id>', methods=['PATCH'])
@@ -2533,10 +2483,22 @@ def update_identifier_scheme(scheme_id):
         scheme.generator_shoulder = (data['generator_shoulder'] or '').strip() or None
     if 'target_url_template' in data:
         scheme.target_url_template = (data['target_url_template'] or '').strip() or None
+    if 'agent_target_url_template' in data:
+        scheme.agent_target_url_template = (data['agent_target_url_template'] or '').strip() or None
+    if 'auto_assign_nodes' in data:
+        scheme.auto_assign_nodes = bool(data['auto_assign_nodes'])
+    if 'auto_assign_agents' in data:
+        scheme.auto_assign_agents = bool(data['auto_assign_agents'])
+    if 'auto_assign_levels' in data:
+        scheme.auto_assign_levels = _clean_levels(data['auto_assign_levels'])
     if 'is_active' in data:
         scheme.is_active = data['is_active']
     if 'sort_order' in data:
         scheme.sort_order = data['sort_order']
+
+    if (scheme.auto_assign_nodes or scheme.auto_assign_agents) and not scheme.generator_url:
+        db.session.rollback()
+        return error('Automatic assignment requires a generator service URL.', 422)
 
     db.session.commit()
     return success(scheme.to_dict())
@@ -2552,7 +2514,8 @@ def delete_identifier_scheme(scheme_id):
     if not scheme:
         return error('Scheme not found', 404)
 
-    in_use = NodeIdentifier.query.filter_by(scheme_id=scheme_id).count()
+    in_use = (NodeIdentifier.query.filter_by(scheme_id=scheme_id).count()
+              + AgentIdentifier.query.filter_by(scheme_id=scheme_id).count())
     if in_use > 0:
         return error(
             f'{in_use} record(s) use this scheme. Deactivate it instead of deleting.', 409)
