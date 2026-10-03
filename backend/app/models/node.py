@@ -482,33 +482,31 @@ class IdentifierScheme(db.Model):
     """Admin-managed list of identifier schemes (ARK, Handle, DOI, ISBN, …).
 
     Mirrors the NodeRelationType pattern: one configurable vocabulary per
-    institution, referenced by NodeIdentifier rows.
+    institution, referenced by NodeIdentifier and AgentIdentifier rows.
     """
     __tablename__ = 'identifier_schemes'
 
     id: so.Mapped[int] = so.mapped_column(primary_key=True)
     institution_id: so.Mapped[int] = so.mapped_column(
         sa.ForeignKey('institutions.id', ondelete='CASCADE'))
-    name: so.Mapped[str] = so.mapped_column(sa.String(100))          # e.g. "ARK"
+    name: so.Mapped[str] = so.mapped_column(sa.String(100))
     description: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
 
-    # Optional URL template for resolving the identifier, {value} is substituted.
-    # e.g. "https://n2t.net/{value}" or "https://doi.org/{value}"
     url_template: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
 
-    # Optional external service endpoint the "fetch" hook POSTs to, to mint a value.
     generator_url: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
-    # Auth/content headers sent with the mint request, e.g. {"Authorization": "Bearer …"}
     generator_headers: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True)
-    # JSON body template. Placeholders {node_id} {ref_code} {title} {target_url} {shoulder}
-    # are substituted. e.g. {"shoulder": "{shoulder}", "target_url": "{target_url}", "label": "{title}"}
     generator_body_template: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True)
-    # Dot-path to the minted value in the response, e.g. "pid" or "data.identifier"
     generator_response_path: so.Mapped[Optional[str]] = so.mapped_column(sa.String(200), nullable=True)
-    # Fixed shoulder/namespace for this scheme (substituted into {shoulder})
     generator_shoulder: so.Mapped[Optional[str]] = so.mapped_column(sa.String(200), nullable=True)
-    # Template to build the target_url from a node, {ref_code} {node_id} substituted
     target_url_template: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
+    agent_target_url_template: so.Mapped[Optional[str]] = so.mapped_column(sa.String(500), nullable=True)
+
+    auto_assign_nodes: so.Mapped[bool] = so.mapped_column(
+        sa.Boolean, default=False, server_default=sa.false())
+    auto_assign_agents: so.Mapped[bool] = so.mapped_column(
+        sa.Boolean, default=False, server_default=sa.false())
+    auto_assign_levels: so.Mapped[Optional[list]] = so.mapped_column(sa.JSON, nullable=True)
 
     is_active: so.Mapped[bool] = so.mapped_column(sa.Boolean, default=True)
     sort_order: so.Mapped[int] = so.mapped_column(sa.Integer, default=0)
@@ -519,26 +517,6 @@ class IdentifierScheme(db.Model):
 
     def __repr__(self):
         return f'<IdentifierScheme {self.name}>'
-
-    @classmethod
-    def get_or_create(cls, institution_id: int, name: str,
-                       description: str | None = None,
-                       url_template: str | None = None) -> 'IdentifierScheme':
-        """Get the institution's scheme by name, creating it (with the given
-        defaults) if it doesn't exist. Used when an identifier is attached
-        from an external source (authority lookup, import) rather than
-        picked from the admin-managed list by a user.
-        """
-        scheme = db.session.execute(
-            sa.select(cls).where(cls.institution_id == institution_id, cls.name == name)
-        ).scalars().first()
-        if scheme:
-            return scheme
-        scheme = cls(institution_id=institution_id, name=name,
-                      description=description, url_template=url_template)
-        db.session.add(scheme)
-        db.session.flush()
-        return scheme
 
     def to_dict(self) -> dict:
         return {
@@ -552,7 +530,11 @@ class IdentifierScheme(db.Model):
             'generator_response_path': self.generator_response_path,
             'generator_shoulder': self.generator_shoulder,
             'target_url_template': self.target_url_template,
+            'agent_target_url_template': self.agent_target_url_template,
             'has_generator': bool(self.generator_url),
+            'auto_assign_nodes': self.auto_assign_nodes,
+            'auto_assign_agents': self.auto_assign_agents,
+            'auto_assign_levels': self.auto_assign_levels or [],
             'is_active': self.is_active,
             'sort_order': self.sort_order,
         }
