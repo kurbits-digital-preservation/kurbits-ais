@@ -559,6 +559,47 @@ class IdentifierScheme(db.Model):
             'sort_order': self.sort_order,
         }
 
+    @classmethod
+    def _find_by_name(cls, institution_id: int, name: str) -> Optional['IdentifierScheme']:
+        return db.session.execute(
+            sa.select(cls).where(
+                cls.institution_id == institution_id,
+                sa.func.lower(cls.name) == name.lower(),
+            )
+        ).scalars().first()
+
+    @classmethod
+    def get_or_create(cls, institution_id: int, name: str,
+                      url_template: Optional[str] = None,
+                      description: Optional[str] = None) -> 'IdentifierScheme':
+        from sqlalchemy.exc import IntegrityError
+
+        name = (name or '').strip()
+        if not name:
+            raise ValueError('Identifier scheme name is required')
+
+        scheme = cls._find_by_name(institution_id, name)
+        if scheme is None:
+            try:
+                with db.session.begin_nested():
+                    scheme = cls(
+                        institution_id=institution_id,
+                        name=name,
+                        description=description,
+                        url_template=url_template,
+                    )
+                    db.session.add(scheme)
+            except IntegrityError:
+                scheme = cls._find_by_name(institution_id, name)
+                if scheme is None:
+                    raise
+
+        if url_template and not scheme.url_template:
+            scheme.url_template = url_template
+
+        db.session.flush()
+        return scheme
+
 
 class NodeIdentifier(db.Model):
     """A single external/persistent identifier attached to a node.
