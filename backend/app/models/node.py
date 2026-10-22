@@ -4,6 +4,7 @@ from enum import Enum
 import sqlalchemy as sa
 import sqlalchemy.orm as so
 from app.extensions import db
+import re
 
 
 class NodeStatus(str, Enum):
@@ -46,6 +47,15 @@ class NodeRelationType(db.Model):
     def __repr__(self):
         return f'<NodeRelationType {self.name}>'
 
+_NATURAL_DIGITS = re.compile(r'(\d+)', re.ASCII)
+_NATURAL_PAD = 12
+
+
+def natural_sort_key(value: Optional[str]) -> str:
+    if not value:
+        return ''
+    parts = _NATURAL_DIGITS.split(value.strip().lower())
+    return ''.join(p.zfill(_NATURAL_PAD) if i % 2 else p for i, p in enumerate(parts))
 
 class Node(db.Model):
     __tablename__ = 'nodes'
@@ -53,11 +63,10 @@ class Node(db.Model):
     id: so.Mapped[int] = so.mapped_column(primary_key=True)
     institution_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey('institutions.id', ondelete='CASCADE'))
 
-    # --- Reference code ---
-    # Full globally unique ref: SE-GBG-A1 / SE-GBG-A1:B2 etc.
-    # local_ref is the archivist-assigned portion within its parent
     local_ref: so.Mapped[str] = so.mapped_column(sa.String(100))
     ref_code: so.Mapped[str] = so.mapped_column(sa.String(500), unique=True)  # full computed ref
+    local_ref_sort: so.Mapped[str] = so.mapped_column(sa.Text, default='')
+    sort_order: so.Mapped[Optional[int]] = so.mapped_column(sa.Integer, nullable=True)
 
     # --- Core description fields (ISAD(G) inspired) ---
     title: so.Mapped[str] = so.mapped_column(sa.String(500))
@@ -176,19 +185,38 @@ class Node(db.Model):
 
     __table_args__ = (
         sa.UniqueConstraint('local_ref', 'parent_id', 'institution_id', name='uq_local_ref_per_parent'),
-        # Serves children lookups AND their ORDER BY local_ref in one index
-        sa.Index('ix_nodes_parent_local_ref', 'parent_id', 'local_ref'),
-        # Serves root listing per institution (parent_id IS NULL scans)
+        sa.Index('ix_nodes_parent_sort', 'parent_id', 'sort_order', 'local_ref_sort'),
         sa.Index('ix_nodes_institution_parent', 'institution_id', 'parent_id'),
     )
+
+    @classmethod
+    def sibling_order(cls):
+        return (cls.sort_order.asc().nulls_last(), cls.local_ref_sort.asc(), cls.id.asc())
+
     @so.validates('hierarchy_type_id', 'parent_id')
     def _coerce_int_fk(self, key, value):
         if value is None or value == '':
-            return None
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            raise ValueError(f'{key} must be an integer, got {value!r}')
+            value = None
+        else:
+            try:
+                value = int(value)
+            except (TypeError, ValueError):
+                raise ValueError(f'{key} must be an integer, got {value!r}')
+        if key == 'parent_id' and value != self.parent_id:
+            self.sort_order = None
+        return value
+
+    @so.validates('parent')
+    def _reset_sort_on_reparent(self, key, value):
+        new_parent_id = value.id if value is not None else None
+        if new_parent_id != self.parent_id:
+            self.sort_order = None
+        return value
+
+    @so.validates('local_ref')
+    def _set_local_ref_sort(self, key, value):
+        self.local_ref_sort = natural_sort_key(value)
+        return value
 
     def __repr__(self):
         return f'<Node {self.ref_code}: {self.title}>'
