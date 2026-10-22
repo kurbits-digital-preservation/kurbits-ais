@@ -83,7 +83,6 @@ def run_ocr(task_id: str) -> None:
             uploaded_by_id=task.created_by_id,
         )
 
-    _reindex_node(attachment.node, db)
 
     char_count = len(text) if text else 0
     task.set_done({'chars_extracted': char_count, 'method': method})
@@ -152,40 +151,3 @@ def _ocr_pdf(file_path: str, task, db) -> str:
 
     return '\n\n'.join(t for t in texts if t)
 
-
-def _reindex_node(node, db) -> None:
-    """
-    Rebuild the node's search_vector to include attachment text
-    if the institution has index_attachment_text enabled.
-    """
-    try:
-        from app.extensions import db as _db
-        import sqlalchemy as sa
-
-        institution = node.institution
-        if not institution.index_attachment_text:
-            return
-
-
-        attachment_texts = [
-            a.extracted_text for a in node.attachments
-            if a.extracted_text
-        ]
-        if not attachment_texts:
-            return
-
-        combined = ' '.join(attachment_texts)
-
-
-        if _db.engine.dialect.name == 'postgresql':
-            _db.session.execute(sa.text("""
-                UPDATE nodes SET search_vector = (
-                    setweight(to_tsvector('swedish', coalesce(title, '')), 'A') ||
-                    setweight(to_tsvector('swedish', coalesce(description, '')), 'B') ||
-                    setweight(to_tsvector('swedish', coalesce(scope_and_content, '')), 'B') ||
-                    setweight(to_tsvector('swedish', coalesce(:attachment_text, '')), 'C')
-                )
-                WHERE id = :node_id
-            """), {'node_id': node.id, 'attachment_text': combined[:50000]})
-    except Exception as e:
-        log.warning(f'Failed to reindex node {node.id}: {e}')

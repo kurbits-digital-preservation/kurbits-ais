@@ -3,10 +3,13 @@ from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.extensions import db, migrate, login_manager, cors
 from config import config
+from app.request import CoercingRequest
+from app.search_index import include_object
 
 
 def create_app(config_name: str = None) -> Flask:
     app = Flask(__name__)
+    app.request_class = CoercingRequest
 
     config_name = config_name or os.environ.get('FLASK_ENV', 'default')
     app.config.from_object(config[config_name])
@@ -18,7 +21,7 @@ def create_app(config_name: str = None) -> Flask:
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     db.init_app(app)
-    migrate.init_app(app, db)
+    migrate.init_app(app, db, include_object=include_object)
 
     login_manager.init_app(app)
     from app.services import identifier_minting  # noqa: F401

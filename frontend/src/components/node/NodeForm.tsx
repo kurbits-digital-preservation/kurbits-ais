@@ -186,7 +186,8 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
   const createMutation = useMutation({
     mutationFn: () => nodesApi.create({
       ...form,
-      hierarchy_type_id: form.hierarchy_type_id as number,
+      hierarchy_type_id: Number(form.hierarchy_type_id),
+      parent_id: form.parent_id != null ? Number(form.parent_id) : null,
       date_start: form.date_start || null,
       date_end: form.date_end || null,
       date_certainty: form.date_certainty || null,
