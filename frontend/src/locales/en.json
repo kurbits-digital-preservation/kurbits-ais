@@ -748,7 +748,6 @@
       "targetUrlHint": "Built per record and sent as {target_url}. {ref_code} and {node_id} are substituted.",
       "headersJson": "Headers (JSON)",
       "requestBodyTemplate": "Request body template (JSON)",
-      "placeholdersHint": "Placeholders: {node_id} {ref_code} {title} {target_url} {shoulder}.",
       "heading": "Identifier schemes",
       "subheading": "Persistent and external identifier types (ARK, Handle, DOI…) that records can carry.",
       "newScheme": "New scheme",
@@ -760,7 +759,18 @@
       "deleteConfirm": "Delete scheme \"{{name}}\"?",
       "couldNotCreate": "Could not create",
       "couldNotSave": "Could not save",
-      "couldNotDelete": "Could not delete"
+      "couldNotDelete": "Could not delete",
+      "agentTargetUrlTemplate": "Target URL template (agents)",
+      "agentTargetUrlHint": "Built per agent and sent as {target_url}. {agent_id} is substituted.",
+      "autoAssignHeading": "Assign automatically on creation",
+      "autoAssignNodes": "Resources",
+      "autoAssignAgents": "Agents",
+      "autoAssignHint": "New records get an identifier from the generator service, including records from rapid entry and imports. If the service fails, the record is still saved and a warning is shown.",
+      "autoAssignLevels": "Only these levels of description",
+      "autoAssignLevelsHint": "Comma-separated. Leave blank to assign to every level.",
+      "autoResourcesTag": "Auto: resources",
+      "autoAgentsTag": "Auto: agents",
+      "placeholdersHint": "Placeholders: {entity_type} {entity_id} {node_id} {agent_id} {ref_code} {title} {name} {target_url} {shoulder}."
     },
     "whisper": {
       "intro": "Connect to a dedicated Whisper transcription service for audio and video files. Run it on a separate machine — ideally with a GPU — for best performance. The service URL and API key are stored per institution.",
@@ -1450,6 +1460,9 @@
     "edit": "Edit",
     "add": "Add",
     "close": "Close",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "savedWithWarnings_one": "Saved, with 1 warning:",
+    "savedWithWarnings_other": "Saved, with {{count}} warnings:",
+    "moreWarnings": "…and {{count}} more."
   }
 }

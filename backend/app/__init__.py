@@ -19,7 +19,9 @@ def create_app(config_name: str = None) -> Flask:
 
     db.init_app(app)
     migrate.init_app(app, db)
+
     login_manager.init_app(app)
+    from app.services import identifier_minting  # noqa: F401
 
     # CORS — allow the Vite dev server to make credentialed requests
     cors.init_app(app, resources={
@@ -49,6 +51,7 @@ def create_app(config_name: str = None) -> Flask:
         register_commands(app)
         register_visual_arkiv_import(app)
         register_testdata_import(app)
+
 
         # Serve React SPA in production
         frontend_dist = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist')

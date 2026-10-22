@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next'
 import LanguageSwitcher from '@/components/LanguageSwitcher'
 import { Clock } from 'lucide-react'
 import HistoryPopover from './HistoryPopover'
+import { useIdentifierAssignmentWatcher } from '@/hooks/useIdentifierAssignmentWatcher'
 
 const NAV_ITEMS = [
   { to: '/app/resources',          icon: FolderOpen,  key: 'resources' },
@@ -28,6 +29,8 @@ export default function AppLayout() {
   const navigate = useNavigate()
   const [institutionMenuOpen, setInstitutionMenuOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+
+  useIdentifierAssignmentWatcher()
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

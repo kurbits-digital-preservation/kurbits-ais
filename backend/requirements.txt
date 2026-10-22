@@ -1,10 +1,11 @@
 Flask>=3.0
 Flask-SQLAlchemy>=3.1
+SQLAlchemy>=2.1
 Flask-Migrate>=4.0
 Flask-Login>=0.6
 Flask-Cors>=4.0
 alembic>=1.13
-psycopg2-binary>=2.9
+psycopg[binary]>=3.2
 Werkzeug>=3.0
 python-dotenv>=1.0
 lxml>=5.0

@@ -2,6 +2,8 @@ from flask import jsonify
 from functools import wraps
 from flask_login import current_user
 
+from app.request_feedback import pop_warnings, pop_tasks
+
 
 def success(data=None, status=200, meta=None):
     body = {'status': 'success'}
@@ -9,6 +11,12 @@ def success(data=None, status=200, meta=None):
         body['data'] = data
     if meta is not None:
         body['meta'] = meta
+    warnings = pop_warnings()
+    if warnings:
+        body['warnings'] = warnings
+    tasks = pop_tasks()
+    if tasks:
+        body['tasks'] = tasks
     return jsonify(body), status
 
 
