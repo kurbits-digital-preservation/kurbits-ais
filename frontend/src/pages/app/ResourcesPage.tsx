@@ -1541,8 +1541,9 @@ export default function ResourcesPage() {
         level_of_description: '', status: 'draft' as unknown as NodeStatus,
         date_start: null, date_end: null, has_children: false, parent_id: null })
       setViewMode('detail')
+      setEditingNode(null)
     }
-  }, [location.state?.selectNodeId, searchParams.get('node')])
+  }, [location.key])
 
   const handleSelect = (node: NodeStub) => {
     setSelectedNode(node)

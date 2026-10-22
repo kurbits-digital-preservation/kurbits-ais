@@ -596,23 +596,18 @@ function ClassificationsSection({ nodeId }: { nodeId: number }) {
 
 function NodeLinksSection({ nodeId }: { nodeId: number }) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [adding, setAdding] = useState(false)
   const [search, setSearch] = useState('')
   const [relationType, setRelationType] = useState('')
 
-  // ── Tree scoping ──────────────────────────────────────────────────
-  // Default: search only within the current node's own tree (its root).
-  // 'all' clears scoping entirely. 'other' lets the user pick a different
-  // root to search under — for the rarer cross-tree link.
   type ScopeMode = 'own' | 'all' | 'other'
   const [scopeMode, setScopeMode] = useState<ScopeMode>('own')
   const [otherRoot, setOtherRoot] = useState<{ id: number; title: string } | null>(null)
   const [pickingRoot, setPickingRoot] = useState(false)
   const [rootSearch, setRootSearch] = useState('')
 
-  // Reuses the ['node', nodeId] cache the page already populates — no extra
-  // request in practice, React Query dedupes by key.
   const { data: currentNode } = useQuery({
     queryKey: ['node', nodeId],
     queryFn: () => nodesApi.get(nodeId).then((r: any) => r.data.data),
@@ -762,15 +757,21 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
 
       {relations?.map((rel: any) => (
         <div key={rel.id} className={styles.linkedItem}>
-          <div className={styles.linkedItemIcon}>
-            <Link size={14} />
-          </div>
-          <div className={styles.linkedItemBody}>
-            <span className={styles.linkedItemName}>{rel.title}</span>
-            <span className={styles.linkedItemMeta}>
-              {RELATION_TYPE_KEY_MAP[rel.relation_type] ? t(`relations.related.types.${RELATION_TYPE_KEY_MAP[rel.relation_type]}`) : rel.relation_type} · {rel.ref_code}
-            </span>
-          </div>
+          <button
+            className={styles.linkedItemBtn}
+            onClick={() => navigate('/app/resources', { state: { selectNodeId: rel.id } })}
+            title={t('relations.related.openInResources')}
+          >
+            <div className={styles.linkedItemIcon}>
+              <Link size={14} />
+            </div>
+            <div className={styles.linkedItemBody}>
+              <span className={styles.linkedItemName}>{rel.title}</span>
+              <span className={styles.linkedItemMeta}>
+                {RELATION_TYPE_KEY_MAP[rel.relation_type] ? t(`relations.related.types.${RELATION_TYPE_KEY_MAP[rel.relation_type]}`) : rel.relation_type} · {rel.ref_code}
+              </span>
+            </div>
+          </button>
           <button
             className="btn btn-ghost btn-sm btn-icon"
             onClick={() => removeMutation.mutate(rel.id)}
