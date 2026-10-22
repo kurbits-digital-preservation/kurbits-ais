@@ -45,7 +45,7 @@ def build_node_payload(node) -> dict:
             'name': agent.name,
             'agent_type': agent.agent_type.value,
             'authorized_form': agent.authorized_form,
-            'identifier': agent.identifier,
+            'identifier': agent.primary_identifier,
             'relation_type': rel or '',
         })
 

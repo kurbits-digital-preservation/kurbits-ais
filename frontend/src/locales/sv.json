@@ -749,7 +749,6 @@
       "targetUrlHint": "Byggs per post och skickas som {target_url}. {ref_code} och {node_id} ersätts.",
       "headersJson": "Rubriker (JSON)",
       "requestBodyTemplate": "Mall för förfrågans innehåll (JSON)",
-      "placeholdersHint": "Platshållare: {node_id} {ref_code} {title} {target_url} {shoulder}.",
       "heading": "Identifierarscheman",
       "subheading": "Beständiga och externa identifierartyper (ARK, Handle, DOI…) som poster kan bära.",
       "newScheme": "Nytt schema",
@@ -761,7 +760,18 @@
       "deleteConfirm": "Ta bort schemat \"{{name}}\"?",
       "couldNotCreate": "Det gick inte att skapa",
       "couldNotSave": "Det gick inte att spara",
-      "couldNotDelete": "Det gick inte att ta bort"
+      "couldNotDelete": "Det gick inte att ta bort",
+      "agentTargetUrlTemplate": "Mål-URL-mall (agenter)",
+      "agentTargetUrlHint": "Byggs per agent och skickas som {target_url}. {agent_id} ersätts.",
+      "autoAssignHeading": "Tilldela automatiskt vid skapande",
+      "autoAssignNodes": "Resurser",
+      "autoAssignAgents": "Agenter",
+      "autoAssignHint": "Nya poster får en identifierare från generatortjänsten, även poster från snabbregistrering och importer. Om tjänsten misslyckas sparas posten ändå och en varning visas.",
+      "autoAssignLevels": "Endast dessa beskrivningsnivåer",
+      "autoAssignLevelsHint": "Kommaseparerade. Lämna tomt för att tilldela alla nivåer.",
+      "autoResourcesTag": "Auto: resurser",
+      "autoAgentsTag": "Auto: agenter",
+      "placeholdersHint": "Platshållare: {entity_type} {entity_id} {node_id} {agent_id} {ref_code} {title} {name} {target_url} {shoulder}."
     },
     "whisper": {
       "intro": "Anslut till en dedikerad Whisper-transkriberingstjänst för ljud- och videofiler. Kör den på en separat maskin — helst med GPU — för bästa prestanda. Tjänstens URL och API-nyckel lagras per institution.",
@@ -1451,6 +1461,9 @@
     "edit": "Redigera",
     "add": "Lägg till",
     "close": "Stäng",
-    "loading": "Laddar…"
+    "loading": "Laddar…",
+    "savedWithWarnings_one": "Sparat, med 1 varning:",
+    "savedWithWarnings_other": "Sparat, med {{count}} varningar:",
+    "moreWarnings": "…och {{count}} till."
   }
 }

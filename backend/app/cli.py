@@ -310,6 +310,13 @@ def register_commands(app: Flask) -> None:
         db.session.commit()
         click.echo(f'System admin created: {username}')
 
+    @app.cli.command('reindex-search')
+    @click.option('--institution-id', type=int, default=None)
+    def reindex_search_command(institution_id):
+        from app.search_index import reindex_search
+        nodes, agents = reindex_search(institution_id)
+        click.echo(f'Reindexed {nodes} nodes and {agents} agents.')
+
 
 # ── Seed helpers ──────────────────────────────────────────────────────
 # Use direct INSERT for the many-to-many level relationships to avoid
