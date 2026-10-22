@@ -31,7 +31,7 @@ def serialize_node(node: Node, include_children: bool = True) -> dict:
             'authorized_form': row.authorized_form,
             'agent_type': row.agent_type.value,
             'relation_type': rel or '',
-            'identifier': row.identifier,
+            'identifier': row.primary_identifier,
         })
 
     classifications = []

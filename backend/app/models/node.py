@@ -181,6 +181,14 @@ class Node(db.Model):
         # Serves root listing per institution (parent_id IS NULL scans)
         sa.Index('ix_nodes_institution_parent', 'institution_id', 'parent_id'),
     )
+    @so.validates('hierarchy_type_id', 'parent_id')
+    def _coerce_int_fk(self, key, value):
+        if value is None or value == '':
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f'{key} must be an integer, got {value!r}')
 
     def __repr__(self):
         return f'<Node {self.ref_code}: {self.title}>'

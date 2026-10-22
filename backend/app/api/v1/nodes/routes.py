@@ -984,7 +984,7 @@ def get_node_agents(node_id):
                 'name': agent.name,
                 'agent_type': agent.agent_type.value,
                 'authorized_form': agent.authorized_form,
-                'identifier': agent.identifier,
+                'identifier': agent.primary_identifier,
                 'relation_type': row.relation_type,
             })
     return success(result)

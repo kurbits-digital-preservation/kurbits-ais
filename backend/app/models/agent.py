@@ -155,6 +155,13 @@ class Agent(db.Model):
         order_by='AgentAttachment.uploaded_at.desc()'
     )
 
+    @property
+    def primary_identifier(self) -> Optional[str]:
+        if not self.identifiers:
+            return None
+        primary = next((i for i in self.identifiers if i.is_primary), self.identifiers[0])
+        return primary.value
+
     def __repr__(self):
         return f'<Agent {self.name} ({self.agent_type.value})>'
 
