@@ -1264,8 +1264,7 @@
       "selectType": "Select type…",
       "searchForAgent": "Search for agent",
       "searchPlaceholder": "Type to search agents…",
-      "noneRecorded": "No relations recorded.",
-      "openInResources": "Open related resource",
+      "noneRecorded": "No relations recorded."
     },
     "linkedResources": {
       "searchCount_one": "Search {{count}} resource…",

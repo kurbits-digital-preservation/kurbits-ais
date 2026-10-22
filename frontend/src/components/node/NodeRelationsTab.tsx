@@ -642,8 +642,9 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
   const addMutation = useMutation({
     mutationFn: ({ targetId, type }: { targetId: number; type: string }) =>
       nodeRelationsApi.addRelation(nodeId, targetId, type),
-    onSuccess: () => {
+    onSuccess: (_res, { targetId }) => {
       queryClient.invalidateQueries({ queryKey: ['node-relations', nodeId] })
+      queryClient.invalidateQueries({ queryKey: ['node-relations', targetId] })
       setAdding(false)
       setSearch('')
       setRelationType('')
@@ -652,7 +653,10 @@ function NodeLinksSection({ nodeId }: { nodeId: number }) {
 
   const removeMutation = useMutation({
     mutationFn: (targetId: number) => nodeRelationsApi.removeRelation(nodeId, targetId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['node-relations', nodeId] }),
+    onSuccess: (_res, targetId) => {
+      queryClient.invalidateQueries({ queryKey: ['node-relations', nodeId] })
+      queryClient.invalidateQueries({ queryKey: ['node-relations', targetId] })
+    },
   })
 
   if (isLoading) return <div className={styles.sectionLoading}><Spinner size={16} /></div>

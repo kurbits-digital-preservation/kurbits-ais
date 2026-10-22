@@ -601,6 +601,25 @@ def revert_node(node_id, change_id):
 
     return success(serialize_node_detail(node))
 
+_BUILTIN_INVERSE_RELATIONS = {
+    'precedes': 'follows',
+    'follows': 'precedes',
+    'is part of': 'has part',
+    'has part': 'is part of',
+}
+
+
+def _inverse_relation_type(institution_id: int, relation_type: str) -> str:
+    rt = NodeRelationType.query.filter_by(
+        institution_id=institution_id, name=relation_type
+    ).first()
+    if rt:
+        if rt.is_symmetric:
+            return relation_type
+        if rt.complementary:
+            return rt.complementary.name
+    return _BUILTIN_INVERSE_RELATIONS.get(relation_type, relation_type)
+
 
 @bp.route('/nodes/<int:node_id>/relations', methods=['GET'])
 @login_required
@@ -626,16 +645,25 @@ def get_relations(node_id):
     seen = set()
 
     for related, rel_type in outgoing:
-        key = (min(node_id, related.id), max(node_id, related.id))
-        if key not in seen:
-            seen.add(key)
-            result.append({**serialize_node_stub(related), 'relation_type': rel_type, 'direction': 'outgoing'})
+        if related.id in seen:
+            continue
+        seen.add(related.id)
+        result.append({
+            **serialize_node_stub(related),
+            'relation_type': rel_type,
+            'direction': 'outgoing',
+        })
 
     for related, rel_type in incoming:
-        key = (min(node_id, related.id), max(node_id, related.id))
-        if key not in seen:
-            seen.add(key)
-            result.append({**serialize_node_stub(related), 'relation_type': rel_type, 'direction': 'incoming'})
+        if related.id in seen:
+            continue
+        seen.add(related.id)
+        result.append({
+            **serialize_node_stub(related),
+            'relation_type': _inverse_relation_type(institution_id, rel_type),
+            'stored_relation_type': rel_type,
+            'direction': 'incoming',
+        })
 
     return success(result)
 
@@ -665,8 +693,12 @@ def add_relation(node_id):
 
     existing = db.session.execute(
         sa.select(node_association).where(
-            node_association.c.source_id == node_id,
-            node_association.c.target_id == target_id,
+            sa.or_(
+                sa.and_(node_association.c.source_id == node_id,
+                        node_association.c.target_id == target_id),
+                sa.and_(node_association.c.source_id == target_id,
+                        node_association.c.target_id == node_id),
+            )
         )
     ).first()
     if existing:
@@ -695,8 +727,10 @@ def remove_relation(node_id, target_id):
     db.session.execute(
         node_association.delete().where(
             sa.or_(
-                sa.and_(node_association.c.source_id == node_id, node_association.c.target_id == target_id),
-                sa.and_(node_association.c.source_id == target_id, node_association.c.target_id == node_id),
+                sa.and_(node_association.c.source_id == node_id,
+                        node_association.c.target_id == target_id),
+                sa.and_(node_association.c.source_id == target_id,
+                        node_association.c.target_id == node_id),
             )
         )
     )
