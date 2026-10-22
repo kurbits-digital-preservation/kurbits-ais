@@ -1387,7 +1387,8 @@
       "selectPlaceholder": "Välj…",
       "searchPlaceholder": "Sök…",
       "noResults": "Inga resultat",
-      "typeToSearch": "Skriv för att söka"
+      "typeToSearch": "Skriv för att söka",
+      "openInResources": "Öppna relaterad resurs"
     },
     "agents": {
       "title": "Agenter",
