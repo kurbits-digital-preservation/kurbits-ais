@@ -12,7 +12,7 @@ def global_search():
         return error('No active institution', 400)
 
     q = request.args.get('q', '').strip()
-    if not q:
+    if not q and not request.args.get('agent_id', '').strip():
         return success({
             'results': [], 'nodes': [], 'agents': [],
             'total': 0, 'node_total': 0, 'agent_total': 0,
@@ -25,22 +25,26 @@ def global_search():
     per_page = min(int(request.args.get('per_page', 25)), 100)
     page = max(1, int(request.args.get('page', 1)))
 
-    # Quick-mode for the cmd+K modal (small limit, no filters)
     quick = request.args.get('quick', 'false').lower() == 'true'
     if quick:
         per_page = 8
         page = 1
 
     filters = {}
-    int_keys = ('hierarchy_type_id', 'classification_id')
+    int_keys = ('hierarchy_type_id', 'classification_id', 'agent_id')
     for key in ('status', 'level', 'hierarchy_type_id', 'classification_id',
-                'date_from', 'date_to', 'agent_type',
-                # file-search filters
+                'date_from', 'date_to', 'agent_type', 'agent_id',
                 'file_mime', 'file_pronom', 'file_min_size', 'file_max_size',
                 'file_has_checksum', 'file_min_width', 'file_min_height'):
         val = request.args.get(key, '').strip()
         if val:
-            filters[key] = int(val) if key in int_keys else val
+            try:
+                filters[key] = int(val) if key in int_keys else val
+            except ValueError:
+                return error(f'{key} must be an integer', 400)
+
+    if filters.get('agent_id') and 'agents' in types:
+        types = [t for t in types if t != 'agents'] or ['nodes']
 
     from app.search import search as do_search
     results = do_search(
