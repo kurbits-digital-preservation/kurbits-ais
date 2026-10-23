@@ -356,6 +356,80 @@ def _upsert_va_identifier(model_cls, fk_field: str, entity_id: int, scheme,
     db.session.add(model_cls(**kwargs))
 
 
+# ─── Alternative names (Arkivb_Tidnamn) ───────────────────────────────
+
+_VA_FORMER_NAME_TYPES = ('tidigare namn', 'former name')
+_VA_NAME_SEPARATORS = re.compile(r'[\r\n;]+')
+
+
+def _split_va_names(raw: str) -> list[str]:
+    """Arkivb_Tidnamn is free text; several names are put on separate lines
+    or separated by semicolons."""
+    seen: set[str] = set()
+    names: list[str] = []
+    for part in _VA_NAME_SEPARATORS.split(raw or ''):
+        name = part.strip()[:500]
+        if name and name.lower() not in seen:
+            seen.add(name.lower())
+            names.append(name)
+    return names
+
+
+def _get_or_create_former_name_type(institution_id: int, db, log):
+    from app.models.agent import AgentNameFormType
+    import sqlalchemy as sa
+
+    existing = db.session.execute(
+        sa.select(AgentNameFormType).where(
+            AgentNameFormType.institution_id == institution_id,
+            sa.func.lower(AgentNameFormType.name).in_(_VA_FORMER_NAME_TYPES),
+        )
+    ).scalars().first()
+    if existing:
+        return existing
+
+    created = AgentNameFormType(
+        institution_id=institution_id,
+        name=_VA_FORMER_NAME_TYPES[0],
+        description='Namn som användes före det nuvarande',
+    )
+    db.session.add(created)
+    db.session.flush()
+    log(f'  Created name form type: {created.name}')
+    return created
+
+
+def _import_name_forms(el, agent, institution_id: int, db, log, system_user_id=None) -> int:
+    """Adds each name in Arkivb_Tidnamn as a 'tidigare namn' name form.
+    Names already on the agent (as name, authorized form or name form) are skipped."""
+    from app.models.agent import AgentNameForm
+
+    names = _split_va_names(_txt(el, 'Arkivb_Tidnamn'))
+    if not names:
+        return 0
+
+    known = {nf.name.lower() for nf in agent.name_forms}
+    known.update(n.lower() for n in (agent.name, agent.authorized_form) if n)
+
+    name_type = None
+    added = 0
+    for name in names:
+        if name.lower() in known:
+            continue
+        if name_type is None:
+            name_type = _get_or_create_former_name_type(institution_id, db, log)
+        agent.name_forms.append(AgentNameForm(
+            type_id=name_type.id,
+            name=name,
+            created_by_id=system_user_id,
+        ))
+        known.add(name.lower())
+        added += 1
+        log(f'    Added name form ({name_type.name}): {name}')
+
+    return added
+
+
 def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
     from app.models.agent import Agent, AgentType, AgentNote, AgentIdentifier
     import sqlalchemy as sa
@@ -378,7 +452,7 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
 
     if existing and not force:
         log(f'  Agent exists (skipping): {name}')
-        return existing, False
+        return existing, False, 0
 
     if existing and force:
         agent = existing
@@ -418,7 +492,7 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
             )
         ).scalars().first()
         if existing_note:
-            existing_note.body = historik
+            existing_note.content = historik
         else:
             db.session.add(AgentNote(
                 agent_id=agent.id,
@@ -427,7 +501,9 @@ def _import_agent(el, institution_id: int, force: bool, db, log) -> tuple:
                 created_by_id=system_user_id,
             ))
 
-    return agent, created
+    name_forms_added = _import_name_forms(el, agent, institution_id, db, log, system_user_id)
+
+    return agent, created, name_forms_added
 
 
 
@@ -1155,6 +1231,7 @@ def _stream_import(filepath: str, institution_id: int, force_agents: bool,
                    dry_run: bool, batch_size: int, parse_codes: bool, db, log) -> dict:
     stats = {
         'agents_created': 0, 'agents_skipped': 0,
+        'name_forms_created': 0,
         'fonds_created': 0,
         'classifications_created': 0,
         'series_created': 0, 'volumes_created': 0,
@@ -1219,11 +1296,12 @@ def _stream_import(filepath: str, institution_id: int, force_agents: bool,
 
 def _process_arkivbildare(el, institution_id, force_agents, ht, levels, parse_codes, db, log, stats):
     system_user_id = _get_system_user_id(institution_id, db)
-    agent, created = _import_agent(el, institution_id, force_agents, db, log)
+    agent, created, name_forms_added = _import_agent(el, institution_id, force_agents, db, log)
     if created:
         stats['agents_created'] += 1
     else:
         stats['agents_skipped'] += 1
+    stats['name_forms_created'] += name_forms_added
 
     for arkiv_el in el.findall('.//Arkiv'):
         fonds = _import_arkiv(arkiv_el, agent, institution_id, ht, levels, db, log, system_user_id)
@@ -1266,6 +1344,9 @@ def _dry_run_arkivbildare(el, log, stats):
     name = _txt(el, 'Arkivb_Namn', '?')
     log(f'  Would import agent: {name}')
     stats['agents_created'] += 1
+    for alt_name in _split_va_names(_txt(el, 'Arkivb_Tidnamn')):
+        log(f'    Would add name form (tidigare namn): {alt_name}')
+        stats['name_forms_created'] += 1
     for arkiv_el in el.findall('.//Arkiv'):
         log(f'    Would import fonds: {_txt(arkiv_el, "Arkiv_Namn", "?")}')
         stats['fonds_created'] += 1
@@ -1354,6 +1435,7 @@ def register_visual_arkiv_import(app):
         click.echo('\n-- Import summary -----------------------------')
         click.echo(f'  Agents created          : {stats["agents_created"]}')
         click.echo(f'  Agents skipped          : {stats["agents_skipped"]}')
+        click.echo(f'  Name forms created      : {stats["name_forms_created"]}')
         click.echo(f'  Fonds created           : {stats["fonds_created"]}')
         click.echo(f'  Classifications created : {stats["classifications_created"]}')
         click.echo(f'  Series created          : {stats["series_created"]}')
