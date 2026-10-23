@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
@@ -766,6 +767,11 @@ function NodeDetailPanel({
     queryFn: () => nodesApi.get(nodeId).then(r => r.data.data),
   })
 
+  const { data: counts } = useQuery({
+    queryKey: ['node-counts', nodeId],
+    queryFn: () => nodesApi.counts(nodeId).then(r => r.data.data),
+  })
+
   const statusMutation = useMutation({
     mutationFn: (status: NodeStatus) => nodesApi.updateStatus(nodeId, status),
     onSuccess: () => {
@@ -898,35 +904,43 @@ function NodeDetailPanel({
       </div>
 
       {/* Tabs */}
-<div className={styles.tabs}>
-  {[
-    { key: 'details',         icon: <FileText size={13} />,   label: t('resources.tabs.details') },
-    { key: 'relations',       icon: <Link size={13} />,       label: t('resources.tabs.relations') },
-    { key: 'identifiers',     icon: <Fingerprint size={13} />, label: `${t('resources.tabs.identifiers')}${data.identifiers?.length ? ` (${data.identifiers.length})` : ''}` },
-    { key: 'locations',       icon: <MapPin size={13} />,     label: t('resources.tabs.locations') },
-    { key: 'classifications', icon: <Tag size={13} />,        label: t('resources.tabs.classifications') },
-    { key: 'places',          icon: <MapPin size={13} />,     label: t('resources.tabs.places') },
-    { key: 'flags',           icon: <Flag size={13} />,       label: `${t('flags.title')}${data?.open_flag_count ? ` (${data.open_flag_count})` : ''}` },
-    { key: 'accessions',      icon: <Archive size={13} />,    label: t('resources.tabs.accessions') },
-    { key: 'tags',            icon: <Tag size={13} />,        label: t('resources.tabs.tags') },
-    { key: 'notes',           icon: <StickyNote size={13} />, label: `${t('resources.tabs.notes')}${data.notes.length ? ` (${data.notes.length})` : ''}` },
-    { key: 'attachments',     icon: <Paperclip size={13} />,  label: `${t('resources.tabs.files')}${data.attachments.length ? ` (${data.attachments.length})` : ''}` },
-    ...(data.is_object ? [{
-      key: 'representations',
-      icon: <Layers size={13} />,
-      label: `${t('resources.tabs.objects')}${data.representations?.length ? ` (${data.representations.length})` : ''}`,
-    }] : []),
-    { key: 'history',         icon: <History size={13} />,   label: t('resources.tabs.history') },
-  ].map(({ key, icon, label }) => (
-    <button
-      key={key}
-      className={`${styles.tab} ${activeTab === key ? styles.tabActive : ''}`}
-      onClick={() => setActiveTab(key as typeof activeTab)}
-    >
-      {icon}{label}
-    </button>
-  ))}
-</div>
+      <div className={styles.tabs}>
+        {([
+          { key: 'details',         icon: <FileText size={13} />,    label: t('resources.tabs.details') },
+          { key: 'relations',       icon: <Link size={13} />,        label: t('resources.tabs.relations'),       count: counts?.relations },
+          { key: 'identifiers',     icon: <Fingerprint size={13} />, label: t('resources.tabs.identifiers'),     count: counts?.identifiers },
+          { key: 'locations',       icon: <MapPin size={13} />,      label: t('resources.tabs.locations') },
+          { key: 'classifications', icon: <Tag size={13} />,         label: t('resources.tabs.classifications'), count: counts?.classifications },
+          { key: 'places',          icon: <MapPin size={13} />,      label: t('resources.tabs.places'),          count: counts?.places },
+          { key: 'flags',           icon: <Flag size={13} />,        label: t('flags.title'),                    count: counts?.flags, warning: true },
+          { key: 'accessions',      icon: <Archive size={13} />,     label: t('resources.tabs.accessions') },
+          { key: 'tags',            icon: <Tag size={13} />,         label: t('resources.tabs.tags'),            count: counts?.tags },
+          { key: 'notes',           icon: <StickyNote size={13} />,  label: t('resources.tabs.notes'),           count: counts?.notes },
+          { key: 'attachments',     icon: <Paperclip size={13} />,   label: t('resources.tabs.files'),           count: counts?.attachments },
+          ...(data.is_object ? [{
+            key: 'representations',
+            icon: <Layers size={13} />,
+            label: t('resources.tabs.objects'),
+            count: data.representations?.length,
+          }] : []),
+          { key: 'history',         icon: <History size={13} />,     label: t('resources.tabs.history') },
+        ] as { key: string; icon: ReactNode; label: string; count?: number; warning?: boolean }[])
+          .map(({ key, icon, label, count, warning }) => (
+            <button
+              key={key}
+              className={`${styles.tab} ${activeTab === key ? styles.tabActive : ''}`}
+              onClick={() => setActiveTab(key as typeof activeTab)}
+            >
+              {icon}
+              {label}
+              {!!count && (
+                <span className={`${styles.tabCount} ${warning ? styles.tabCountWarning : ''}`}>
+                  {count > 99 ? '99+' : count}
+                </span>
+              )}
+            </button>
+          ))}
+      </div>
 
       {showMove && data && (
         <MoveNodeDialog

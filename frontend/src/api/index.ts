@@ -44,6 +44,9 @@ export const nodesApi = {
   descendantCount: (id: number) =>
     api.get(`/nodes/${id}/descendant-count`),
 
+  counts: (nodeId: number) =>
+    api.get<{ status: string; data: NodeCounts }>(`/nodes/${nodeId}/counts`),
+
   updateStatus: (nodeId: number, status: string) =>
     api.patch(`/nodes/${nodeId}/status`, { status }),
 
@@ -188,6 +191,8 @@ export const agentsApi = {
 
   getRelationTypes: () => api.get('/agents/relation-types'),
   getNodeRelationTypes: () => api.get('/agents/node-relation-types'),
+   counts: (agentId: number) =>
+    api.get<{ status: string; data: AgentCounts }>(`/agents/${agentId}/counts`),
     // Identifiers
   getIdentifiers: (agentId: number) => api.get(`/agents/${agentId}/identifiers`),
   addIdentifier: (agentId: number, data: any) => api.post(`/agents/${agentId}/identifiers`, data),
@@ -872,4 +877,25 @@ export const labelTemplatesApi = {
   create: (data: any) => api.post('/label-templates', data),
   update: (id: number, data: any) => api.put(`/label-templates/${id}`, data),
   delete: (id: number) => api.delete(`/label-templates/${id}`),
+}
+
+export interface NodeCounts {
+  relations: number
+  identifiers: number
+  classifications: number
+  places: number
+  flags: number
+  tags: number
+  notes: number
+  attachments: number
+}
+
+export interface AgentCounts {
+  relations: number
+  identifiers: number
+  resources: number
+  places: number
+  tags: number
+  notes: number
+  attachments: number
 }

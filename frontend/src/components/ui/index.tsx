@@ -62,6 +62,8 @@ export interface TabDef {
   key: string
   icon: ReactNode
   label: string
+  count?: number
+  warning?: boolean
 }
 interface TabsProps {
   tabs: TabDef[]
@@ -79,6 +81,11 @@ export function Tabs({ tabs, active, onChange }: TabsProps) {
         >
           {tab.icon}
           {tab.label}
+          {!!tab.count && (
+            <span className={`${styles.tabCount} ${tab.warning ? styles.tabCountWarning : ''}`}>
+              {tab.count > 99 ? '99+' : tab.count}
+            </span>
+          )}
         </button>
       ))}
     </div>
