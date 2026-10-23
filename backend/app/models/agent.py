@@ -154,6 +154,10 @@ class Agent(db.Model):
         'AgentAttachment', back_populates='agent', cascade='all, delete-orphan',
         order_by='AgentAttachment.uploaded_at.desc()'
     )
+    name_forms: so.Mapped[List['AgentNameForm']] = so.relationship(
+        'AgentNameForm', back_populates='agent', cascade='all, delete-orphan',
+        order_by='AgentNameForm.id'
+    )
 
     @property
     def primary_identifier(self) -> Optional[str]:
@@ -358,4 +362,73 @@ class AgentAttachment(db.Model):
             'description': self.description,
             'uploaded_at': self.uploaded_at.isoformat(),
             'uploaded_by': self.uploaded_by.username if self.uploaded_by else None,
+        }
+class AgentNameFormType(db.Model):
+    """Configurable kinds of alternative name forms per institution."""
+    __tablename__ = 'agent_name_form_types'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    institution_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('institutions.id', ondelete='CASCADE'))
+    name: so.Mapped[str] = so.mapped_column(sa.String(100))
+    description: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+    created_at: so.Mapped[datetime] = so.mapped_column(
+        default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        sa.UniqueConstraint('institution_id', 'name', name='uq_agent_name_form_type_per_institution'),
+    )
+
+    def __repr__(self):
+        return f'<AgentNameFormType {self.name}>'
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+        }
+
+
+class AgentNameForm(db.Model):
+    """An alternative name form for an agent: abbreviation, former name, parallel name…"""
+    __tablename__ = 'agent_name_forms'
+
+    id: so.Mapped[int] = so.mapped_column(primary_key=True)
+    agent_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('agents.id', ondelete='CASCADE'))
+    type_id: so.Mapped[int] = so.mapped_column(
+        sa.ForeignKey('agent_name_form_types.id', ondelete='RESTRICT'))
+    name: so.Mapped[str] = so.mapped_column(sa.String(500))
+    date_from: so.Mapped[Optional[str]] = so.mapped_column(sa.String(50), nullable=True)
+    date_to: so.Mapped[Optional[str]] = so.mapped_column(sa.String(50), nullable=True)
+
+    created_at: so.Mapped[datetime] = so.mapped_column(
+        default=lambda: datetime.now(timezone.utc))
+    created_by_id: so.Mapped[Optional[int]] = so.mapped_column(
+        sa.ForeignKey('users.id', name='fk_agent_name_form_created_by'), nullable=True)
+
+    agent: so.Mapped['Agent'] = so.relationship('Agent', back_populates='name_forms')
+    type: so.Mapped['AgentNameFormType'] = so.relationship('AgentNameFormType', lazy='joined')
+    created_by: so.Mapped[Optional['User']] = so.relationship('User', foreign_keys=[created_by_id])
+
+    __table_args__ = (
+        sa.Index('ix_agent_name_forms_agent', 'agent_id'),
+        sa.Index('ix_agent_name_forms_type', 'type_id'),
+    )
+
+    def __repr__(self):
+        return f'<AgentNameForm {self.name}>'
+
+    def to_dict(self) -> dict:
+        return {
+            'id': self.id,
+            'agent_id': self.agent_id,
+            'type_id': self.type_id,
+            'type_name': self.type.name if self.type else None,
+            'name': self.name,
+            'date_from': self.date_from,
+            'date_to': self.date_to,
+            'created_at': self.created_at.isoformat(),
+            'created_by': self.created_by.username if self.created_by else None,
         }

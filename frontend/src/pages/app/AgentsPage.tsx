@@ -5,7 +5,7 @@ import {
   Plus, Users, User, Building2, UsersRound, Bot,
   Pencil, Trash2, Link, FileText, StickyNote,
   X, Save, ExternalLink, Globe, Upload, Check, AlertCircle,
-  MapPin, Tag as Tag2, Search, Download, Fingerprint, Paperclip
+  MapPin, Tag as Tag2, Search, Download, Fingerprint, Paperclip, Signature
 } from 'lucide-react'
 import { agentsApi, agentsImportApi, nodesApi} from '@/api'
 import PlacesPanel from '@/components/geo/PlacesPanel'
@@ -22,6 +22,7 @@ import type { AuthorityResult } from '@/components/ui/AuthorityLookup'
 import BookmarkButton from '@/components/layout/BookmarkButton'
 import AgentIdentifiersTab from '@/components/agent/AgentIdentifiersTab'
 import AgentAttachmentsTab from '@/components/agent/AgentAttachmentsTab'
+import AgentNameFormsTab from '@/components/agent/AgentNameFormsTab'
 import { useTranslation } from 'react-i18next'
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -46,7 +47,10 @@ function AgentListItem({
   isSelected: boolean
   onClick: () => void
 }) {
+  const { t } = useTranslation()
   const Icon = AGENT_TYPE_ICONS[agent.agent_type]
+  const otherNames = agent.other_names ?? []
+  const hiddenCount = (agent.other_names_total ?? otherNames.length) - otherNames.length
   return (
     <div
       className={`${styles.listItem} ${isSelected ? styles.listItemSelected : ''}`}
@@ -57,6 +61,12 @@ function AgentListItem({
       </div>
       <div className={styles.listItemBody}>
         <span className={styles.listItemName}>{agent.name}</span>
+        {otherNames.length > 0 && (
+          <span className={styles.listItemOtherNames} title={otherNames.join(' · ')}>
+            {otherNames.join(' · ')}
+            {hiddenCount > 0 && ` ${t('agents.nameForms.andMore', { count: hiddenCount })}`}
+          </span>
+        )}
         <div className={styles.listItemMeta}>
           <TypePill type={agent.agent_type} />
           {(agent.date_from || agent.date_to) && (
@@ -671,6 +681,7 @@ function AgentDetailPanel({
 
   const tabs: TabDef[] = [
     { key: 'details',     icon: <FileText size={13} />,    label: t('resources.tabs.details') },
+    { key: 'nameForms',   icon: <Signature size={13} />,   label: t('agents.nameForms.title'),       count: counts?.name_forms },
     { key: 'relations',   icon: <Link size={13} />,        label: t('agents.detail.tabs.relations'), count: counts?.relations },
     { key: 'identifiers', icon: <Fingerprint size={13} />, label: t('resources.tabs.identifiers'),   count: counts?.identifiers },
     { key: 'resources',   icon: <Globe size={13} />,       label: t('agents.detail.tabs.resources'), count: counts?.resources },
@@ -731,6 +742,7 @@ function AgentDetailPanel({
 
       <div className={styles.detailBody}>
         {tab === 'details'     && <DetailsTab agent={agent} />}
+        {tab === 'nameForms'   && <AgentNameFormsTab agentId={agent.id} />}
         {tab === 'relations'   && <RelationsTab agent={agent} />}
         {tab === 'identifiers' && <AgentIdentifiersTab agentId={agent.id} />}
         {tab === 'resources'   && <LinkedResourcesTab agent={agent} />}

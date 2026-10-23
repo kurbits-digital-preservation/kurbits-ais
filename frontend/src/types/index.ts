@@ -9,7 +9,7 @@ export interface InstitutionStub {
   settings?: {
     disabled_builtins?: string[]
   }
-}''
+}
 
 export interface User {
   id: number
@@ -159,12 +159,33 @@ export interface AgentStub {
   date_from: string | null
   date_to: string | null
   identifier: string | null
+  other_names?: string[]
+  other_names_total?: number
 }
 
 export interface AgentRelation {
   agent: { id: number; name: string; agent_type: AgentType }
   association_type: string
   direction: 'outgoing' | 'incoming'
+}
+
+export interface AgentNameFormType {
+  id: number
+  name: string
+  description: string | null
+  usage_count?: number
+}
+
+export interface AgentNameForm {
+  id: number
+  agent_id: number
+  type_id: number
+  type_name: string | null
+  name: string
+  date_from: string | null
+  date_to: string | null
+  created_at: string
+  created_by: string | null
 }
 
 export interface AgentDetail extends AgentStub {
@@ -175,6 +196,7 @@ export interface AgentDetail extends AgentStub {
   updated_at: string
   created_by: string | null
   notes: AgentNote[]
+  name_forms: AgentNameForm[]
   relations: AgentRelation[]
   node_count: number
 }
