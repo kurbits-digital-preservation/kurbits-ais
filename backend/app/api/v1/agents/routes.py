@@ -19,6 +19,11 @@ from app.models import Agent, AgentType, AgentRelationType, AgentNodeRelationTyp
 from app.models.agent import agent_node_association, AgentIdentifier, AgentAttachment
 from app.models.node import IdentifierScheme, NodeIdentifier, Node
 from app.eaccpf.exporter import export_agent_eac
+from app.models.agent import (
+    Agent, AgentType, AgentNote, AgentIdentifier, AgentAttachment,
+    agent_node_association, agent_to_agent_association,
+)
+from app.models.geo import AgentPlace, agent_tags_table
 
 BUILTIN_SCHEME_DEFAULTS = {
     'wikidata': {'name': 'Wikidata', 'url_template': 'https://www.wikidata.org/wiki/{value}'},
@@ -107,6 +112,47 @@ def get_agent(agent_id):
         return error('Agent not found', 404)
     return success(serialize_agent_detail(agent))
 
+@bp.route('/agents/<int:agent_id>/counts', methods=['GET'])
+@login_required
+def get_agent_counts(agent_id):
+    institution_id = current_user.active_institution_id
+    agent = _get_agent_or_404(agent_id, institution_id)
+    if not agent:
+        return error('Agent not found', 404)
+
+    def count(stmt) -> int:
+        return db.session.execute(stmt).scalar() or 0
+
+    related_agents = sa.union(
+        sa.select(agent_to_agent_association.c.target_agent_id.label('other_id'))
+        .where(agent_to_agent_association.c.source_agent_id == agent_id),
+        sa.select(agent_to_agent_association.c.source_agent_id.label('other_id'))
+        .where(agent_to_agent_association.c.target_agent_id == agent_id),
+    ).subquery()
+
+    return success({
+        'relations': count(sa.select(sa.func.count()).select_from(related_agents)),
+        'identifiers': count(
+            sa.select(sa.func.count(AgentIdentifier.id)).where(AgentIdentifier.agent_id == agent_id)
+        ),
+        'resources': count(
+            sa.select(sa.func.count()).select_from(agent_node_association)
+            .where(agent_node_association.c.agent_id == agent_id)
+        ),
+        'places': count(
+            sa.select(sa.func.count(AgentPlace.id)).where(AgentPlace.agent_id == agent_id)
+        ),
+        'tags': count(
+            sa.select(sa.func.count()).select_from(agent_tags_table)
+            .where(agent_tags_table.c.agent_id == agent_id)
+        ),
+        'notes': count(
+            sa.select(sa.func.count(AgentNote.id)).where(AgentNote.agent_id == agent_id)
+        ),
+        'attachments': count(
+            sa.select(sa.func.count(AgentAttachment.id)).where(AgentAttachment.agent_id == agent_id)
+        ),
+    })
 
 @bp.route('/agents', methods=['POST'])
 @login_required

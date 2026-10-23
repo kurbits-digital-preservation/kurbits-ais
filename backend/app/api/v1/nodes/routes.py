@@ -35,6 +35,7 @@ from app.api.v1.nodes.serializers import (
 )
 
 from app.services.identifier_minting import MintError, build_context, mint_value, value_in_use
+from app.models.geo import NodePlace, Tag, PlaceType, TagCategory, node_tags_table
 
 def _get_node_or_404(node_id: int, institution_id: int):
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
@@ -420,6 +421,57 @@ def get_descendant_count(node_id):
     ids = _collect_subtree_ids(node.id)
     return success({'descendant_count': len(ids) - 1})
 
+@bp.route('/nodes/<int:node_id>/counts', methods=['GET'])
+@login_required
+def get_node_counts(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    def count(stmt) -> int:
+        return db.session.execute(stmt).scalar() or 0
+
+    linked_nodes = sa.union(
+        sa.select(node_association.c.target_id.label('other_id'))
+        .where(node_association.c.source_id == node_id),
+        sa.select(node_association.c.source_id.label('other_id'))
+        .where(node_association.c.target_id == node_id),
+    ).subquery()
+
+    agents = count(
+        sa.select(sa.func.count()).select_from(agent_node_association)
+        .where(agent_node_association.c.node_id == node_id)
+    )
+    nodes = count(sa.select(sa.func.count()).select_from(linked_nodes))
+
+    return success({
+        'relations': agents + nodes,
+        'identifiers': count(
+            sa.select(sa.func.count(NodeIdentifier.id)).where(NodeIdentifier.node_id == node_id)
+        ),
+        'classifications': count(
+            sa.select(sa.func.count()).select_from(classification_node_association)
+            .where(classification_node_association.c.node_id == node_id)
+        ),
+        'places': count(
+            sa.select(sa.func.count(NodePlace.id)).where(NodePlace.node_id == node_id)
+        ),
+        'flags': count(
+            sa.select(sa.func.count(NodeFlag.id))
+            .where(NodeFlag.node_id == node_id, NodeFlag.status != 'resolved')
+        ),
+        'tags': count(
+            sa.select(sa.func.count()).select_from(node_tags_table)
+            .where(node_tags_table.c.node_id == node_id)
+        ),
+        'notes': count(
+            sa.select(sa.func.count(NodeNote.id)).where(NodeNote.node_id == node_id)
+        ),
+        'attachments': count(
+            sa.select(sa.func.count(NodeAttachment.id)).where(NodeAttachment.node_id == node_id)
+        ),
+    })
 
 def _collect_subtree_ids(root_id: int) -> list:
     all_ids = [root_id]

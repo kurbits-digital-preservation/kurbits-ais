@@ -14,6 +14,7 @@ import {
   PageShell, SidebarPanel, EmptyState, Tabs,
   FieldList, SearchInput, Spinner, TypePill
 } from '@/components/ui'
+import type { TabDef } from '@/components/ui'
 import type { AgentDetail, AgentStub, AgentType } from '@/types'
 import styles from './AgentsPage.module.css'
 import AuthorityLookup from '@/components/ui/AuthorityLookup'
@@ -648,6 +649,11 @@ function AgentDetailPanel({
     queryFn: () => agentsApi.get(agentId).then(r => r.data.data),
   })
 
+  const { data: counts } = useQuery({
+    queryKey: ['agent-counts', agentId],
+    queryFn: () => agentsApi.counts(agentId).then(r => r.data.data),
+  })
+
   const deleteMutation = useMutation({
     mutationFn: () => agentsApi.delete(agentId),
     onSuccess: () => {
@@ -663,15 +669,15 @@ function AgentDetailPanel({
 
   const Icon = AGENT_TYPE_ICONS[agent.agent_type]
 
-  const tabs = [
+  const tabs: TabDef[] = [
     { key: 'details',     icon: <FileText size={13} />,    label: t('resources.tabs.details') },
-    { key: 'relations',   icon: <Link size={13} />,         label: `${t('agents.detail.tabs.relations')}${agent.relations.length ? ` (${agent.relations.length})` : ''}` },
-    { key: 'identifiers', icon: <Fingerprint size={13} />,  label: `${t('resources.tabs.identifiers')}${(agent as any).identifiers?.length ? ` (${(agent as any).identifiers.length})` : ''}` },
-    { key: 'resources',   icon: <Globe size={13} />,        label: `${t('agents.detail.tabs.resources')}${agent.node_count ? ` (${agent.node_count})` : ''}` },
-    { key: 'places',      icon: <MapPin size={13} />,       label: t('resources.tabs.places') },
-    { key: 'tags',        icon: <Tag2 size={13} />,         label: t('resources.tabs.tags') },
-    { key: 'notes',       icon: <StickyNote size={13} />,   label: `${t('resources.tabs.notes')}${agent.notes.length ? ` (${agent.notes.length})` : ''}` },
-    { key: 'files',       icon: <Paperclip size={13} />,    label: `${t('resources.tabs.files')}${(agent as any).attachments?.length ? ` (${(agent as any).attachments.length})` : ''}` },
+    { key: 'relations',   icon: <Link size={13} />,        label: t('agents.detail.tabs.relations'), count: counts?.relations },
+    { key: 'identifiers', icon: <Fingerprint size={13} />, label: t('resources.tabs.identifiers'),   count: counts?.identifiers },
+    { key: 'resources',   icon: <Globe size={13} />,       label: t('agents.detail.tabs.resources'), count: counts?.resources },
+    { key: 'places',      icon: <MapPin size={13} />,      label: t('resources.tabs.places'),        count: counts?.places },
+    { key: 'tags',        icon: <Tag2 size={13} />,        label: t('resources.tabs.tags'),          count: counts?.tags },
+    { key: 'notes',       icon: <StickyNote size={13} />,  label: t('resources.tabs.notes'),         count: counts?.notes },
+    { key: 'files',       icon: <Paperclip size={13} />,   label: t('resources.tabs.files'),         count: counts?.attachments },
   ]
 
   return (

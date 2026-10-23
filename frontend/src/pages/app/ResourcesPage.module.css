@@ -212,6 +212,41 @@
   font-weight: 500;
 }
 
+.tabCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--color-ink-muted);
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+}
+
+.tabActive .tabCount {
+  color: var(--color-surface);
+  background: var(--color-ink);
+  border-color: var(--color-ink);
+}
+
+.tabCountWarning {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+
+.tabActive .tabCountWarning {
+  color: var(--color-surface);
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
 /* ─── Tab content ────────────────────────────────────────────────── */
 .detailContent {
   flex: 1;
