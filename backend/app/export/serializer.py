@@ -104,7 +104,7 @@ def serialize_node(node: Node, include_children: bool = True) -> dict:
     }
 
     if include_children:
-        children = node.children.order_by(Node.local_ref).all()
+        children = node.children.order_by(*Node.sibling_order())
         data['children'] = [
             serialize_node(child, include_children=True)
             for child in children

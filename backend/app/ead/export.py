@@ -131,7 +131,7 @@ def _build_component(parent: etree._Element, node: Node,
             _text_el(odd, 'p', note.content)
 
     if include_children:
-        children = node.children.order_by(Node.local_ref).all()
+        children = node.children.order_by(*Node.sibling_order())
         if children:
             dsc = etree.SubElement(c, 'dsc')
             for child in children:
@@ -210,7 +210,7 @@ def export_node(node: Node, include_children: bool = True) -> bytes:
         _text_el(odd, 'p', note.content)
 
     if include_children:
-        children = node.children.order_by(Node.local_ref).all()
+        children = node.children.order_by(*Node.sibling_order())
         if children:
             dsc = etree.SubElement(archdesc, 'dsc')
             for child in children:
