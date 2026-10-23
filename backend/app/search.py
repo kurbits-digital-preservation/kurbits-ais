@@ -3,6 +3,9 @@ Full-text search service for Kurbits.
 
 PostgreSQL:  tsvector + GIN index, Swedish/English stemming, weighted columns.
 SQLite:      ILIKE fallback across the same fields including metadata_spec cast.
+
+Browse mode: with no query but an agent_id filter, nodes linked to the agent
+are listed in reference code order.
 """
 from __future__ import annotations
 from typing import Optional
@@ -10,8 +13,15 @@ import sqlalchemy as sa
 from app.extensions import db
 
 
+MIN_QUERY_LENGTH = 2
+
+
 def _is_postgres() -> bool:
     return db.engine.dialect.name == 'postgresql'
+
+
+def _has_query(q: str) -> bool:
+    return len(q) >= MIN_QUERY_LENGTH
 
 
 def _enum_variants(enum_cls, raw) -> list[str]:
@@ -143,17 +153,22 @@ def search_attachment_text(
     ]
 
 
+# ─── Node search ──────────────────────────────────────────────────────
+
 def _pg_node_query(
     q: str, institution_id: int,
     filters: dict, limit: int, offset: int
 ) -> tuple[list[dict], int]:
     from app.models.node import NodeStatus
-    where = [
-        "n.institution_id = :institution_id",
-        "n.search_vector @@ (plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q))",
-    ]
-    params: dict = {'q': q, 'institution_id': institution_id,
-                    'limit': limit, 'offset': offset}
+    has_q = _has_query(q)
+    where = ["n.institution_id = :institution_id"]
+    params: dict = {'institution_id': institution_id, 'limit': limit, 'offset': offset}
+
+    if has_q:
+        where.append(
+            "n.search_vector @@ (plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q))"
+        )
+        params['q'] = q
 
     if filters.get('status'):
         _add_enum_where(where, params, 'n.status', 'status', NodeStatus, filters['status'])
@@ -169,6 +184,12 @@ def _pg_node_query(
             "WHERE cna.node_id = n.id AND cna.classification_id = :classification_id)"
         )
         params['classification_id'] = int(filters['classification_id'])
+    if filters.get('agent_id'):
+        where.append(
+            "EXISTS (SELECT 1 FROM agent_node_association ana_f "
+            "WHERE ana_f.node_id = n.id AND ana_f.agent_id = :agent_id)"
+        )
+        params['agent_id'] = int(filters['agent_id'])
     if filters.get('date_from'):
         where.append("n.date_start >= :date_from")
         params['date_from'] = filters['date_from']
@@ -238,18 +259,25 @@ def _pg_node_query(
 
     where_sql = ' AND '.join(where)
 
+    if has_q:
+        rank_sql = """ts_rank(
+                n.search_vector,
+                plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q)
+            )"""
+        order_sql = "rank DESC, n.title"
+    else:
+        rank_sql = "0.0"
+        order_sql = "n.ref_code"
+
     sql = sa.text(f"""
         SELECT
             n.id, n.ref_code, n.title, n.level_of_description,
             n.status, n.date_start, n.date_end, n.hierarchy_type_id,
-            ts_rank(
-                n.search_vector,
-                plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q)
-            ) AS rank,
+            {rank_sql} AS rank,
             COUNT(*) OVER() AS total_count
         FROM nodes n
         WHERE {where_sql}
-        ORDER BY rank DESC, n.title
+        ORDER BY {order_sql}
         LIMIT :limit OFFSET :offset
     """)
 
@@ -273,73 +301,26 @@ def _pg_node_query(
     ], int(total)
 
 
-def _pg_agent_query(
-    q: str, institution_id: int,
-    filters: dict, limit: int, offset: int
-) -> tuple[list[dict], int]:
-    from app.models.agent import AgentType
-    where = [
-        "a.institution_id = :institution_id",
-        "a.search_vector @@ (plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q))",
-    ]
-    params: dict = {'q': q, 'institution_id': institution_id,
-                    'limit': limit, 'offset': offset}
-
-    if filters.get('agent_type'):
-        _add_enum_where(where, params, 'a.agent_type', 'agent_type', AgentType, filters['agent_type'])
-
-    where_sql = ' AND '.join(where)
-
-    sql = sa.text(f"""
-        SELECT
-            a.id, a.name, a.agent_type, a.authorized_form, a.date_from, a.date_to,
-            ts_rank(
-                a.search_vector,
-                plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q)
-            ) AS rank,
-            COUNT(*) OVER() AS total_count
-        FROM agents a
-        WHERE {where_sql}
-        ORDER BY rank DESC, a.name
-        LIMIT :limit OFFSET :offset
-    """)
-
-    rows = list(db.session.execute(sql, params))
-    total = rows[0].total_count if rows else 0
-
-    return [
-        {
-            'type': 'agent',
-            'id': row.id,
-            'name': row.name,
-            'agent_type': _enum_value(AgentType, row.agent_type),
-            'authorized_form': row.authorized_form,
-            'date_from': row.date_from,
-            'date_to': row.date_to,
-            'rank': float(row.rank),
-        }
-        for row in rows
-    ], int(total)
-
-
 def _sqlite_node_query(
     q: str, institution_id: int,
     filters: dict, limit: int, offset: int
 ) -> tuple[list[dict], int]:
     from app.models.node import Node, NodeAttachment, NodeNote
+    has_q = _has_query(q)
     pattern = f'%{q}%'
 
-    query = Node.query.filter(
-        Node.institution_id == institution_id,
-        sa.or_(
-            Node.title.ilike(pattern),
-            Node.ref_code.ilike(pattern),
-            Node.description.ilike(pattern),
-            Node.scope_and_content.ilike(pattern),
-            Node.arrangement.ilike(pattern),
-            sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
+    query = Node.query.filter(Node.institution_id == institution_id)
+    if has_q:
+        query = query.filter(
+            sa.or_(
+                Node.title.ilike(pattern),
+                Node.ref_code.ilike(pattern),
+                Node.description.ilike(pattern),
+                Node.scope_and_content.ilike(pattern),
+                Node.arrangement.ilike(pattern),
+                sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
+            )
         )
-    )
 
     if filters.get('status'):
         query = query.filter(Node.status == filters['status'])
@@ -354,6 +335,13 @@ def _sqlite_node_query(
                 sa.select(_cna.c.node_id).where(
                     _cna.c.classification_id == int(filters['classification_id'])
                 )
+            )
+        )
+    if filters.get('agent_id'):
+        from app.models.agent import agent_node_association as _ana
+        query = query.filter(
+            Node.id.in_(
+                sa.select(_ana.c.node_id).where(_ana.c.agent_id == int(filters['agent_id']))
             )
         )
     if filters.get('date_from'):
@@ -463,14 +451,18 @@ def _sqlite_node_query(
         )
 
     total = query.count()
-    nodes = query.order_by(
-        sa.case(
-            (Node.title.ilike(pattern), 1),
-            (Node.ref_code.ilike(pattern), 2),
-            else_=3,
-        ),
-        Node.title,
-    ).limit(limit).offset(offset).all()
+    if has_q:
+        query = query.order_by(
+            sa.case(
+                (Node.title.ilike(pattern), 1),
+                (Node.ref_code.ilike(pattern), 2),
+                else_=3,
+            ),
+            Node.title,
+        )
+    else:
+        query = query.order_by(Node.ref_code)
+    nodes = query.limit(limit).offset(offset).all()
 
     return [
         {
@@ -483,10 +475,61 @@ def _sqlite_node_query(
             'date_start': n.date_start.year if n.date_start else None,
             'date_end': n.date_end.year if n.date_end else None,
             'hierarchy_type_id': n.hierarchy_type_id,
-            'rank': 1.0,
+            'rank': 1.0 if has_q else 0.0,
         }
         for n in nodes
     ], total
+
+
+# ─── Agent search ─────────────────────────────────────────────────────
+
+def _pg_agent_query(
+    q: str, institution_id: int,
+    filters: dict, limit: int, offset: int
+) -> tuple[list[dict], int]:
+    from app.models.agent import AgentType
+    where = [
+        "a.institution_id = :institution_id",
+        "a.search_vector @@ (plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q))",
+    ]
+    params: dict = {'q': q, 'institution_id': institution_id,
+                    'limit': limit, 'offset': offset}
+
+    if filters.get('agent_type'):
+        _add_enum_where(where, params, 'a.agent_type', 'agent_type', AgentType, filters['agent_type'])
+
+    where_sql = ' AND '.join(where)
+
+    sql = sa.text(f"""
+        SELECT
+            a.id, a.name, a.agent_type, a.authorized_form, a.date_from, a.date_to,
+            ts_rank(
+                a.search_vector,
+                plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q)
+            ) AS rank,
+            COUNT(*) OVER() AS total_count
+        FROM agents a
+        WHERE {where_sql}
+        ORDER BY rank DESC, a.name
+        LIMIT :limit OFFSET :offset
+    """)
+
+    rows = list(db.session.execute(sql, params))
+    total = rows[0].total_count if rows else 0
+
+    return [
+        {
+            'type': 'agent',
+            'id': row.id,
+            'name': row.name,
+            'agent_type': _enum_value(AgentType, row.agent_type),
+            'authorized_form': row.authorized_form,
+            'date_from': row.date_from,
+            'date_to': row.date_to,
+            'rank': float(row.rank),
+        }
+        for row in rows
+    ], int(total)
 
 
 def _sqlite_agent_query(
@@ -535,32 +578,39 @@ def _sqlite_agent_query(
     ], total
 
 
+# ─── Facets ───────────────────────────────────────────────────────────
+
+AGENT_FACET_LIMIT = 15
+
+
 def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
     """Facet counts for a search, respecting the query and all OTHER active filters."""
     from app.models.node import Node
-    from app.models.agent import Agent
+    from app.models.agent import Agent, agent_node_association as ANA
     from app.models.hierarchy import HierarchyType
     from app.models.classification import Classification, classification_node_association as CNA
 
     q = (q or '').strip()
+    has_q = _has_query(q)
     pattern = f'%{q}%'
-    facets: dict = {'agent_type': [], 'classification': [], 'hierarchy_type': [],
+    facets: dict = {'agent': [], 'agent_type': [], 'classification': [], 'hierarchy_type': [],
                     'level': [], 'status': []}
-    if len(q) < 2:
+    if not has_q and not filters.get('agent_id'):
         return facets
 
     def _node_base(exclude: str = ''):
-        query = db.session.query(Node.id).filter(
-            Node.institution_id == institution_id,
-            sa.or_(
-                Node.title.ilike(pattern),
-                Node.ref_code.ilike(pattern),
-                Node.description.ilike(pattern),
-                Node.scope_and_content.ilike(pattern),
-                Node.arrangement.ilike(pattern),
-                sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
+        query = db.session.query(Node.id).filter(Node.institution_id == institution_id)
+        if has_q:
+            query = query.filter(
+                sa.or_(
+                    Node.title.ilike(pattern),
+                    Node.ref_code.ilike(pattern),
+                    Node.description.ilike(pattern),
+                    Node.scope_and_content.ilike(pattern),
+                    Node.arrangement.ilike(pattern),
+                    sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
+                )
             )
-        )
         if exclude != 'status' and filters.get('status'):
             query = query.filter(Node.status == filters['status'])
         if exclude != 'level' and filters.get('level'):
@@ -573,6 +623,12 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
                     sa.select(CNA.c.node_id).where(
                         CNA.c.classification_id == int(filters['classification_id'])
                     )
+                )
+            )
+        if exclude != 'agent' and filters.get('agent_id'):
+            query = query.filter(
+                Node.id.in_(
+                    sa.select(ANA.c.node_id).where(ANA.c.agent_id == int(filters['agent_id']))
                 )
             )
         if filters.get('date_from'):
@@ -623,25 +679,65 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
         key=lambda x: -x['count']
     )[:30]
 
-    agent_base = db.session.query(Agent.id).filter(
-        Agent.institution_id == institution_id,
-        sa.or_(
-            Agent.name.ilike(pattern),
-            Agent.authorized_form.ilike(pattern),
-        )
+    agent_count = sa.func.count(ANA.c.node_id)
+    agent_query = (
+        db.session.query(Agent.id, Agent.name, agent_count)
+        .join(ANA, ANA.c.agent_id == Agent.id)
+        .filter(Agent.institution_id == institution_id)
+        .group_by(Agent.id, Agent.name)
     )
-    for atype, count in (
-        db.session.query(Agent.agent_type, sa.func.count())
-        .filter(Agent.id.in_(agent_base.subquery().select()))
-        .group_by(Agent.agent_type).all()
-    ):
-        if atype:
-            val = atype.value if hasattr(atype, 'value') else atype
-            facets['agent_type'].append({'value': val, 'count': count})
-    facets['agent_type'].sort(key=lambda x: -x['count'])
+    if has_q:
+        agent_query = agent_query.filter(
+            ANA.c.node_id.in_(_node_base('agent').subquery().select())
+        )
+        facets['agent'] = [
+            {'value': str(aid), 'label': name, 'count': cnt}
+            for aid, name, cnt in agent_query.order_by(agent_count.desc(), Agent.name)
+            .limit(AGENT_FACET_LIMIT).all()
+        ]
+
+    active_agent = filters.get('agent_id')
+    if active_agent and str(active_agent) not in {f['value'] for f in facets['agent']}:
+        active_query = (
+            db.session.query(Agent.id, Agent.name, agent_count)
+            .join(ANA, ANA.c.agent_id == Agent.id)
+            .filter(
+                Agent.id == int(active_agent),
+                Agent.institution_id == institution_id,
+                ANA.c.node_id.in_(_node_base().subquery().select()),
+            )
+            .group_by(Agent.id, Agent.name)
+        )
+        row = active_query.first()
+        if row:
+            facets['agent'].insert(0, {'value': str(row[0]), 'label': row[1], 'count': row[2]})
+        else:
+            agent = db.session.get(Agent, int(active_agent))
+            if agent and agent.institution_id == institution_id:
+                facets['agent'].insert(0, {'value': str(agent.id), 'label': agent.name, 'count': 0})
+
+    if has_q:
+        agent_base = db.session.query(Agent.id).filter(
+            Agent.institution_id == institution_id,
+            sa.or_(
+                Agent.name.ilike(pattern),
+                Agent.authorized_form.ilike(pattern),
+            )
+        )
+        for atype, count in (
+            db.session.query(Agent.agent_type, sa.func.count())
+            .filter(Agent.id.in_(agent_base.subquery().select()))
+            .group_by(Agent.agent_type).all()
+        ):
+            if atype:
+                val = atype.value if hasattr(atype, 'value') else atype
+                facets['agent_type'].append({'value': val, 'count': count})
+        facets['agent_type'].sort(key=lambda x: -x['count'])
 
     return facets
 
+
+# ─── File search ──────────────────────────────────────────────────────
 
 def _file_query(q, institution_id, filters, limit, offset):
     """Search node attachments by filename and technical metadata, grouped by node."""
@@ -747,6 +843,8 @@ def _file_match_count(q, institution_id):
     return int(count or 0)
 
 
+# ─── Entry point ──────────────────────────────────────────────────────
+
 def search(
     q: str,
     institution_id: int,
@@ -756,14 +854,20 @@ def search(
     page: int = 1,
 ) -> dict:
     q = q.strip()
-    if not q or len(q) < 2:
+    filters = filters or {}
+    has_q = _has_query(q)
+    browse = not has_q and bool(filters.get('agent_id'))
+
+    if not has_q and not browse:
         return {
             'nodes': [], 'agents': [], 'files': [], 'total': 0,
             'query': q, 'engine': 'none', 'page': page, 'per_page': limit,
         }
 
     types = types or ['nodes', 'agents']
-    filters = filters or {}
+    if browse:
+        types = ['nodes']
+
     pg = _is_postgres()
     engine_name = 'postgresql' if pg else 'sqlite'
     offset = (page - 1) * limit
@@ -783,7 +887,7 @@ def search(
     file_match_hint = 0
     if 'files' in types:
         file_results, file_total = _file_query(q, institution_id, filters, limit, offset)
-    else:
+    elif has_q:
         file_match_hint = _file_match_count(q, institution_id)
 
     text_types = [t for t in types if t in ('nodes', 'agents')]

@@ -1197,7 +1197,10 @@
       "classification": "Classification",
       "hierarchy": "Hierarchy",
       "level": "Level",
-      "clear": "clear"
+      "clear": "clear",
+      "agent": "Agent",
+      "agentPlaceholder": "Find agent…",
+      "agentNoMatch": "No matching agents"
     },
     "fileFilters": {
       "title": "File filters",

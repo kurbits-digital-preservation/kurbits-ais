@@ -20,7 +20,7 @@ const AGENT_ICONS: Record<string, typeof User> = {
 }
 const NODE_STATUSES = ['draft', 'published', 'restricted']
 const AGENT_TYPES   = ['person', 'organization', 'family', 'software']
-const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types', 'classification_id', 'hierarchy_type_id']
+const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types', 'classification_id', 'hierarchy_type_id', 'agent_id']
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -253,9 +253,12 @@ export default function SearchPage() {
   const [inputValue, setInputValue] = useState(searchParams.get('q') ?? '')
   const [showFilters, setShowFilters] = useState(false)
 
-  const q       = searchParams.get('q') ?? ''
-  const page    = parseInt(searchParams.get('page') ?? '1')
-  const perPage = 25
+  const q         = searchParams.get('q') ?? ''
+  const page      = parseInt(searchParams.get('page') ?? '1')
+  const perPage   = 25
+  const agentId   = searchParams.get('agent_id') ?? ''
+  const browse    = q.length < 2 && !!agentId
+  const canSearch = q.length >= 2 || browse
 
   useEffect(() => { setInputValue(searchParams.get('q') ?? '') }, [searchParams])
 
@@ -287,7 +290,7 @@ export default function SearchPage() {
       }
       return searchApi.search(params).then(r => r.data.data)
     },
-    enabled: q.length >= 2,
+    enabled: canSearch,
     staleTime: 10_000,
   })
 
@@ -377,7 +380,7 @@ export default function SearchPage() {
 
         {/* ── Search results ── */}
         <div className={styles.results}>
-          {q.length >= 2 && (
+          {canSearch && (
             <div className={styles.statsBar}>
               {isFetching ? (
                 <span className={styles.searching}><Spinner size={13} /> {t('search.searching')}</span>
@@ -385,7 +388,7 @@ export default function SearchPage() {
                 <div className={styles.statsLeft}>
                   <span className={styles.totalCount}>
                     {total === 0 ? t('search.noResults') : t('search.resultsCount', { count: total })}
-                    {' '}{t('search.for')} <strong>"{q}"</strong>
+                    {q && <>{' '}{t('search.for')} <strong>"{q}"</strong></>}
                   </span>
                   {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
                   {data.node_total > 0 && <span className={styles.typeStat}>{t('search.resourcesCount', { count: data.node_total })}</span>}
@@ -406,7 +409,7 @@ export default function SearchPage() {
             </button>
           )}
 
-          {!q && (
+          {!q && !browse && (
             <div className={styles.emptyState}>
               <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
               <p>{t('search.startPrompt')}</p>
@@ -414,12 +417,18 @@ export default function SearchPage() {
             </div>
           )}
 
-          {q.length === 1 && <div className={styles.emptyState}><p className={styles.emptyHint}>{t('search.typeMoreChars')}</p></div>}
+          {q.length === 1 && !browse && <div className={styles.emptyState}><p className={styles.emptyHint}>{t('search.typeMoreChars')}</p></div>}
 
-          {q.length >= 2 && !isFetching && results.length === 0 && (data?.files?.length ?? 0) === 0 && (
+          {canSearch && !isFetching && results.length === 0 && (data?.files?.length ?? 0) === 0 && (
             <div className={styles.emptyState}>
-              <p>{t('search.noResultsForPrefix')} <strong>"{q}"</strong></p>
-              <p className={styles.emptyHint}>{t('search.tryDifferentKeywords')}</p>
+              {q ? (
+                <>
+                  <p>{t('search.noResultsForPrefix')} <strong>"{q}"</strong></p>
+                  <p className={styles.emptyHint}>{t('search.tryDifferentKeywords')}</p>
+                </>
+              ) : (
+                <p>{t('search.noResults')}</p>
+              )}
             </div>
           )}
 

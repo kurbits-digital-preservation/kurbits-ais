@@ -1198,7 +1198,10 @@
       "classification": "Klassificering",
       "hierarchy": "Hierarki",
       "level": "Nivå",
-      "clear": "rensa"
+      "clear": "rensa",
+      "agent": "Agent",
+      "agentPlaceholder": "Sök agent…",
+      "agentNoMatch": "Inga matchande agenter"
     },
     "fileFilters": {
       "title": "Filfilter",

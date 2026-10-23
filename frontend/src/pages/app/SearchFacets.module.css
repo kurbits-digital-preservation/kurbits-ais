@@ -99,3 +99,87 @@
   border-color: var(--color-accent);
   font-weight: 600;
 }
+.agentPicker {
+  position: relative;
+  margin-bottom: var(--space-1);
+}
+
+.agentPickerInputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.agentPickerIcon {
+  position: absolute;
+  left: 8px;
+  color: var(--color-ink-faint);
+  pointer-events: none;
+}
+
+.agentPickerInput {
+  width: 100%;
+  padding: 5px 26px 5px 26px;
+  font-size: var(--text-xs);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.agentPickerInput:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.agentPickerClear {
+  position: absolute;
+  right: 6px;
+  display: flex;
+  padding: 2px;
+  border: none;
+  background: none;
+  color: var(--color-ink-faint);
+  cursor: pointer;
+}
+
+.agentPickerDropdown {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+
+.agentPickerOption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--color-ink);
+  text-align: left;
+}
+.agentPickerOption:hover { background: var(--color-bg-subtle); }
+
+.agentPickerType {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+}
+
+.agentPickerEmpty {
+  padding: 8px;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  font-style: italic;
+}
