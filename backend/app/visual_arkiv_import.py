@@ -42,6 +42,15 @@ def _txt(el, tag: str, default: str = '') -> str:
     return child.text.strip()
 
 
+def _txt_any(el, *tags: str, default: str = '') -> str:
+    """First non-empty value among several spellings of a tag."""
+    for tag in tags:
+        value = _txt(el, tag)
+        if value:
+            return value
+    return default
+
+
 def _serie_parts(el) -> tuple[str, str, str]:
     """Return (Y, Z, A) components of a SerieAA code."""
     y = _txt(el, 'Serie_Y', '').strip()
@@ -109,6 +118,88 @@ def _nivaa_to_level_name(nivaa: str) -> str:
 
 
 
+# ─── Field mapping helpers ───────────────────────────────────────────
+
+STORAGE_UNIT_TYPE_FIELD = {
+    'name': 'storage_unit_type',
+    'label': 'Förvaringsenhetstyp',
+    'type': 'text',
+    'required': False,
+}
+PLACEMENT_NOTE_FIELD = {
+    'name': 'placement_note',
+    'label': 'Placeringsanmärkning',
+    'type': 'textarea',
+    'required': False,
+}
+DISPOSAL_YEAR_FIELD = {
+    'name': 'disposal_year',
+    'label': 'Gallringsår',
+    'type': 'text',
+    'required': False,
+}
+
+# level name -> metadata fields the import fills on that level
+_VA_LEVEL_FIELDS = {
+    'Fonds':          [PLACEMENT_NOTE_FIELD],
+    'Series':         [PLACEMENT_NOTE_FIELD, DISPOSAL_YEAR_FIELD],
+    'Sub-series':     [PLACEMENT_NOTE_FIELD, DISPOSAL_YEAR_FIELD],
+    'Sub-sub-series': [PLACEMENT_NOTE_FIELD, DISPOSAL_YEAR_FIELD],
+    'Volume':         [STORAGE_UNIT_TYPE_FIELD, PLACEMENT_NOTE_FIELD, DISPOSAL_YEAR_FIELD],
+}
+
+_EMPTY_VA_VALUES = ('', '-')
+
+
+def _clean(value: str | None) -> str | None:
+    if value is None:
+        return None
+    value = value.strip()
+    return None if value in _EMPTY_VA_VALUES else value
+
+
+def _ensure_metadata_field(level, field: dict, log) -> None:
+    """Adds a field to a level's metadata_schema unless a field with the same
+    name exists. The schema is replaced, not mutated, so the JSON change is saved."""
+    schema = level.metadata_schema if isinstance(level.metadata_schema, dict) else {}
+    fields = list(schema.get('fields') or [])
+    if any(f.get('name') == field['name'] for f in fields if isinstance(f, dict)):
+        return
+    level.metadata_schema = {**schema, 'fields': [*fields, dict(field)]}
+    log(f'  Added metadata field "{field["label"]}" to level {level.name}')
+
+
+def _va_metadata(**values: str | None) -> dict:
+    """metadata_spec from field name -> raw value, leaving out empty values."""
+    return {name: cleaned for name, value in values.items() if (cleaned := _clean(value))}
+
+
+def _va_extent(quantity: str | None, unit: str | None) -> str | None:
+    unit = _clean(unit)
+    try:
+        amount = float((quantity or '0').replace(',', '.'))
+    except ValueError:
+        return None
+    if not unit or amount <= 0:
+        return None
+    return f'{amount:g} {unit}'
+
+
+def _va_access_conditions(flag: str, text: str | None) -> str | None:
+    text = _clean(text)
+    if text:
+        return text
+    return 'Sekretess' if flag == '1' else None
+
+
+def _va_add_note(node_id: int, note_type: str, content: str | None, db, system_user_id) -> None:
+    from app.models.node import NodeNote
+    content = _clean(content)
+    if content:
+        db.session.add(NodeNote(node_id=node_id, note_type=note_type,
+                                content=content, created_by_id=system_user_id))
+
+
 def _ensure_va_hierarchy(institution_id: int, db, log, parse_codes: bool = False) -> tuple:
     """
     Find or create an ISAD(G) hierarchy.
@@ -170,6 +261,10 @@ def _ensure_va_hierarchy(institution_id: int, db, log, parse_codes: bool = False
     if parse_codes:
         levels['Sub-series']     = _get_or_create_level('Sub-series',     3, False)
         levels['Sub-sub-series'] = _get_or_create_level('Sub-sub-series', 4, False)
+
+    for level_name, level in levels.items():
+        for field in _VA_LEVEL_FIELDS.get(level_name, []):
+            _ensure_metadata_field(level, field, log)
 
     relations = [
         (levels['Fonds'],  levels['Series']),
@@ -523,15 +618,8 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
     arkiv_id_org = _txt(el, 'Arkiv_ID_Org') or None
     senastenot   = _txt(el, 'Arkiv_Senastenot') or None
 
-    description_parts = []
-    if extent:
-        description_parts.append(f'Extent: {extent}')
-    if placering:
-        description_parts.append(f'Location: {placering}')
-    if sekretess == '1':
-        sek_text = _txt(el, 'Arkiv_SekretessText') or 'Secrecy restrictions apply'
-        description_parts.append(f'Access restrictions: {sek_text}')
-    description = '\n'.join(description_parts) if description_parts else None
+    access_conditions = _va_access_conditions(sekretess, _txt(el, 'Arkiv_SekretessText'))
+    metadata = _va_metadata(placement_note=placering)
 
 
 
@@ -551,7 +639,10 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
         node.title = name
         node.date_start = _year_to_date(date_from)
         node.date_end = _year_to_date(date_to, end=True)
-        node.description = description
+        node.description = None
+        node.extent = extent
+        node.access_conditions = access_conditions
+        node.metadata_spec = {**(node.metadata_spec or {}), **metadata}
         log(f'    Fonds exists (Visual Arkiv ID {arkiv_id_org}) — updated: {node.ref_code} -- {name}')
     else:
         local_ref = _make_unique_ref(nr, institution_id, None, db, Node)
@@ -564,7 +655,9 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
             hierarchy_type_id=ht.id,
             date_start=_year_to_date(date_from),
             date_end=_year_to_date(date_to, end=True),
-            description=description,
+            extent=extent,
+            access_conditions=access_conditions,
+            metadata_spec=metadata,
         )
         from app.models import Institution as _Inst
         _inst = db.session.get(_Inst, institution_id)
@@ -629,29 +722,14 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
 
 def _build_serie_node(el, parent_node, level_name, local_ref, institution_id, ht, db, log, system_user_id=None):
     """Create a single Series / Sub-series / Sub-sub-series node from <SerieAA>."""
-    from app.models.node import Node, NodeNote
+    from app.models.node import Node
 
     title     = _txt(el, 'Serie_Serierubrik') or 'Untitled series'
     notes_txt = _txt(el, 'Serie_Anmerkning') or None
     placering = _txt(el, 'Serie_Placering') or None
     sekretess = _txt(el, 'Serie_Sekretess', '0')
-    gallras   = _txt(el, 'Serie_Gallras', '0')
     gallr_ar  = _txt(el, 'Serie_GallrasAr') or None
     gallr_txt = _txt(el, 'Serie_GallrasText') or None
-
-    description_parts = []
-    if placering:
-        description_parts.append(f'Location: {placering}')
-    if sekretess == '1':
-        sek_text = _txt(el, 'Serie_SekretessText') or 'Secrecy restrictions apply'
-        description_parts.append(f'Access restrictions: {sek_text}')
-    if gallras == '1':
-        disp = 'Appraisal: scheduled for disposal'
-        if gallr_ar:
-            disp += f' ({gallr_ar})'
-        if gallr_txt:
-            disp += f' -- {gallr_txt}'
-        description_parts.append(disp)
 
     node = Node(
         institution_id=institution_id,
@@ -660,14 +738,15 @@ def _build_serie_node(el, parent_node, level_name, local_ref, institution_id, ht
         title=title,
         level_of_description=level_name,
         hierarchy_type_id=ht.id,
-        description='\n'.join(description_parts) if description_parts else None,
+        access_conditions=_va_access_conditions(sekretess, _txt(el, 'Serie_SekretessText')),
+        metadata_spec=_va_metadata(placement_note=placering, disposal_year=gallr_ar),
     )
     node.ref_code = f'{parent_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
 
-    if notes_txt:
-        db.session.add(NodeNote(node_id=node.id, note_type='general', content=notes_txt, created_by_id=system_user_id))
+    _va_add_note(node.id, 'general', notes_txt, db, system_user_id)
+    _va_add_note(node.id, 'appraisal', gallr_txt, db, system_user_id)
 
     _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
@@ -772,43 +851,22 @@ def _import_series_parsed(arkiv_el, fonds_node, institution_id, ht, levels, db, 
 
 
 def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int, system_user_id=None) -> object:
-    from app.models.node import Node, NodeNote
+    """Create a Volume node from <Volym> (allmänna arkivschemat)."""
+    from app.models.node import Node
 
     volnr     = _txt(el, 'Volym_Volnr') or str(vol_idx)
-    tid       = _txt(el, 'Volym_Tid') or None
     date_from = _txt(el, 'Volym_TidFrom') or None
     date_to   = _txt(el, 'Volym_TidTom') or None
-    anm       = _txt(el, 'Volym_Anm') or _txt(el, 'Volym_Anmerkningar') or None
+    anm       = _clean(_txt(el, 'Volym_Anm'))
+    anmerkn   = _clean(_txt(el, 'Volym_Anmerkningar'))
     placering = _txt(el, 'Volym_Placering') or None
     sekretess = _txt(el, 'Volym_Sekretess', '0')
     gallr_ar  = _txt(el, 'Volym_GallrasAr') or None
     gallr_txt = _txt(el, 'Volym_GallrasText') or None
-    omf_enhet = _txt(el, 'Volym_OmfEnhet') or None
-    omf_mgd   = _txt(el, 'Volym_OmfMgd', '0')
-    forvtyp   = _txt(el, 'Volyml_ForvaringsenhetTyp') or None
+    forvtyp   = _txt_any(el, 'Volyml_FörvaringsenhetTyp', 'Volyml_ForvaringsenhetTyp',
+                         'Volym_FörvaringsenhetTyp', 'Volym_ForvaringsenhetTyp') or None
 
-
-
-    title = f'Vol. {volnr}'
-
-    description_parts = []
-    if placering:
-        description_parts.append(f'Location: {placering}')
-    if forvtyp and forvtyp != '-':
-        description_parts.append(f'Container type: {forvtyp}')
-    if omf_enhet and omf_mgd != '0':
-        description_parts.append(f'Extent: {omf_mgd} {omf_enhet}')
-    if sekretess == '1':
-        sek_text = _txt(el, 'Volym_SekretessText') or 'Secrecy restrictions apply'
-        description_parts.append(f'Access restrictions: {sek_text}')
-    if gallr_ar or gallr_txt:
-        disp = 'Appraisal: scheduled for disposal'
-        if gallr_ar:
-            disp += f' ({gallr_ar})'
-        if gallr_txt:
-            disp += f' -- {gallr_txt}'
-        description_parts.append(disp)
-
+    title     = f'Vol. {volnr}'
     local_ref = _make_unique_ref(volnr, institution_id, serie_node.id, db, Node)
 
     node = Node(
@@ -820,20 +878,26 @@ def _import_volym(el, serie_node, institution_id: int, ht, db, log, vol_idx: int
         hierarchy_type_id=ht.id,
         date_start=_year_to_date(date_from),
         date_end=_year_to_date(date_to, end=True),
-        description='\n'.join(description_parts) if description_parts else None,
+        scope_and_content=anm,
+        extent=_va_extent(_txt(el, 'Volym_OmfMgd'), _txt(el, 'Volym_OmfEnhet')),
+        access_conditions=_va_access_conditions(sekretess, _txt(el, 'Volym_SekretessText')),
+        metadata_spec=_va_metadata(
+            storage_unit_type=forvtyp,
+            placement_note=placering,
+            disposal_year=gallr_ar,
+        ),
     )
     node.ref_code = f'{serie_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
     _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
-    if anm:
-        db.session.add(NodeNote(node_id=node.id, note_type='general', content=anm, created_by_id=system_user_id))
+    if anmerkn and anmerkn != anm:
+        _va_add_note(node.id, 'general', anmerkn, db, system_user_id)
+    _va_add_note(node.id, 'appraisal', gallr_txt, db, system_user_id)
 
     log(f'        Volume: {node.ref_code} -- {title}')
     return node
-
-
 
 
 def _ensure_klass_root(institution_id: int, ht, version_label: str, db, log, system_user_id=None) -> object:
@@ -992,37 +1056,20 @@ def _link_node_to_classification(node, classification, db) -> None:
 def _build_handlingsslag_node(hs_el, parent_node, institution_id, ht, strukt_map,
                                db, log, system_user_id, level_name='Series') -> object:
     """Create a Series/Sub-series node from <HandlingsSlag> and link to Classification."""
-    from app.models.node import Node, NodeNote
+    from app.models.node import Node
 
     namn      = _txt(hs_el, 'HS_Namn') or 'Untitled'
     struktur  = _txt(hs_el, 'HS_Struktur') or ''
-    beskr     = _txt(hs_el, 'HS_Beskr') or None
+    beskr     = _clean(_txt(hs_el, 'HS_Beskr'))
     anm       = _txt(hs_el, 'HS_Anmerkning') or None
     placering = _txt(hs_el, 'HS_Placering') or None
     sekretess = _txt(hs_el, 'HS_Sekretess', '0')
-    gallras   = _txt(hs_el, 'HS_Gallras', '0')
     gallr_ar  = _txt(hs_el, 'HS_GallrasAr') or None
     gallr_txt = _txt(hs_el, 'HS_GallrasText') or None
 
     local_ref = _make_unique_ref(
         struktur or namn[:20], institution_id, parent_node.id, db, Node
     )
-
-    description_parts = []
-    if beskr:
-        description_parts.append(beskr)
-    if placering:
-        description_parts.append(f'Location: {placering}')
-    if sekretess == '1':
-        sek_text = _txt(hs_el, 'HS_SekretessText') or 'Secrecy restrictions apply'
-        description_parts.append(f'Access restrictions: {sek_text}')
-    if gallras == '1':
-        disp = 'Appraisal: scheduled for disposal'
-        if gallr_ar:
-            disp += f' ({gallr_ar})'
-        if gallr_txt:
-            disp += f' -- {gallr_txt}'
-        description_parts.append(disp)
 
     node = Node(
         institution_id=institution_id,
@@ -1031,15 +1078,17 @@ def _build_handlingsslag_node(hs_el, parent_node, institution_id, ht, strukt_map
         title=namn,
         level_of_description=level_name,
         hierarchy_type_id=ht.id,
-        description='\n'.join(description_parts) if description_parts else None,
+        description=beskr,
+        access_conditions=_va_access_conditions(sekretess, _txt(hs_el, 'HS_SekretessText')),
+        metadata_spec=_va_metadata(placement_note=placering, disposal_year=gallr_ar),
     )
     node.ref_code = f'{parent_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
     _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
-    if anm:
-        db.session.add(NodeNote(node_id=node.id, note_type='general', content=anm, created_by_id=system_user_id))
+    _va_add_note(node.id, 'general', anm, db, system_user_id)
+    _va_add_note(node.id, 'appraisal', gallr_txt, db, system_user_id)
 
     classification = _resolve_hs_classification(hs_el, strukt_map)
     if classification:
@@ -1118,54 +1167,21 @@ def _import_handlingsslag_parsed(hs_grupp, fonds_node, institution_id, ht, level
 
 def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
                         vol_idx: int, system_user_id=None) -> object:
-    from app.models.node import Node, NodeNote
+    """Create a Volume node from <FörvaringsenhetRel> (verksamhetsbaserad arkivredovisning)."""
+    from app.models.node import Node
 
     beteckning = _txt(el, 'ForvenhRel_Beteckning') or str(vol_idx)
-    tid        = _txt(el, 'ForvenhRel_Tid') or _txt(el, 'ForvenhRel_Stid') or None
     date_from  = _txt(el, 'ForvenhRel_TidFrom') or None
     date_to    = _txt(el, 'ForvenhRel_TidTom') or None
-    anm        = _txt(el, 'ForvenhRel_Anm') or None
-    anmerkn    = _txt(el, 'ForvenhRel_Anmerkningar') or None
+    anm        = _clean(_txt(el, 'ForvenhRel_Anm'))
+    anmerkn    = _clean(_txt(el, 'ForvenhRel_Anmerkningar'))
     placering  = _txt(el, 'ForvenhRel_Placering') or None
     sekretess  = _txt(el, 'ForvenhRel_Sekretess', '0')
     gallr_ar   = _txt(el, 'ForvenhRel_GallrasAr') or None
     gallr_txt  = _txt(el, 'ForvenhRel_GallrasText') or None
-    omf_enhet  = _txt(el, 'ForvenhRel_OmfEnhet') or None
-    omf_mgd    = _txt(el, 'ForvenhRel_OmfMgd', '0')
-    forvtyp    = _txt(el, 'ForvenhRel_ForvaringsenhetTyp') or None
+    forvtyp    = _txt_any(el, 'ForvenhRel_FörvaringsenhetTyp', 'ForvenhRel_ForvaringsenhetTyp') or None
 
-
-
-
-
-
-
-
-
-
-
-    title = f'Vol. {beteckning}'
-
-    description_parts = []
-    if anm:
-        description_parts.append(anm)
-    if placering:
-        description_parts.append(f'Location: {placering}')
-    if forvtyp and forvtyp not in ('-', ''):
-        description_parts.append(f'Container type: {forvtyp}')
-    if omf_enhet and omf_enhet != '-' and omf_mgd != '0':
-        description_parts.append(f'Extent: {omf_mgd} {omf_enhet}')
-    if sekretess == '1':
-        sek_text = _txt(el, 'ForvenhRel_SekretessText') or 'Secrecy restrictions apply'
-        description_parts.append(f'Access restrictions: {sek_text}')
-    if gallr_ar or gallr_txt:
-        disp = 'Appraisal: scheduled for disposal'
-        if gallr_ar:
-            disp += f' ({gallr_ar})'
-        if gallr_txt:
-            disp += f' -- {gallr_txt}'
-        description_parts.append(disp)
-
+    title     = f'Vol. {beteckning}'
     ref_base  = beteckning if beteckning != '-' else str(vol_idx)
     local_ref = _make_unique_ref(ref_base, institution_id, serie_node.id, db, Node)
 
@@ -1178,20 +1194,26 @@ def _import_forvenhrel(el, serie_node, institution_id: int, ht, db, log,
         hierarchy_type_id=ht.id,
         date_start=_year_to_date(date_from),
         date_end=_year_to_date(date_to, end=True),
-        description='\n'.join(description_parts) if description_parts else None,
+        scope_and_content=anm,
+        extent=_va_extent(_txt(el, 'ForvenhRel_OmfMgd'), _txt(el, 'ForvenhRel_OmfEnhet')),
+        access_conditions=_va_access_conditions(sekretess, _txt(el, 'ForvenhRel_SekretessText')),
+        metadata_spec=_va_metadata(
+            storage_unit_type=forvtyp,
+            placement_note=placering,
+            disposal_year=gallr_ar,
+        ),
     )
     node.ref_code = f'{serie_node.ref_code}/{local_ref}'
     db.session.add(node)
     db.session.flush()
     _log_import_event(node.id, 'Created from a Visual Arkiv 7 import.', db, system_user_id)
 
-    if anmerkn:
-        db.session.add(NodeNote(node_id=node.id, note_type='general', content=anmerkn, created_by_id=system_user_id))
+    if anmerkn and anmerkn != anm:
+        _va_add_note(node.id, 'general', anmerkn, db, system_user_id)
+    _va_add_note(node.id, 'appraisal', gallr_txt, db, system_user_id)
 
     log(f'        Volume: {node.ref_code} -- {title}')
     return node
-
-
 
 
 def _link_agent_to_node(agent, fonds_node, institution_id: int, db) -> None:
