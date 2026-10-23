@@ -2,11 +2,16 @@ from typing import Optional
 import sqlalchemy as sa
 from app.extensions import db
 
-SEARCH_VECTOR_INDEXES = {'ix_nodes_search_vector', 'ix_agents_search_vector'}
+SEARCH_VECTOR_COLUMNS = {'search_vector', 'attachment_vector'}
+SEARCH_VECTOR_INDEXES = {
+    'ix_nodes_search_vector',
+    'ix_agents_search_vector',
+    'ix_nodes_attachment_vector',
+}
 
 
 def include_object(obj, name, type_, reflected, compare_to):
-    if type_ == 'column' and name == 'search_vector':
+    if type_ == 'column' and name in SEARCH_VECTOR_COLUMNS:
         return False
     if type_ == 'index' and name in SEARCH_VECTOR_INDEXES:
         return False

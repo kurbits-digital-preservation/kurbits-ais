@@ -50,6 +50,16 @@
   line-height: 1.4;
 }
 
+.listItemOtherNames {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
 .listItemMeta {
   display: flex;
   align-items: center;

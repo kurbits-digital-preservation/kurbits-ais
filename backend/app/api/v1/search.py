@@ -43,6 +43,13 @@ def global_search():
             except ValueError:
                 return error(f'{key} must be an integer', 400)
 
+    scope = request.args.get('scope', '').strip()
+    if scope:
+        from app.search import SEARCH_SCOPES
+        if scope not in SEARCH_SCOPES:
+            return error(f'scope must be one of: {", ".join(SEARCH_SCOPES)}', 400)
+        filters['scope'] = scope
+
     if filters.get('agent_id') and 'agents' in types:
         types = [t for t in types if t != 'agents'] or ['nodes']
 

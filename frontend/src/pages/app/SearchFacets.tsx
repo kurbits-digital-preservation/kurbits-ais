@@ -51,6 +51,15 @@ const RECORD_TYPE_KEYS: Record<string, string> = {
 }
 const RECORD_TYPES = ['nodes,agents', 'nodes', 'agents', 'files']
 
+// Which text a query is matched against — 'attachments' only exists for resources.
+const SEARCH_SCOPES = ['all', 'description', 'notes', 'attachments']
+const SCOPE_KEYS: Record<string, string> = {
+  all: 'search.facets.scopeAll',
+  description: 'search.facets.scopeDescription',
+  notes: 'search.facets.scopeNotes',
+  attachments: 'search.facets.scopeAttachments',
+}
+
 type SetParam = (k: string, v: string) => void
 type ClearParam = (k: string) => void
 
@@ -184,6 +193,8 @@ export default function SearchFacets({ facets, params, setParam, clearParam }: {
   const { t } = useTranslation()
   const currentType = params.get('types') ?? 'nodes,agents'
   const searchesNodes = currentType.split(',').includes('nodes')
+  const currentScope = params.get('scope') ?? 'all'
+  const availableScopes = SEARCH_SCOPES.filter(sc => sc !== 'attachments' || searchesNodes)
 
   return (
     <div className={styles.facets}>
@@ -202,6 +213,24 @@ export default function SearchFacets({ facets, params, setParam, clearParam }: {
           ))}
         </div>
       </div>
+
+      {/* Search scope — which text the query is matched against */}
+      {currentType !== 'files' && (
+        <div className={styles.facetGroup}>
+          <div className={styles.facetTitle}>{t('search.facets.scope')}</div>
+          <div className={styles.recordTypeRow}>
+            {availableScopes.map(sc => (
+              <button
+                key={sc}
+                className={`${styles.recordTypeBtn} ${currentScope === sc ? styles.recordTypeActive : ''}`}
+                onClick={() => sc === 'all' ? clearParam('scope') : setParam('scope', sc)}
+              >
+                {t(SCOPE_KEYS[sc])}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {FACET_ORDER.map(facetKey => {
         if (facetKey === 'agent') {

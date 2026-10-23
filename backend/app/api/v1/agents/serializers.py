@@ -1,5 +1,7 @@
 from app.models.agent import Agent, AgentNote, AgentRelationType, AgentNodeRelationType
 
+OTHER_NAMES_IN_STUB = 3
+
 
 def serialize_agent_stub(agent: Agent) -> dict:
     return {
@@ -9,6 +11,8 @@ def serialize_agent_stub(agent: Agent) -> dict:
         'authorized_form': agent.authorized_form,
         'date_from': agent.date_from,
         'date_to': agent.date_to,
+        'other_names': [nf.name for nf in agent.name_forms[:OTHER_NAMES_IN_STUB]],
+        'other_names_total': len(agent.name_forms),
     }
 
 
@@ -27,6 +31,7 @@ def serialize_agent_detail(agent: Agent) -> dict:
         'updated_at': agent.updated_at.isoformat(),
         'created_by': agent.created_by.username if agent.created_by else None,
         'notes': [serialize_agent_note(n) for n in agent.notes],
+        'name_forms': [nf.to_dict() for nf in agent.name_forms],
         'relations': agent.get_relations(),
         'node_count': agent.nodes.count(),
     }

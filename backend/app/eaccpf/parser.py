@@ -15,7 +15,7 @@ class ParsedAgent:
         self.agent_type: str = 'organization'
         self.name: str = ''
         self.authorized_form: Optional[str] = None
-        self.parallel_names: list[str] = []
+        self.name_forms: list[dict] = []
         self.date_from: Optional[str] = None
         self.date_to: Optional[str] = None
         self.description: Optional[str] = None
@@ -126,20 +126,59 @@ def _parse_entity_type(el: etree._Element) -> str:
     return 'organization'
 
 
-def _parse_names(identity_el: etree._Element) -> tuple[str, Optional[str], list[str]]:
+_ALTERNATIVE_FORM_TOKENS = {'parallel', 'other', 'variant', 'abbreviation', 'former', 'later'}
+
+
+def _parse_use_dates(name_entry: etree._Element) -> tuple[Optional[str], Optional[str]]:
+    use_dates = _find(name_entry, 'useDates')
+    if use_dates is None:
+        return None, None
+
+    date_range = _find(use_dates, 'dateRange')
+    if date_range is not None:
+        from_el = _find(date_range, 'fromDate')
+        to_el = _find(date_range, 'toDate')
+        date_from = ((from_el.get('standardDate') if from_el is not None else None) or _text(from_el) or '').strip()[:50]
+        date_to = ((to_el.get('standardDate') if to_el is not None else None) or _text(to_el) or '').strip()[:50]
+        return date_from or None, date_to or None
+
+    date_el = _find(use_dates, 'date')
+    if date_el is not None:
+        val = (date_el.get('standardDate') or _text(date_el) or '').strip()[:50]
+        return val or None, None
+
+    return None, None
+
+
+def _name_form_type(name_entry: etree._Element) -> Optional[str]:
+    local_type = (name_entry.get('localType') or '').strip()
+    if local_type and local_type.lower() not in ('authorized', 'authorizedform'):
+        return local_type
+
+    parent = name_entry.getparent()
+    if parent is not None and _localname(parent) == 'nameEntryParallel':
+        return 'parallel'
+
+    alt = _find(name_entry, 'alternativeForm')
+    token = _text(alt).strip().lower() if alt is not None else ''
+    if token in _ALTERNATIVE_FORM_TOKENS:
+        return token
+    return None
+
+
+def _parse_names(identity_el: etree._Element) -> tuple[str, Optional[str], list[dict]]:
     """
-    Returns (name, authorized_form, parallel_names).
+    Returns (name, authorized_form, name_forms).
     EAC-CPF 2010: <nameEntry><part> with localType="forename"/"surname" etc.
     EAC-CPF 2022: <nameEntry><part> with localType
-    Authorized form: nameEntry with <authorizedForm> child or @localType="authorized"
+    Authorized form: nameEntry with <authorizedForm> child or @localType="authorized".
+    Every other nameEntry becomes a name form: {name, type, date_from, date_to},
+    where type is the nameEntry's localType, 'parallel' inside nameEntryParallel,
+    or None when the record does not say.
     """
-    name_entries = _findall_deep(identity_el, 'nameEntry')
-    authorized_form = None
-    name = ''
-    parallel_names = []
+    entries: list[tuple[str, bool, etree._Element]] = []
 
-    for ne in name_entries:
-        # Check if  authorized form
+    for ne in _findall_deep(identity_el, 'nameEntry'):
         is_authorized = (
             _find(ne, 'authorizedForm') is not None
             or ne.get('localType', '').lower() in ('authorized', 'authorizedform')
@@ -152,25 +191,34 @@ def _parse_names(identity_el: etree._Element) -> tuple[str, Optional[str], list[
         else:
             full = _text(ne).strip()
 
-        if not full:
+        if full:
+            entries.append((full, is_authorized, ne))
+
+    if not entries:
+        return '', None, []
+
+    name = entries[0][0]
+    authorized = next((e for e in entries if e[1]), None)
+    authorized_form = authorized[0] if authorized else None
+
+    used = {name.lower()}
+    if authorized_form:
+        used.add(authorized_form.lower())
+
+    name_forms: list[dict] = []
+    for full, is_authorized, ne in entries:
+        if is_authorized or full.lower() in used:
             continue
+        used.add(full.lower())
+        date_from, date_to = _parse_use_dates(ne)
+        name_forms.append({
+            'name': full,
+            'type': _name_form_type(ne),
+            'date_from': date_from,
+            'date_to': date_to,
+        })
 
-        if is_authorized or not authorized_form:
-            if is_authorized:
-                authorized_form = full
-                if not name:
-                    name = full
-            elif not name:
-                name = full
-            else:
-                parallel_names.append(full)
-        else:
-            parallel_names.append(full)
-
-    if not name and authorized_form:
-        name = authorized_form
-
-    return name, authorized_form, parallel_names
+    return name, authorized_form, name_forms
 
 
 def _parse_dates(description_el: etree._Element) -> tuple[Optional[str], Optional[str]]:
@@ -272,7 +320,7 @@ def _parse_eac_element(eac_el: etree._Element, result: ParseResult) -> Optional[
         return None
 
     agent.agent_type = _parse_entity_type(identity_el)
-    agent.name, agent.authorized_form, agent.parallel_names = _parse_names(identity_el)
+    agent.name, agent.authorized_form, agent.name_forms = _parse_names(identity_el)
 
     if not agent.name:
         result.warnings.append(f'Record {agent.source_id} has no parseable name — skipped')

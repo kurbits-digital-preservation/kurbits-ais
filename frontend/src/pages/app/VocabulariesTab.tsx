@@ -289,6 +289,56 @@ function SimpleVocabSection({
   )
 }
 
+// ─── Agent name form types section ────────────────────────────────────
+
+function AgentNameFormTypesSection() {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const { data: types, isLoading } = useQuery({
+    queryKey: ['vocab-agent-name-form-types'],
+    queryFn: () => vocabApi.listAgentNameFormTypes().then(r => r.data.data),
+  })
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['vocab-agent-name-form-types'] })
+  const showError = (err: any) => alert(err?.response?.data?.message ?? t('admin.vocab.nameForms.saveFailed'))
+
+  const createMutation = useMutation({
+    mutationFn: ({ name, desc }: { name: string; desc: string }) =>
+      vocabApi.createAgentNameFormType({ name, description: desc || null }),
+    onSuccess: invalidate,
+    onError: showError,
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name, desc }: { id: number; name: string; desc?: string }) =>
+      vocabApi.updateAgentNameFormType(id, { name, description: desc }),
+    onSuccess: invalidate,
+    onError: showError,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => { setDeletingId(id); return vocabApi.deleteAgentNameFormType(id) },
+    onSuccess: () => { invalidate(); setDeletingId(null) },
+    onError: (err: any) => { setDeletingId(null); showError(err) },
+  })
+
+  return (
+    <SimpleVocabSection
+      title={t('admin.vocab.nameForms.title')}
+      description={t('admin.vocab.nameForms.desc')}
+      items={types ?? []}
+      isLoading={isLoading}
+      onCreate={(name, desc) => createMutation.mutate({ name, desc })}
+      onUpdate={(id, name, desc) => updateMutation.mutate({ id, name, desc })}
+      onDelete={id => { if (confirm(t('admin.vocab.nameForms.deleteConfirm'))) deleteMutation.mutate(id) }}
+      isCreating={createMutation.isPending}
+      isDeleting={deletingId}
+    />
+  )
+}
+
 // ─── Agent-agent relation types section ───────────────────────────────
 
 function AgentAgentRow({ rt, onUpdate, onDelete, isDeleting }: {
@@ -681,7 +731,7 @@ function RepresentationTypesSection() {
     <SimpleVocabSection
       title={t('admin.vocab.representationTypes.title')}
       description={t('admin.vocab.representationTypes.desc')}
-      items={items}
+      items={types ?? []}
       isLoading={isLoading}
       onCreate={(name, desc) => createMutation.mutate({ name, desc, isSymmetric: true, complementName: '' })}
       onUpdate={(id, name, desc) => updateMutation.mutate({ id, name, desc })}
@@ -1008,6 +1058,7 @@ export default function VocabulariesTab() {
       {vocabTab === 'relations' && (
         <div className={styles.group}>
           <AgentRelationSection />
+          <AgentNameFormTypesSection />
           <SimpleVocabSection
             title={t('admin.vocab.agentResource.title')}
             description={t('admin.vocab.agentResource.desc')}

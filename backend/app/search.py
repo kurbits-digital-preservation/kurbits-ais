@@ -6,6 +6,13 @@ SQLite:      ILIKE fallback across the same fields including metadata_spec cast.
 
 Browse mode: with no query but an agent_id filter, nodes linked to the agent
 are listed in reference code order.
+
+Scopes (filters['scope']) limit which text a query is matched against:
+  all          everything in search_vector (attachment text only when the
+               institution indexes it)
+  description  titles, ref codes and descriptive fields   (weights A, B)
+  notes        notes                                        (weight C)
+  attachments  extracted attachment text — nodes only, always available
 """
 from __future__ import annotations
 from typing import Optional
@@ -15,6 +22,23 @@ from app.extensions import db
 
 MIN_QUERY_LENGTH = 2
 
+SEARCH_SCOPES = ('all', 'description', 'notes', 'attachments')
+
+_PG_TSQUERY = "(plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q))"
+
+# scope -> (vector column, weights to keep or None)
+_PG_NODE_SCOPES = {
+    'all':         ('n.search_vector', None),
+    'description': ('n.search_vector', '{a,b}'),
+    'notes':       ('n.search_vector', '{c}'),
+    'attachments': ('n.attachment_vector', None),
+}
+_PG_AGENT_SCOPES = {
+    'all':         ('a.search_vector', None),
+    'description': ('a.search_vector', '{a,b}'),
+    'notes':       ('a.search_vector', '{c}'),
+}
+
 
 def _is_postgres() -> bool:
     return db.engine.dialect.name == 'postgresql'
@@ -22,6 +46,90 @@ def _is_postgres() -> bool:
 
 def _has_query(q: str) -> bool:
     return len(q) >= MIN_QUERY_LENGTH
+
+
+def search_scope(filters: Optional[dict]) -> str:
+    scope = (filters or {}).get('scope') or 'all'
+    return scope if scope in SEARCH_SCOPES else 'all'
+
+
+def _pg_scope_sql(scopes: dict, scope: str) -> tuple[list[str], str]:
+    """WHERE clauses and rank expression for a scope. The plain @@ on the
+    indexed column narrows candidates; ts_filter then keeps only the weights
+    that belong to the scope."""
+    column, weights = scopes.get(scope, scopes['all'])
+    where = [f"{column} @@ {_PG_TSQUERY}"]
+    rank_vector = column
+    if weights:
+        rank_vector = f"ts_filter({column}, '{weights}')"
+        where.append(f"{rank_vector} @@ {_PG_TSQUERY}")
+    return where, f"ts_rank({rank_vector}, {_PG_TSQUERY})"
+
+
+def _node_text_condition(pattern: str, scope: str):
+    """ILIKE equivalent of the scopes, for SQLite and facet counts."""
+    from app.models.node import Node, NodeNote, NodeAttachment
+    description = sa.or_(
+        Node.title.ilike(pattern),
+        Node.ref_code.ilike(pattern),
+        Node.description.ilike(pattern),
+        Node.scope_and_content.ilike(pattern),
+        Node.arrangement.ilike(pattern),
+        sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
+    )
+    notes = sa.exists(
+        sa.select(NodeNote.id).where(
+            NodeNote.node_id == Node.id,
+            NodeNote.content.ilike(pattern),
+        )
+    )
+    attachments = sa.exists(
+        sa.select(NodeAttachment.id).where(
+            NodeAttachment.node_id == Node.id,
+            NodeAttachment.extracted_text.ilike(pattern),
+        )
+    )
+    if scope == 'description':
+        return description
+    if scope == 'notes':
+        return notes
+    if scope == 'attachments':
+        return attachments
+    return sa.or_(description, notes)
+
+
+def _agent_text_condition(pattern: str, scope: str):
+    from app.models.agent import Agent, AgentIdentifier, AgentNameForm, AgentNote
+    description = sa.or_(
+        Agent.name.ilike(pattern),
+        Agent.authorized_form.ilike(pattern),
+        Agent.description.ilike(pattern),
+        sa.exists(
+            sa.select(AgentIdentifier.id).where(
+                AgentIdentifier.agent_id == Agent.id,
+                AgentIdentifier.value.ilike(pattern),
+            )
+        ),
+        sa.exists(
+            sa.select(AgentNameForm.id).where(
+                AgentNameForm.agent_id == Agent.id,
+                AgentNameForm.name.ilike(pattern),
+            )
+        ),
+    )
+    notes = sa.exists(
+        sa.select(AgentNote.id).where(
+            AgentNote.agent_id == Agent.id,
+            AgentNote.content.ilike(pattern),
+        )
+    )
+    if scope == 'description':
+        return description
+    if scope == 'notes':
+        return notes
+    if scope == 'attachments':
+        return sa.false()
+    return sa.or_(description, notes)
 
 
 def _enum_variants(enum_cls, raw) -> list[str]:
@@ -164,10 +272,10 @@ def _pg_node_query(
     where = ["n.institution_id = :institution_id"]
     params: dict = {'institution_id': institution_id, 'limit': limit, 'offset': offset}
 
+    rank_sql = "0.0"
     if has_q:
-        where.append(
-            "n.search_vector @@ (plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q))"
-        )
+        scope_where, rank_sql = _pg_scope_sql(_PG_NODE_SCOPES, search_scope(filters))
+        where.extend(scope_where)
         params['q'] = q
 
     if filters.get('status'):
@@ -259,15 +367,7 @@ def _pg_node_query(
 
     where_sql = ' AND '.join(where)
 
-    if has_q:
-        rank_sql = """ts_rank(
-                n.search_vector,
-                plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q)
-            )"""
-        order_sql = "rank DESC, n.title"
-    else:
-        rank_sql = "0.0"
-        order_sql = "n.ref_code"
+    order_sql = "rank DESC, n.title" if has_q else "n.ref_code"
 
     sql = sa.text(f"""
         SELECT
@@ -311,16 +411,7 @@ def _sqlite_node_query(
 
     query = Node.query.filter(Node.institution_id == institution_id)
     if has_q:
-        query = query.filter(
-            sa.or_(
-                Node.title.ilike(pattern),
-                Node.ref_code.ilike(pattern),
-                Node.description.ilike(pattern),
-                Node.scope_and_content.ilike(pattern),
-                Node.arrangement.ilike(pattern),
-                sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
-            )
-        )
+        query = query.filter(_node_text_condition(pattern, search_scope(filters)))
 
     if filters.get('status'):
         query = query.filter(Node.status == filters['status'])
@@ -483,15 +574,34 @@ def _sqlite_node_query(
 
 # ─── Agent search ─────────────────────────────────────────────────────
 
+OTHER_NAMES_IN_RESULT = 3
+
+
+def _attach_other_names(results: list[dict]) -> list[dict]:
+    from app.models.agent import AgentNameForm
+    ids = [r['id'] for r in results]
+    names: dict[int, list[str]] = {}
+    if ids:
+        rows = db.session.execute(
+            sa.select(AgentNameForm.agent_id, AgentNameForm.name)
+            .where(AgentNameForm.agent_id.in_(ids))
+            .order_by(AgentNameForm.agent_id, AgentNameForm.id)
+        ).all()
+        for agent_id, name in rows:
+            names.setdefault(agent_id, []).append(name)
+    for r in results:
+        all_names = names.get(r['id'], [])
+        r['other_names'] = all_names[:OTHER_NAMES_IN_RESULT]
+        r['other_names_total'] = len(all_names)
+    return results
+
 def _pg_agent_query(
     q: str, institution_id: int,
     filters: dict, limit: int, offset: int
 ) -> tuple[list[dict], int]:
     from app.models.agent import AgentType
-    where = [
-        "a.institution_id = :institution_id",
-        "a.search_vector @@ (plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q))",
-    ]
+    scope_where, rank_sql = _pg_scope_sql(_PG_AGENT_SCOPES, search_scope(filters))
+    where = ["a.institution_id = :institution_id", *scope_where]
     params: dict = {'q': q, 'institution_id': institution_id,
                     'limit': limit, 'offset': offset}
 
@@ -503,10 +613,7 @@ def _pg_agent_query(
     sql = sa.text(f"""
         SELECT
             a.id, a.name, a.agent_type, a.authorized_form, a.date_from, a.date_to,
-            ts_rank(
-                a.search_vector,
-                plainto_tsquery('swedish', :q) || plainto_tsquery('english', :q)
-            ) AS rank,
+            {rank_sql} AS rank,
             COUNT(*) OVER() AS total_count
         FROM agents a
         WHERE {where_sql}
@@ -517,7 +624,7 @@ def _pg_agent_query(
     rows = list(db.session.execute(sql, params))
     total = rows[0].total_count if rows else 0
 
-    return [
+    return _attach_other_names([
         {
             'type': 'agent',
             'id': row.id,
@@ -529,29 +636,19 @@ def _pg_agent_query(
             'rank': float(row.rank),
         }
         for row in rows
-    ], int(total)
+    ]), int(total)
 
 
 def _sqlite_agent_query(
     q: str, institution_id: int,
     filters: dict, limit: int, offset: int
 ) -> tuple[list[dict], int]:
-    from app.models.agent import Agent, AgentIdentifier
+    from app.models.agent import Agent
     pattern = f'%{q}%'
 
     query = Agent.query.filter(
         Agent.institution_id == institution_id,
-        sa.or_(
-            Agent.name.ilike(pattern),
-            Agent.authorized_form.ilike(pattern),
-            Agent.description.ilike(pattern),
-            sa.exists(
-                sa.select(AgentIdentifier.id).where(
-                    AgentIdentifier.agent_id == Agent.id,
-                    AgentIdentifier.value.ilike(pattern),
-                )
-            ),
-        )
+        _agent_text_condition(pattern, search_scope(filters)),
     )
 
     if filters.get('agent_type'):
@@ -563,7 +660,7 @@ def _sqlite_agent_query(
         Agent.name,
     ).limit(limit).offset(offset).all()
 
-    return [
+    return _attach_other_names([
         {
             'type': 'agent',
             'id': a.id,
@@ -575,7 +672,7 @@ def _sqlite_agent_query(
             'rank': 1.0,
         }
         for a in agents
-    ], total
+    ]), total
 
 
 # ─── Facets ───────────────────────────────────────────────────────────
@@ -592,6 +689,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
 
     q = (q or '').strip()
     has_q = _has_query(q)
+    scope = search_scope(filters)
     pattern = f'%{q}%'
     facets: dict = {'agent': [], 'agent_type': [], 'classification': [], 'hierarchy_type': [],
                     'level': [], 'status': []}
@@ -601,16 +699,7 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
     def _node_base(exclude: str = ''):
         query = db.session.query(Node.id).filter(Node.institution_id == institution_id)
         if has_q:
-            query = query.filter(
-                sa.or_(
-                    Node.title.ilike(pattern),
-                    Node.ref_code.ilike(pattern),
-                    Node.description.ilike(pattern),
-                    Node.scope_and_content.ilike(pattern),
-                    Node.arrangement.ilike(pattern),
-                    sa.cast(Node.metadata_spec, sa.Text).ilike(pattern),
-                )
-            )
+            query = query.filter(_node_text_condition(pattern, scope))
         if exclude != 'status' and filters.get('status'):
             query = query.filter(Node.status == filters['status'])
         if exclude != 'level' and filters.get('level'):
@@ -716,13 +805,10 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
             if agent and agent.institution_id == institution_id:
                 facets['agent'].insert(0, {'value': str(agent.id), 'label': agent.name, 'count': 0})
 
-    if has_q:
+    if has_q and scope != 'attachments':
         agent_base = db.session.query(Agent.id).filter(
             Agent.institution_id == institution_id,
-            sa.or_(
-                Agent.name.ilike(pattern),
-                Agent.authorized_form.ilike(pattern),
-            )
+            _agent_text_condition(pattern, scope),
         )
         for atype, count in (
             db.session.query(Agent.agent_type, sa.func.count())
@@ -867,6 +953,8 @@ def search(
     types = types or ['nodes', 'agents']
     if browse:
         types = ['nodes']
+    elif search_scope(filters) == 'attachments' and 'agents' in types:
+        types = [t for t in types if t != 'agents'] or ['nodes']
 
     pg = _is_postgres()
     engine_name = 'postgresql' if pg else 'sqlite'

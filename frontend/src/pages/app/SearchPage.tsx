@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { searchApi, hierarchyApi, savedSearchesApi } from '@/api'
 import { Spinner } from '@/components/ui'
+import ResizablePanels from '@/components/ui/ResizablePanels'
 import styles from './SearchPage.module.css'
 import SearchFacets from './SearchFacets'
 import FileFilters from './FileFilters'
@@ -20,7 +21,7 @@ const AGENT_ICONS: Record<string, typeof User> = {
 }
 const NODE_STATUSES = ['draft', 'published', 'restricted']
 const AGENT_TYPES   = ['person', 'organization', 'family', 'software']
-const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types', 'classification_id', 'hierarchy_type_id', 'agent_id']
+const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types', 'classification_id', 'hierarchy_type_id', 'agent_id', 'scope']
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -75,6 +76,13 @@ function AgentRow({ item, onClick }: { item: any; onClick: () => void }) {
       <div className={styles.resultIconWrap}><Icon size={15} /></div>
       <div className={styles.resultBody}>
         <div className={styles.resultTitle}>{item.name ?? item.authorized_form}</div>
+        {item.other_names?.length > 0 && (
+          <div className={styles.resultAltNames}>
+            {t('search.alsoKnownAs')} {item.other_names.join(' · ')}
+            {item.other_names_total > item.other_names.length &&
+              ` ${t('agents.nameForms.andMore', { count: item.other_names_total - item.other_names.length })}`}
+          </div>
+        )}
         <div className={styles.resultMeta}>
           <span className={styles.resultLevel}>{t(`agents.types.${item.agent_type}`, { defaultValue: item.agent_type })}</span>
           {item.date_from && (
@@ -358,103 +366,111 @@ export default function SearchPage() {
 
       <div className={styles.body}>
 
-        {/* ── Sidebar: filters + saved searches ── */}
-        <aside className={styles.sidebar}>
-          {showFilters && (
-            <div className={styles.filterPanel}>
-              <FilterPanel params={searchParams} setParam={setParam} clearParam={clearParam} />
-            </div>
-          )}
-          <SearchFacets
-            facets={data?.facets}
-            params={searchParams}
-            setParam={setParam}
-            clearParam={clearParam}
-          />
-          {searchParams.get('types') === 'files' && (
-            <FileFilters params={searchParams} setParam={setParam} clearParam={clearParam} />
-          )}
-          <SavedSearchesPanel onLoad={handleLoadSaved} />
-
-        </aside>
-
-        {/* ── Search results ── */}
-        <div className={styles.results}>
-          {canSearch && (
-            <div className={styles.statsBar}>
-              {isFetching ? (
-                <span className={styles.searching}><Spinner size={13} /> {t('search.searching')}</span>
-              ) : data ? (
-                <div className={styles.statsLeft}>
-                  <span className={styles.totalCount}>
-                    {total === 0 ? t('search.noResults') : t('search.resultsCount', { count: total })}
-                    {q && <>{' '}{t('search.for')} <strong>"{q}"</strong></>}
-                  </span>
-                  {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
-                  {data.node_total > 0 && <span className={styles.typeStat}>{t('search.resourcesCount', { count: data.node_total })}</span>}
-                  {data.agent_total > 0 && <span className={styles.typeStat}>{t('search.agentsCount', { count: data.agent_total })}</span>}
-                  {data.file_total > 0 && <span className={styles.typeStat}>{t('search.filesMatchCount', { count: data.file_total })}</span>}
+        {/* ── Sidebar (resizable) + results ── */}
+        <ResizablePanels
+          storageKey="kurbits.search.sidebarWidth"
+          defaultLeftWidth={320}
+          minLeftWidth={240}
+          maxLeftWidth={560}
+          left={
+            <aside className={styles.sidebar}>
+              {showFilters && (
+                <div className={styles.filterPanel}>
+                  <FilterPanel params={searchParams} setParam={setParam} clearParam={clearParam} />
                 </div>
-              ) : null}
-            </div>
-          )}
+              )}
+              <SearchFacets
+                facets={data?.facets}
+                params={searchParams}
+                setParam={setParam}
+                clearParam={clearParam}
+              />
+              {searchParams.get('types') === 'files' && (
+                <FileFilters params={searchParams} setParam={setParam} clearParam={clearParam} />
+              )}
+              <SavedSearchesPanel onLoad={handleLoadSaved} />
 
-          {/* Files-also-match hint (textual modes only) */}
-          {searchParams.get('types') !== 'files' && (data?.file_match_hint ?? 0) > 0 && (
-            <button
-              className={styles.filesHint}
-              onClick={() => setParam('types', 'files')}
-            >
-              {t('search.fileHintRecords', { count: data.file_match_hint })}
-            </button>
-          )}
+            </aside>
+          }
+          right={
+            <div className={styles.results}>
+              {canSearch && (
+                <div className={styles.statsBar}>
+                  {isFetching ? (
+                    <span className={styles.searching}><Spinner size={13} /> {t('search.searching')}</span>
+                  ) : data ? (
+                    <div className={styles.statsLeft}>
+                      <span className={styles.totalCount}>
+                        {total === 0 ? t('search.noResults') : t('search.resultsCount', { count: total })}
+                        {q && <>{' '}{t('search.for')} <strong>"{q}"</strong></>}
+                      </span>
+                      {data.engine && <span className={styles.engineBadge}>{data.engine}</span>}
+                      {data.node_total > 0 && <span className={styles.typeStat}>{t('search.resourcesCount', { count: data.node_total })}</span>}
+                      {data.agent_total > 0 && <span className={styles.typeStat}>{t('search.agentsCount', { count: data.agent_total })}</span>}
+                      {data.file_total > 0 && <span className={styles.typeStat}>{t('search.filesMatchCount', { count: data.file_total })}</span>}
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
-          {!q && !browse && (
-            <div className={styles.emptyState}>
-              <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
-              <p>{t('search.startPrompt')}</p>
-              <p className={styles.emptyHint}>{t('search.startHint')}</p>
-            </div>
-          )}
+              {/* Files-also-match hint (textual modes only) */}
+              {searchParams.get('types') !== 'files' && (data?.file_match_hint ?? 0) > 0 && (
+                <button
+                  className={styles.filesHint}
+                  onClick={() => setParam('types', 'files')}
+                >
+                  {t('search.fileHintRecords', { count: data.file_match_hint })}
+                </button>
+              )}
 
-          {q.length === 1 && !browse && <div className={styles.emptyState}><p className={styles.emptyHint}>{t('search.typeMoreChars')}</p></div>}
+              {!q && !browse && (
+                <div className={styles.emptyState}>
+                  <Search size={40} style={{ opacity: 0.15, marginBottom: 'var(--space-4)' }} />
+                  <p>{t('search.startPrompt')}</p>
+                  <p className={styles.emptyHint}>{t('search.startHint')}</p>
+                </div>
+              )}
 
-          {canSearch && !isFetching && results.length === 0 && (data?.files?.length ?? 0) === 0 && (
-            <div className={styles.emptyState}>
-              {q ? (
-                <>
-                  <p>{t('search.noResultsForPrefix')} <strong>"{q}"</strong></p>
-                  <p className={styles.emptyHint}>{t('search.tryDifferentKeywords')}</p>
-                </>
+              {q.length === 1 && !browse && <div className={styles.emptyState}><p className={styles.emptyHint}>{t('search.typeMoreChars')}</p></div>}
+
+              {canSearch && !isFetching && results.length === 0 && (data?.files?.length ?? 0) === 0 && (
+                <div className={styles.emptyState}>
+                  {q ? (
+                    <>
+                      <p>{t('search.noResultsForPrefix')} <strong>"{q}"</strong></p>
+                      <p className={styles.emptyHint}>{t('search.tryDifferentKeywords')}</p>
+                    </>
+                  ) : (
+                    <p>{t('search.noResults')}</p>
+                  )}
+                </div>
+              )}
+
+              {searchParams.get('types') === 'files' ? (
+                (data?.files?.length ?? 0) > 0 && (
+                  <div className={styles.resultList}>
+                    <FileResults groups={data.files} />
+                  </div>
+                )
               ) : (
-                <p>{t('search.noResults')}</p>
+                results.length > 0 && (
+                  <div className={styles.resultList}>
+                    {results.map((item: any) =>
+                      item.type === 'node'
+                        ? <NodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                        : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
+                    )}
+                  </div>
+                )
+              )}
+
+              {pages > 1 && (
+                <Pagination page={page} pages={pages} total={total} perPage={perPage}
+                  onPage={p => { const next = new URLSearchParams(searchParams); next.set('page', String(p)); setSearchParams(next) }} />
               )}
             </div>
-          )}
-
-          {searchParams.get('types') === 'files' ? (
-            (data?.files?.length ?? 0) > 0 && (
-              <div className={styles.resultList}>
-                <FileResults groups={data.files} />
-              </div>
-            )
-          ) : (
-            results.length > 0 && (
-              <div className={styles.resultList}>
-                {results.map((item: any) =>
-                  item.type === 'node'
-                    ? <NodeRow  key={`n${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                    : <AgentRow key={`a${item.id}`} item={item} onClick={() => handleResultClick(item)} />
-                )}
-              </div>
-            )
-          )}
-
-          {pages > 1 && (
-            <Pagination page={page} pages={pages} total={total} perPage={perPage}
-              onPage={p => { const next = new URLSearchParams(searchParams); next.set('page', String(p)); setSearchParams(next) }} />
-          )}
-        </div>
+          }
+        />
 
       </div>
     </div>

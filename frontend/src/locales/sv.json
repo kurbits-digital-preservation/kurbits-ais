@@ -405,6 +405,12 @@
     "integration": "Vokabulär"
   },
   "admin": {
+    "nameForms": {
+      "title": "Namnformstyper",
+      "desc": "Typer av alternativa namn för agenter, t.ex. förkortning eller tidigare namn.",
+      "deleteConfirm": "Ta bort namnformstypen?",
+      "saveFailed": "Kunde inte spara namnformstypen"
+    },
     "roles": {
       "admin": "Admin",
       "archivist": "Arkivarie",
@@ -1156,6 +1162,7 @@
     }
   },
   "search": {
+    "alsoKnownAs": "Also:",
     "resource": "Resurs",
     "agent": "Agent",
     "dateRange": "Datumintervall",
@@ -1198,6 +1205,11 @@
       "classification": "Klassificering",
       "hierarchy": "Hierarki",
       "level": "Nivå",
+      "scope": "Sök i",
+      "scopeAll": "Allt",
+      "scopeDescription": "Beskrivning",
+      "scopeNotes": "Anteckningar",
+      "scopeAttachments": "Bilagetext",
       "clear": "rensa",
       "agent": "Agent",
       "agentPlaceholder": "Sök agent…",
@@ -1221,6 +1233,20 @@
     }
   },
   "agents": {
+    "nameForms": {
+      "title": "Namnformer",
+      "add": "Lägg till namnform",
+      "type": "Typ",
+      "selectType": "Välj typ…",
+      "noTypesHint": "Inga namnformstyper ännu. Lägg till dem under Administration → Vokabulärer.",
+      "name": "Namn",
+      "dateFrom": "Använt från",
+      "dateTo": "Använt till",
+      "noneYet": "Inga alternativa namnformer ännu.",
+      "deleteConfirm": "Ta bort namnformen \"{{name}}\"?",
+      "saveFailed": "Kunde inte spara namnformen",
+      "andMore": "och {{count}} till"
+    },
     "list": {
       "noneFound": "Inga agenter hittades.",
       "countLabel_one": "{{count}} agent",

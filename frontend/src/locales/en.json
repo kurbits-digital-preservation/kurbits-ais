@@ -404,6 +404,12 @@
     "integration": "Vocabulary"
   },
   "admin": {
+          "nameForms": {
+        "title": "Name form types",
+        "desc": "Kinds of alternative names for agents, e.g. abbreviation or former name.",
+        "deleteConfirm": "Delete this name form type?",
+        "saveFailed": "Could not save the name form type"
+      },
     "roles": {
       "admin": "Admin",
       "archivist": "Archivist",
@@ -1155,6 +1161,7 @@
     }
   },
   "search": {
+    "alsoKnownAs": "Även:",
     "resource": "Resource",
     "agent": "Agent",
     "dateRange": "Date range",
@@ -1197,6 +1204,11 @@
       "classification": "Classification",
       "hierarchy": "Hierarchy",
       "level": "Level",
+            "scope": "Search in",
+      "scopeAll": "Everything",
+      "scopeDescription": "Description",
+      "scopeNotes": "Notes",
+      "scopeAttachments": "Attachment text",
       "clear": "clear",
       "agent": "Agent",
       "agentPlaceholder": "Find agent…",
@@ -1220,6 +1232,20 @@
     }
   },
   "agents": {
+    "nameForms": {
+      "title": "Name forms",
+      "add": "Add name form",
+      "type": "Type",
+      "selectType": "Select type…",
+      "noTypesHint": "No name form types yet. Add them under Administration → Vocabularies.",
+      "name": "Name",
+      "dateFrom": "Used from",
+      "dateTo": "Used to",
+      "noneYet": "No alternative name forms yet.",
+      "deleteConfirm": "Delete the name form \"{{name}}\"?",
+      "saveFailed": "Could not save the name form",
+      "andMore": "and {{count}} more"
+    },
     "list": {
       "noneFound": "No agents found.",
       "countLabel_one": "{{count}} agent",

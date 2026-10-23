@@ -15,7 +15,7 @@ from app.api.v1.agents.serializers import (
 from app.api.v1.nodes.serializers import serialize_node_stub
 from app.api.v1.nodes.routes import MIME_MAP, _allowed_file
 from app.extensions import db
-from app.models import Agent, AgentType, AgentRelationType, AgentNodeRelationType, AgentNote
+from app.models import Agent, AgentType, AgentRelationType, AgentNodeRelationType, AgentNote, AgentNameForm, AgentNameFormType
 from app.models.agent import agent_node_association, AgentIdentifier, AgentAttachment
 from app.models.node import IdentifierScheme, NodeIdentifier, Node
 from app.eaccpf.exporter import export_agent_eac
@@ -24,7 +24,7 @@ from app.models.agent import (
     agent_node_association, agent_to_agent_association,
 )
 from app.models.geo import AgentPlace, agent_tags_table
-
+import sqlalchemy.orm as so
 BUILTIN_SCHEME_DEFAULTS = {
     'wikidata': {'name': 'Wikidata', 'url_template': 'https://www.wikidata.org/wiki/{value}'},
     'viaf':     {'name': 'VIAF',     'url_template': 'https://viaf.org/viaf/{value}'},
@@ -55,13 +55,18 @@ def list_agents():
     query = sa.select(Agent).where(Agent.institution_id == institution_id)
 
     if search:
+        pattern = f'%{search}%'
         query = query.where(
             sa.or_(
-                Agent.name.ilike(f'%{search}%'),
-                Agent.authorized_form.ilike(f'%{search}%'),
+                Agent.name.ilike(pattern),
+                Agent.authorized_form.ilike(pattern),
                 sa.exists(sa.select(AgentIdentifier.id).where(
                     AgentIdentifier.agent_id == Agent.id,
-                    AgentIdentifier.value.ilike(f'%{search}%'),
+                    AgentIdentifier.value.ilike(pattern),
+                )),
+                sa.exists(sa.select(AgentNameForm.id).where(
+                    AgentNameForm.agent_id == Agent.id,
+                    AgentNameForm.name.ilike(pattern),
                 )),
             )
         )
@@ -88,7 +93,7 @@ def list_agents():
     if date_to:
         query = query.where(sa.or_(Agent.date_to <= date_to, Agent.date_to.is_(None)))
 
-    query = query.order_by(Agent.name)
+    query = query.order_by(Agent.name).options(so.selectinload(Agent.name_forms))
     paginated = db.paginate(query, page=page, per_page=per_page, error_out=False)
 
     return success(
@@ -132,6 +137,9 @@ def get_agent_counts(agent_id):
 
     return success({
         'relations': count(sa.select(sa.func.count()).select_from(related_agents)),
+        'name_forms': count(
+            sa.select(sa.func.count(AgentNameForm.id)).where(AgentNameForm.agent_id == agent_id)
+        ),
         'identifiers': count(
             sa.select(sa.func.count(AgentIdentifier.id)).where(AgentIdentifier.agent_id == agent_id)
         ),
@@ -1011,3 +1019,209 @@ def delete_agent_attachment(agent_id, attachment_id):
     db.session.delete(attachment)
     db.session.commit()
     return success({'message': 'Attachment deleted'})
+
+# ─── Name form types (vocabulary) ─────────────────────────────────────
+
+def _clean_str(value, max_len: int):
+    if value is None:
+        return None
+    value = str(value).strip()
+    return value[:max_len] or None
+
+
+def _get_name_form_type(type_id, institution_id):
+    try:
+        type_id = int(type_id)
+    except (TypeError, ValueError):
+        return None
+    return AgentNameFormType.query.filter_by(id=type_id, institution_id=institution_id).first()
+
+
+@bp.route('/agents/name-form-types', methods=['GET'])
+@login_required
+def list_name_form_types():
+    institution_id = current_user.active_institution_id
+    types = (
+        AgentNameFormType.query
+        .filter_by(institution_id=institution_id)
+        .order_by(AgentNameFormType.name)
+        .all()
+    )
+    usage = dict(
+        db.session.execute(
+            sa.select(AgentNameForm.type_id, sa.func.count(AgentNameForm.id))
+            .where(AgentNameForm.type_id.in_([t.id for t in types]))
+            .group_by(AgentNameForm.type_id)
+        ).all()
+    ) if types else {}
+    return success([{**t.to_dict(), 'usage_count': usage.get(t.id, 0)} for t in types])
+
+
+@bp.route('/agents/name-form-types', methods=['POST'])
+@login_required
+@require_write
+def create_name_form_type():
+    institution_id = current_user.active_institution_id
+    data = request.get_json(silent=True) or {}
+
+    name = _clean_str(data.get('name'), 100)
+    if not name:
+        return error('name is required', 400)
+
+    exists = AgentNameFormType.query.filter(
+        AgentNameFormType.institution_id == institution_id,
+        sa.func.lower(AgentNameFormType.name) == name.lower(),
+    ).first()
+    if exists:
+        return error('A name form type with this name already exists', 409)
+
+    rt = AgentNameFormType(
+        institution_id=institution_id,
+        name=name,
+        description=_clean_str(data.get('description'), 300),
+    )
+    db.session.add(rt)
+    db.session.commit()
+    return success({**rt.to_dict(), 'usage_count': 0}, 201)
+
+
+@bp.route('/agents/name-form-types/<int:type_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_name_form_type(type_id):
+    institution_id = current_user.active_institution_id
+    rt = _get_name_form_type(type_id, institution_id)
+    if not rt:
+        return error('Name form type not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        name = _clean_str(data.get('name'), 100)
+        if not name:
+            return error('name cannot be empty', 400)
+        clash = AgentNameFormType.query.filter(
+            AgentNameFormType.institution_id == institution_id,
+            sa.func.lower(AgentNameFormType.name) == name.lower(),
+            AgentNameFormType.id != rt.id,
+        ).first()
+        if clash:
+            return error('A name form type with this name already exists', 409)
+        rt.name = name
+    if 'description' in data:
+        rt.description = _clean_str(data.get('description'), 300)
+
+    db.session.commit()
+    usage = AgentNameForm.query.filter_by(type_id=rt.id).count()
+    return success({**rt.to_dict(), 'usage_count': usage})
+
+
+@bp.route('/agents/name-form-types/<int:type_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_name_form_type(type_id):
+    institution_id = current_user.active_institution_id
+    rt = _get_name_form_type(type_id, institution_id)
+    if not rt:
+        return error('Name form type not found', 404)
+
+    usage = AgentNameForm.query.filter_by(type_id=rt.id).count()
+    if usage:
+        return error(f'Type is used by {usage} name form(s) and cannot be deleted', 409)
+
+    db.session.delete(rt)
+    db.session.commit()
+    return success({'message': 'Name form type deleted'})
+
+
+# ─── Agent name forms ─────────────────────────────────────────────────
+
+@bp.route('/agents/<int:agent_id>/name-forms', methods=['GET'])
+@login_required
+def list_agent_name_forms(agent_id):
+    institution_id = current_user.active_institution_id
+    agent = _get_agent_or_404(agent_id, institution_id)
+    if not agent:
+        return error('Agent not found', 404)
+    return success([nf.to_dict() for nf in agent.name_forms])
+
+
+@bp.route('/agents/<int:agent_id>/name-forms', methods=['POST'])
+@login_required
+@require_write
+def create_agent_name_form(agent_id):
+    institution_id = current_user.active_institution_id
+    agent = _get_agent_or_404(agent_id, institution_id)
+    if not agent:
+        return error('Agent not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    name = _clean_str(data.get('name'), 500)
+    if not name:
+        return error('name is required', 400)
+
+    rt = _get_name_form_type(data.get('type_id'), institution_id)
+    if not rt:
+        return error('type_id is missing or invalid', 400)
+
+    nf = AgentNameForm(
+        agent_id=agent.id,
+        type_id=rt.id,
+        name=name,
+        date_from=_clean_str(data.get('date_from'), 50),
+        date_to=_clean_str(data.get('date_to'), 50),
+        created_by_id=current_user.id,
+    )
+    db.session.add(nf)
+    db.session.commit()
+    return success(nf.to_dict(), 201)
+
+
+@bp.route('/agents/<int:agent_id>/name-forms/<int:form_id>', methods=['PATCH'])
+@login_required
+@require_write
+def update_agent_name_form(agent_id, form_id):
+    institution_id = current_user.active_institution_id
+    agent = _get_agent_or_404(agent_id, institution_id)
+    if not agent:
+        return error('Agent not found', 404)
+
+    nf = AgentNameForm.query.filter_by(id=form_id, agent_id=agent.id).first()
+    if not nf:
+        return error('Name form not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    if 'name' in data:
+        name = _clean_str(data.get('name'), 500)
+        if not name:
+            return error('name cannot be empty', 400)
+        nf.name = name
+    if 'type_id' in data:
+        rt = _get_name_form_type(data.get('type_id'), institution_id)
+        if not rt:
+            return error('type_id is invalid', 400)
+        nf.type_id = rt.id
+    if 'date_from' in data:
+        nf.date_from = _clean_str(data.get('date_from'), 50)
+    if 'date_to' in data:
+        nf.date_to = _clean_str(data.get('date_to'), 50)
+
+    db.session.commit()
+    return success(nf.to_dict())
+
+
+@bp.route('/agents/<int:agent_id>/name-forms/<int:form_id>', methods=['DELETE'])
+@login_required
+@require_write
+def delete_agent_name_form(agent_id, form_id):
+    institution_id = current_user.active_institution_id
+    agent = _get_agent_or_404(agent_id, institution_id)
+    if not agent:
+        return error('Agent not found', 404)
+
+    nf = AgentNameForm.query.filter_by(id=form_id, agent_id=agent.id).first()
+    if not nf:
+        return error('Name form not found', 404)
+
+    db.session.delete(nf)
+    db.session.commit()
+    return success({'message': 'Name form deleted'})
