@@ -90,17 +90,21 @@ def export_agent_eac(agent, institution=None) -> bytes:
     _sub(name_entry, 'part', getattr(agent, 'authorized_form', None) or getattr(agent, 'name', ''))
     _sub(name_entry, 'authorizedForm', 'kurbits')
 
-    # parallel / other name forms, if the model has them
-    for parallel in (getattr(agent, 'parallel_forms', None) or []):
-        if parallel:
-            pe = _sub(identity, 'nameEntry')
-            _sub(pe, 'part', parallel)
-            _sub(pe, 'alternativeForm', 'parallel')
-    for other in (getattr(agent, 'other_forms', None) or []):
-        if other:
-            oe = _sub(identity, 'nameEntry')
-            _sub(oe, 'part', other)
-            _sub(oe, 'alternativeForm', 'other')
+    # alternative name forms — the type travels as @localType
+    for form in (getattr(agent, 'name_forms', None) or []):
+        if not form.name:
+            continue
+        attrs = {'localType': form.type.name} if form.type else {}
+        fe = _sub(identity, 'nameEntry', **attrs)
+        _sub(fe, 'part', form.name)
+        if form.date_from or form.date_to:
+            use_dates = _sub(fe, 'useDates')
+            drange = _sub(use_dates, 'dateRange')
+            if form.date_from:
+                _sub(drange, 'fromDate', str(form.date_from), standardDate=str(form.date_from))
+            if form.date_to:
+                _sub(drange, 'toDate', str(form.date_to), standardDate=str(form.date_to))
+        _sub(fe, 'alternativeForm', 'kurbits')
 
     # description
     description = _sub(cpf, 'description')

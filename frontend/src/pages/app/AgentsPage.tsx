@@ -5,7 +5,7 @@ import {
   Plus, Users, User, Building2, UsersRound, Bot,
   Pencil, Trash2, Link, FileText, StickyNote,
   X, Save, ExternalLink, Globe, Upload, Check, AlertCircle,
-  MapPin, Tag as Tag2, Search, Download, Fingerprint, Paperclip
+  MapPin, Tag as Tag2, Search, Download, Fingerprint, Paperclip, Signature
 } from 'lucide-react'
 import { agentsApi, agentsImportApi, nodesApi} from '@/api'
 import PlacesPanel from '@/components/geo/PlacesPanel'
@@ -14,6 +14,7 @@ import {
   PageShell, SidebarPanel, EmptyState, Tabs,
   FieldList, SearchInput, Spinner, TypePill
 } from '@/components/ui'
+import type { TabDef } from '@/components/ui'
 import type { AgentDetail, AgentStub, AgentType } from '@/types'
 import styles from './AgentsPage.module.css'
 import AuthorityLookup from '@/components/ui/AuthorityLookup'
@@ -21,6 +22,7 @@ import type { AuthorityResult } from '@/components/ui/AuthorityLookup'
 import BookmarkButton from '@/components/layout/BookmarkButton'
 import AgentIdentifiersTab from '@/components/agent/AgentIdentifiersTab'
 import AgentAttachmentsTab from '@/components/agent/AgentAttachmentsTab'
+import AgentNameFormsTab from '@/components/agent/AgentNameFormsTab'
 import { useTranslation } from 'react-i18next'
 
 // ─── Constants ───────────────────────────────────────────────────────
@@ -45,7 +47,10 @@ function AgentListItem({
   isSelected: boolean
   onClick: () => void
 }) {
+  const { t } = useTranslation()
   const Icon = AGENT_TYPE_ICONS[agent.agent_type]
+  const otherNames = agent.other_names ?? []
+  const hiddenCount = (agent.other_names_total ?? otherNames.length) - otherNames.length
   return (
     <div
       className={`${styles.listItem} ${isSelected ? styles.listItemSelected : ''}`}
@@ -56,6 +61,12 @@ function AgentListItem({
       </div>
       <div className={styles.listItemBody}>
         <span className={styles.listItemName}>{agent.name}</span>
+        {otherNames.length > 0 && (
+          <span className={styles.listItemOtherNames} title={otherNames.join(' · ')}>
+            {otherNames.join(' · ')}
+            {hiddenCount > 0 && ` ${t('agents.nameForms.andMore', { count: hiddenCount })}`}
+          </span>
+        )}
         <div className={styles.listItemMeta}>
           <TypePill type={agent.agent_type} />
           {(agent.date_from || agent.date_to) && (
@@ -648,6 +659,11 @@ function AgentDetailPanel({
     queryFn: () => agentsApi.get(agentId).then(r => r.data.data),
   })
 
+  const { data: counts } = useQuery({
+    queryKey: ['agent-counts', agentId],
+    queryFn: () => agentsApi.counts(agentId).then(r => r.data.data),
+  })
+
   const deleteMutation = useMutation({
     mutationFn: () => agentsApi.delete(agentId),
     onSuccess: () => {
@@ -663,15 +679,16 @@ function AgentDetailPanel({
 
   const Icon = AGENT_TYPE_ICONS[agent.agent_type]
 
-  const tabs = [
+  const tabs: TabDef[] = [
     { key: 'details',     icon: <FileText size={13} />,    label: t('resources.tabs.details') },
-    { key: 'relations',   icon: <Link size={13} />,         label: `${t('agents.detail.tabs.relations')}${agent.relations.length ? ` (${agent.relations.length})` : ''}` },
-    { key: 'identifiers', icon: <Fingerprint size={13} />,  label: `${t('resources.tabs.identifiers')}${(agent as any).identifiers?.length ? ` (${(agent as any).identifiers.length})` : ''}` },
-    { key: 'resources',   icon: <Globe size={13} />,        label: `${t('agents.detail.tabs.resources')}${agent.node_count ? ` (${agent.node_count})` : ''}` },
-    { key: 'places',      icon: <MapPin size={13} />,       label: t('resources.tabs.places') },
-    { key: 'tags',        icon: <Tag2 size={13} />,         label: t('resources.tabs.tags') },
-    { key: 'notes',       icon: <StickyNote size={13} />,   label: `${t('resources.tabs.notes')}${agent.notes.length ? ` (${agent.notes.length})` : ''}` },
-    { key: 'files',       icon: <Paperclip size={13} />,    label: `${t('resources.tabs.files')}${(agent as any).attachments?.length ? ` (${(agent as any).attachments.length})` : ''}` },
+    { key: 'nameForms',   icon: <Signature size={13} />,   label: t('agents.nameForms.title'),       count: counts?.name_forms },
+    { key: 'relations',   icon: <Link size={13} />,        label: t('agents.detail.tabs.relations'), count: counts?.relations },
+    { key: 'identifiers', icon: <Fingerprint size={13} />, label: t('resources.tabs.identifiers'),   count: counts?.identifiers },
+    { key: 'resources',   icon: <Globe size={13} />,       label: t('agents.detail.tabs.resources'), count: counts?.resources },
+    { key: 'places',      icon: <MapPin size={13} />,      label: t('resources.tabs.places'),        count: counts?.places },
+    { key: 'tags',        icon: <Tag2 size={13} />,        label: t('resources.tabs.tags'),          count: counts?.tags },
+    { key: 'notes',       icon: <StickyNote size={13} />,  label: t('resources.tabs.notes'),         count: counts?.notes },
+    { key: 'files',       icon: <Paperclip size={13} />,   label: t('resources.tabs.files'),         count: counts?.attachments },
   ]
 
   return (
@@ -725,6 +742,7 @@ function AgentDetailPanel({
 
       <div className={styles.detailBody}>
         {tab === 'details'     && <DetailsTab agent={agent} />}
+        {tab === 'nameForms'   && <AgentNameFormsTab agentId={agent.id} />}
         {tab === 'relations'   && <RelationsTab agent={agent} />}
         {tab === 'identifiers' && <AgentIdentifiersTab agentId={agent.id} />}
         {tab === 'resources'   && <LinkedResourcesTab agent={agent} />}

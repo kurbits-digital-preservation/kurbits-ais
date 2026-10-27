@@ -23,6 +23,8 @@ from app.models.agent import (
     AgentRelationType,
     AgentNodeRelationType,
     AgentNote,
+    AgentNameForm,
+    AgentNameFormType,
     agent_node_association,
     agent_to_agent_association,
 )
@@ -67,6 +69,8 @@ __all__ = [
     'AgentRelationType',
     'AgentNodeRelationType',
     'AgentNote',
+    'AgentNameForm'
+    'AgentNameFormType',
     'agent_node_association',
     'agent_to_agent_association',
     'Location',

@@ -481,7 +481,7 @@ def _seed_classification(institution) -> None:
 
 def _seed_vocabularies(institution, language: str = 'en') -> None:
     """Seed default relation type vocabularies for an institution."""
-    from app.models.agent import AgentRelationType, AgentNodeRelationType
+    from app.models.agent import AgentRelationType, AgentNodeRelationType, AgentNameFormType
     from app.models.node import NodeRelationType
 
     institution_id = institution.id
@@ -695,6 +695,34 @@ def _seed_vocabularies(institution, language: str = 'en') -> None:
                 name=name,
                 label=label,
                 sort_order=sort_order,
+            ))
+
+    # ── Agent name form types ─────────────────────────────────────────────
+    name_form_types = {
+        'en': [
+            ('abbreviation',  'Abbreviated form of the name'),
+            ('former name',   'Name used before the current one'),
+            ('later name',    'Name used after this form'),
+            ('parallel name', 'The name in another language or script'),
+            ('variant form',  'Other variant of the name'),
+        ],
+        'sv': [
+            ('förkortning',   'Förkortad form av namnet'),
+            ('tidigare namn', 'Namn som användes före det nuvarande'),
+            ('senare namn',   'Namn som användes efter denna form'),
+            ('parallellnamn', 'Namnet på ett annat språk eller i en annan skrift'),
+            ('variantform',   'Annan variant av namnet'),
+        ],
+    }
+    for name, description in name_form_types.get(language, name_form_types['en']):
+        existing = AgentNameFormType.query.filter_by(
+            institution_id=institution_id, name=name
+        ).first()
+        if not existing:
+            db.session.add(AgentNameFormType(
+                institution_id=institution_id,
+                name=name,
+                description=description,
             ))
 
     db.session.commit()

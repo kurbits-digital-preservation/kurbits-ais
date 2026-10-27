@@ -35,6 +35,7 @@ from app.api.v1.nodes.serializers import (
 )
 
 from app.services.identifier_minting import MintError, build_context, mint_value, value_in_use
+from app.models.geo import NodePlace, Tag, PlaceType, TagCategory, node_tags_table
 
 def _get_node_or_404(node_id: int, institution_id: int):
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
@@ -59,7 +60,7 @@ def get_tree():
     if not include_drafts:
         query = query.where(Node.status == NodeStatus.PUBLISHED)
 
-    roots = db.session.execute(query.order_by(Node.ref_code)).scalars().all()
+    roots = db.session.execute(query.order_by(*Node.sibling_order())).scalars().all()
     with_children = compute_has_children(roots)
     return success([
         serialize_node_stub(n, has_children=n.id in with_children) for n in roots
@@ -79,12 +80,12 @@ def get_children(node_id):
 
     include_drafts = request.args.get('include_drafts', 'true').lower() == 'true'
     page = request.args.get('page', 1, type=int)
-    per_page = min(request.args.get('per_page', 200, type=int), 500)
+    per_page = min(request.args.get('per_page', 200, type=int), 1000)
 
     children_q = sa.select(Node).where(Node.parent_id == node.id)
     if not include_drafts:
         children_q = children_q.where(Node.status == NodeStatus.PUBLISHED)
-    children_q = children_q.order_by(Node.local_ref)
+    children_q = children_q.order_by(*Node.sibling_order())
 
     paginated = db.paginate(children_q, page=page, per_page=per_page, error_out=False)
     with_children = compute_has_children(paginated.items)
@@ -97,8 +98,82 @@ def get_children(node_id):
             'per_page': per_page,
             'total': paginated.total,
             'pages': paginated.pages,
+            'manually_ordered': any(c.sort_order is not None for c in paginated.items),
         }
     )
+
+
+@bp.route('/nodes/<int:node_id>/children/order', methods=['PUT'])
+@login_required
+@require_write
+def reorder_children(node_id):
+    institution_id = current_user.active_institution_id
+    parent = _get_node_or_404(node_id, institution_id)
+    if not parent:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    node_ids = data.get('node_ids')
+    if not isinstance(node_ids, list) or not all(
+        isinstance(i, int) and not isinstance(i, bool) for i in node_ids
+    ):
+        return error('node_ids must be a list of integers', 400)
+
+    children = db.session.execute(
+        sa.select(Node).where(Node.parent_id == parent.id).order_by(*Node.sibling_order())
+    ).scalars().all()
+    by_id = {c.id: c for c in children}
+
+    if len(node_ids) != len(set(node_ids)) or set(node_ids) != set(by_id):
+        return error('node_ids must contain every child of this node exactly once', 422)
+
+    if [c.id for c in children] != node_ids:
+        for position, child_id in enumerate(node_ids, start=1):
+            by_id[child_id].sort_order = position
+
+        snapshot = parent.to_dict()
+        parent.record_change(
+            change_type='reorder',
+            description=f'Reordered {len(node_ids)} children',
+            created_by_id=current_user.id,
+            before_data=snapshot,
+            after_data=snapshot,
+        )
+        db.session.commit()
+
+    ordered = [by_id[i] for i in node_ids]
+    with_children = compute_has_children(ordered)
+    return success([
+        serialize_node_stub(c, has_children=c.id in with_children) for c in ordered
+    ])
+
+
+@bp.route('/nodes/<int:node_id>/children/order', methods=['DELETE'])
+@login_required
+@require_write
+def reset_children_order(node_id):
+    institution_id = current_user.active_institution_id
+    parent = _get_node_or_404(node_id, institution_id)
+    if not parent:
+        return error('Node not found', 404)
+
+    result = db.session.execute(
+        sa.update(Node)
+        .where(Node.parent_id == parent.id, Node.sort_order.isnot(None))
+        .values(sort_order=None)
+    )
+
+    if result.rowcount:
+        snapshot = parent.to_dict()
+        parent.record_change(
+            change_type='reorder',
+            description='Reset children to reference code order',
+            created_by_id=current_user.id,
+            before_data=snapshot,
+            after_data=snapshot,
+        )
+    db.session.commit()
+    return success({'reset': result.rowcount})
 
 
 @bp.route('/nodes', methods=['GET'])
@@ -346,6 +421,57 @@ def get_descendant_count(node_id):
     ids = _collect_subtree_ids(node.id)
     return success({'descendant_count': len(ids) - 1})
 
+@bp.route('/nodes/<int:node_id>/counts', methods=['GET'])
+@login_required
+def get_node_counts(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    def count(stmt) -> int:
+        return db.session.execute(stmt).scalar() or 0
+
+    linked_nodes = sa.union(
+        sa.select(node_association.c.target_id.label('other_id'))
+        .where(node_association.c.source_id == node_id),
+        sa.select(node_association.c.source_id.label('other_id'))
+        .where(node_association.c.target_id == node_id),
+    ).subquery()
+
+    agents = count(
+        sa.select(sa.func.count()).select_from(agent_node_association)
+        .where(agent_node_association.c.node_id == node_id)
+    )
+    nodes = count(sa.select(sa.func.count()).select_from(linked_nodes))
+
+    return success({
+        'relations': agents + nodes,
+        'identifiers': count(
+            sa.select(sa.func.count(NodeIdentifier.id)).where(NodeIdentifier.node_id == node_id)
+        ),
+        'classifications': count(
+            sa.select(sa.func.count()).select_from(classification_node_association)
+            .where(classification_node_association.c.node_id == node_id)
+        ),
+        'places': count(
+            sa.select(sa.func.count(NodePlace.id)).where(NodePlace.node_id == node_id)
+        ),
+        'flags': count(
+            sa.select(sa.func.count(NodeFlag.id))
+            .where(NodeFlag.node_id == node_id, NodeFlag.status != 'resolved')
+        ),
+        'tags': count(
+            sa.select(sa.func.count()).select_from(node_tags_table)
+            .where(node_tags_table.c.node_id == node_id)
+        ),
+        'notes': count(
+            sa.select(sa.func.count(NodeNote.id)).where(NodeNote.node_id == node_id)
+        ),
+        'attachments': count(
+            sa.select(sa.func.count(NodeAttachment.id)).where(NodeAttachment.node_id == node_id)
+        ),
+    })
 
 def _collect_subtree_ids(root_id: int) -> list:
     all_ids = [root_id]
@@ -601,6 +727,25 @@ def revert_node(node_id, change_id):
 
     return success(serialize_node_detail(node))
 
+_BUILTIN_INVERSE_RELATIONS = {
+    'precedes': 'follows',
+    'follows': 'precedes',
+    'is part of': 'has part',
+    'has part': 'is part of',
+}
+
+
+def _inverse_relation_type(institution_id: int, relation_type: str) -> str:
+    rt = NodeRelationType.query.filter_by(
+        institution_id=institution_id, name=relation_type
+    ).first()
+    if rt:
+        if rt.is_symmetric:
+            return relation_type
+        if rt.complementary:
+            return rt.complementary.name
+    return _BUILTIN_INVERSE_RELATIONS.get(relation_type, relation_type)
+
 
 @bp.route('/nodes/<int:node_id>/relations', methods=['GET'])
 @login_required
@@ -626,16 +771,25 @@ def get_relations(node_id):
     seen = set()
 
     for related, rel_type in outgoing:
-        key = (min(node_id, related.id), max(node_id, related.id))
-        if key not in seen:
-            seen.add(key)
-            result.append({**serialize_node_stub(related), 'relation_type': rel_type, 'direction': 'outgoing'})
+        if related.id in seen:
+            continue
+        seen.add(related.id)
+        result.append({
+            **serialize_node_stub(related),
+            'relation_type': rel_type,
+            'direction': 'outgoing',
+        })
 
     for related, rel_type in incoming:
-        key = (min(node_id, related.id), max(node_id, related.id))
-        if key not in seen:
-            seen.add(key)
-            result.append({**serialize_node_stub(related), 'relation_type': rel_type, 'direction': 'incoming'})
+        if related.id in seen:
+            continue
+        seen.add(related.id)
+        result.append({
+            **serialize_node_stub(related),
+            'relation_type': _inverse_relation_type(institution_id, rel_type),
+            'stored_relation_type': rel_type,
+            'direction': 'incoming',
+        })
 
     return success(result)
 
@@ -665,8 +819,12 @@ def add_relation(node_id):
 
     existing = db.session.execute(
         sa.select(node_association).where(
-            node_association.c.source_id == node_id,
-            node_association.c.target_id == target_id,
+            sa.or_(
+                sa.and_(node_association.c.source_id == node_id,
+                        node_association.c.target_id == target_id),
+                sa.and_(node_association.c.source_id == target_id,
+                        node_association.c.target_id == node_id),
+            )
         )
     ).first()
     if existing:
@@ -695,8 +853,10 @@ def remove_relation(node_id, target_id):
     db.session.execute(
         node_association.delete().where(
             sa.or_(
-                sa.and_(node_association.c.source_id == node_id, node_association.c.target_id == target_id),
-                sa.and_(node_association.c.source_id == target_id, node_association.c.target_id == node_id),
+                sa.and_(node_association.c.source_id == node_id,
+                        node_association.c.target_id == target_id),
+                sa.and_(node_association.c.source_id == target_id,
+                        node_association.c.target_id == node_id),
             )
         )
     )

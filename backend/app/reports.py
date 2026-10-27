@@ -171,7 +171,7 @@ def _collect_tree(node_id: int, institution_id: int, db, max_depth: int = 10) ->
     }
 
     if max_depth > 0:
-        for child in node.children.order_by(Node.local_ref).all():
+        for child in node.children.order_by(*Node.sibling_order()):
             child_data = _collect_tree(child.id, institution_id, db, max_depth - 1)
             if child_data:
                 result['children'].append(child_data)

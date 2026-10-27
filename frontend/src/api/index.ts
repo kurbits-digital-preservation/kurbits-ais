@@ -1,7 +1,7 @@
 import api from './client'
 import type {
   User, NodeStub, NodeDetail, AgentStub, AgentDetail,
-  LocationStub, LocationDetail, ClassificationStub,ApiResponse, ExternalIntegration
+  LocationStub, LocationDetail, ClassificationStub,ApiResponse, ExternalIntegration, AgentNameForm, AgentNameFormType
 } from '@/types'
 
 
@@ -43,6 +43,9 @@ export const nodesApi = {
 
   descendantCount: (id: number) =>
     api.get(`/nodes/${id}/descendant-count`),
+
+  counts: (nodeId: number) =>
+    api.get<{ status: string; data: NodeCounts }>(`/nodes/${nodeId}/counts`),
 
   updateStatus: (nodeId: number, status: string) =>
     api.patch(`/nodes/${nodeId}/status`, { status }),
@@ -188,6 +191,8 @@ export const agentsApi = {
 
   getRelationTypes: () => api.get('/agents/relation-types'),
   getNodeRelationTypes: () => api.get('/agents/node-relation-types'),
+   counts: (agentId: number) =>
+    api.get<{ status: string; data: AgentCounts }>(`/agents/${agentId}/counts`),
     // Identifiers
   getIdentifiers: (agentId: number) => api.get(`/agents/${agentId}/identifiers`),
   addIdentifier: (agentId: number, data: any) => api.post(`/agents/${agentId}/identifiers`, data),
@@ -195,6 +200,15 @@ export const agentsApi = {
     api.patch(`/agents/${agentId}/identifiers/${id}`, data),
   deleteIdentifier: (agentId: number, id: number) =>
     api.delete(`/agents/${agentId}/identifiers/${id}`),
+
+     getNameForms: (agentId: number) =>
+    api.get<{ status: string; data: AgentNameForm[] }>(`/agents/${agentId}/name-forms`),
+  addNameForm: (agentId: number, data: Record<string, unknown>) =>
+    api.post<{ status: string; data: AgentNameForm }>(`/agents/${agentId}/name-forms`, data),
+  updateNameForm: (agentId: number, formId: number, data: Record<string, unknown>) =>
+    api.patch<{ status: string; data: AgentNameForm }>(`/agents/${agentId}/name-forms/${formId}`, data),
+  deleteNameForm: (agentId: number, formId: number) =>
+    api.delete(`/agents/${agentId}/name-forms/${formId}`),
 
   // Attachments
   getAttachments: (agentId: number) => api.get(`/agents/${agentId}/attachments`),
@@ -468,6 +482,17 @@ export const vocabApi = {
     api.patch<{ status: string; data: any }>(`/agents/node-relation-types/${id}`, data),
   deleteAgentNodeRelationType: (id: number) =>
     api.delete(`/agents/node-relation-types/${id}`),
+
+
+  // Agent name form types
+  listAgentNameFormTypes: () =>
+    api.get<{ status: string; data: AgentNameFormType[] }>('/agents/name-form-types'),
+  createAgentNameFormType: (data: Record<string, unknown>) =>
+    api.post<{ status: string; data: AgentNameFormType }>('/agents/name-form-types', data),
+  updateAgentNameFormType: (id: number, data: Record<string, unknown>) =>
+    api.patch<{ status: string; data: AgentNameFormType }>(`/agents/name-form-types/${id}`, data),
+  deleteAgentNameFormType: (id: number) =>
+    api.delete(`/agents/name-form-types/${id}`),
 
   // Place types vocab
   listPlaceTypes: (applicableTo?: string) =>
@@ -872,4 +897,26 @@ export const labelTemplatesApi = {
   create: (data: any) => api.post('/label-templates', data),
   update: (id: number, data: any) => api.put(`/label-templates/${id}`, data),
   delete: (id: number) => api.delete(`/label-templates/${id}`),
+}
+
+export interface NodeCounts {
+  relations: number
+  identifiers: number
+  classifications: number
+  places: number
+  flags: number
+  tags: number
+  notes: number
+  attachments: number
+}
+
+export interface AgentCounts {
+  relations: number
+  name_forms: number
+  identifiers: number
+  resources: number
+  places: number
+  tags: number
+  notes: number
+  attachments: number
 }

@@ -1,5 +1,5 @@
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query'
 import AuthGuard from '@/components/layout/AuthGuard'
 import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/app/LoginPage'
@@ -13,10 +13,16 @@ import FlagsPage from '@/pages/app/FlagsPage'
 import AcquisitionsPage from '@/pages/app/AcquisitionsPage'
 import SearchPage from '@/pages/app/SearchPage'
 
-const queryClient = new QueryClient({
+const queryClient: QueryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 30_000, retry: 1 },
   },
+  mutationCache: new MutationCache({
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['node-counts'] })
+      queryClient.invalidateQueries({ queryKey: ['agent-counts'] })
+    },
+  }),
 })
 
 const router = createBrowserRouter([

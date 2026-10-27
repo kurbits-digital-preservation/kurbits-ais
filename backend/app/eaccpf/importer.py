@@ -4,7 +4,9 @@ Converts EAC-CPF into Kurbits Agent model instances.
 """
 from __future__ import annotations
 from app.extensions import db
-from app.models.agent import Agent, AgentType, AgentNote, AgentRelationType, AgentIdentifier
+from app.models.agent import (
+    Agent, AgentType, AgentRelationType, AgentIdentifier, AgentNameForm, AgentNameFormType,
+)
 from app.models.node import IdentifierScheme
 from app.eaccpf.parser import ParsedAgent, ParseResult
 
@@ -17,6 +19,17 @@ _AGENT_TYPE_MAP = {
 }
 
 _EAC_RECORD_SCHEME_NAME = 'EAC-CPF Record ID'
+
+# EAC-CPF tokens -> name form type names to look for, in order.
+_NAME_FORM_TYPE_ALIASES = {
+    'parallel':     ('parallellnamn', 'parallel name'),
+    'abbreviation': ('förkortning', 'abbreviation'),
+    'former':       ('tidigare namn', 'former name'),
+    'later':        ('senare namn', 'later name'),
+    'variant':      ('variantform', 'variant form'),
+    'other':        ('variantform', 'variant form'),
+}
+_DEFAULT_NAME_FORM_TOKEN = 'variant'
 
 
 class ImportResult:
@@ -66,6 +79,54 @@ def _set_source_id_identifier(agent: Agent, eac_scheme: IdentifierScheme, source
     db.session.add(AgentIdentifier(agent_id=agent.id, scheme_id=eac_scheme.id, value=source_id))
 
 
+class _NameFormTypeResolver:
+    """Maps EAC-CPF name form types onto the institution's vocabulary,
+    creating missing types once per import."""
+
+    def __init__(self, institution_id: int, result: ImportResult):
+        self.institution_id = institution_id
+        self.result = result
+        self.by_name = {
+            t.name.lower(): t
+            for t in AgentNameFormType.query.filter_by(institution_id=institution_id).all()
+        }
+
+    def resolve(self, raw: str | None) -> AgentNameFormType:
+        token = (raw or _DEFAULT_NAME_FORM_TOKEN).strip()
+        key = token.lower()
+
+        if key in self.by_name:
+            return self.by_name[key]
+        for alias in _NAME_FORM_TYPE_ALIASES.get(key, ()):
+            if alias in self.by_name:
+                return self.by_name[alias]
+
+        name = _NAME_FORM_TYPE_ALIASES.get(key, (token,))[0][:100]
+        created = AgentNameFormType(institution_id=self.institution_id, name=name)
+        db.session.add(created)
+        db.session.flush()
+        self.by_name[name.lower()] = created
+        self.result.warnings.append(f'Created name form type "{name}"')
+        return created
+
+
+def _add_name_forms(agent: Agent, name_forms: list[dict], resolver: _NameFormTypeResolver,
+                    created_by_id: int) -> None:
+    existing = {nf.name.lower() for nf in agent.name_forms}
+    for form in name_forms:
+        name = (form.get('name') or '').strip()[:500]
+        if not name or name.lower() in existing:
+            continue
+        existing.add(name.lower())
+        agent.name_forms.append(AgentNameForm(
+            type_id=resolver.resolve(form.get('type')).id,
+            name=name,
+            date_from=form.get('date_from'),
+            date_to=form.get('date_to'),
+            created_by_id=created_by_id,
+        ))
+
+
 def _find_existing(institution_id: int, parsed: ParsedAgent, eac_scheme: IdentifierScheme) -> Agent | None:
     """Try to find an existing agent matching by EAC-CPF record id, then authorized_form."""
     if parsed.source_id:
@@ -105,6 +166,7 @@ def agents_from_eaccpf(
     result.warnings.extend(parse_result.warnings)
 
     eac_scheme = _get_eac_scheme(institution_id)
+    resolver = _NameFormTypeResolver(institution_id, result)
 
     # First pass: create/update all agents (without relations, to avoid FK issues)
     id_map: dict[str, int] = {}  # source_id → agent.id
@@ -130,6 +192,7 @@ def agents_from_eaccpf(
                 agent.date_from = parsed.date_from
             if parsed.date_to:
                 agent.date_to = parsed.date_to
+            _add_name_forms(agent, parsed.name_forms, resolver, created_by_id)
             db.session.flush()
             result.updated.append({'id': agent.id, 'name': agent.name})
         else:
@@ -144,17 +207,8 @@ def agents_from_eaccpf(
                 created_by_id=created_by_id,
             )
             db.session.add(agent)
+            _add_name_forms(agent, parsed.name_forms, resolver, created_by_id)
             db.session.flush()
-
-            # Add parallel names as notes
-            if parsed.parallel_names:
-                note = AgentNote(
-                    agent_id=agent.id,
-                    note_type='parallel_names',
-                    content='Parallel name forms: ' + '; '.join(parsed.parallel_names),
-                    created_by_id=created_by_id,
-                )
-                db.session.add(note)
 
             result.created.append({'id': agent.id, 'name': agent.name})
 
