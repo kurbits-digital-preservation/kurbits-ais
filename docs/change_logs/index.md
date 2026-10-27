@@ -6,3 +6,4 @@
 | [1.1](1_1.md)     | 20260903 | Major fixes                 |
 | [1.1.1](1_1_1.md) | 20260926 | Translations, react-i18next |
 | [1.1.2](1_1_2.md) | 20261022 | Bugfixes for postgre        |
+| [1.1.3](1_1_3.md) | 20261022 | Bugfixes for postgre        |
