@@ -7,6 +7,10 @@ SQLite:      ILIKE fallback across the same fields including metadata_spec cast.
 Browse mode: with no query but an agent_id filter, nodes linked to the agent
 are listed in reference code order.
 
+Agent links are inherited downwards: an agent linked to a fonds or series
+also applies to everything below it, both for the agent filter and the
+agent facet.
+
 Scopes (filters['scope']) limit which text a query is matched against:
   all          everything in search_vector (attachment text only when the
                institution indexes it)
@@ -64,6 +68,65 @@ def _pg_scope_sql(scopes: dict, scope: str) -> tuple[list[str], str]:
         rank_vector = f"ts_filter({column}, '{weights}')"
         where.append(f"{rank_vector} @@ {_PG_TSQUERY}")
     return where, f"ts_rank({rank_vector}, {_PG_TSQUERY})"
+
+
+# Nodes linked to an agent plus all their descendants (PostgreSQL, raw SQL).
+_PG_AGENT_SUBTREE = """n.id IN (
+    WITH RECURSIVE agent_tree(id) AS (
+        SELECT ana_f.node_id
+          FROM agent_node_association ana_f
+         WHERE ana_f.agent_id = :agent_id
+        UNION
+        SELECT c.id
+          FROM nodes c
+          JOIN agent_tree t ON c.parent_id = t.id
+    )
+    SELECT id FROM agent_tree
+)"""
+
+
+def _agent_subtree_ids(agent_id: int):
+    """SELECT of node ids linked to the agent, including all descendants."""
+    from app.models.node import Node
+    from app.models.agent import agent_node_association as ANA
+
+    tree = (
+        sa.select(ANA.c.node_id.label('id'))
+        .where(ANA.c.agent_id == agent_id)
+        .cte('agent_tree', recursive=True)
+    )
+    tree = tree.union(
+        sa.select(Node.id).where(Node.parent_id == tree.c.id)
+    )
+    return sa.select(tree.c.id)
+
+
+def _inherited_agent_counts(hit_ids, institution_id: int, limit: int):
+    """Agents linked to the hits or to any of their ancestors, counted by
+    distinct hit. Walks upwards from the hits."""
+    from app.models.node import Node
+    from app.models.agent import Agent, agent_node_association as ANA
+
+    up = (
+        sa.select(Node.id.label('hit_id'), Node.id.label('node_id'), Node.parent_id.label('parent_id'))
+        .where(Node.id.in_(hit_ids))
+        .cte('hit_ancestors', recursive=True)
+    )
+    up = up.union_all(
+        sa.select(up.c.hit_id, Node.id, Node.parent_id)
+        .where(Node.id == up.c.parent_id)
+    )
+
+    hits = sa.func.count(sa.distinct(up.c.hit_id))
+    return db.session.execute(
+        sa.select(Agent.id, Agent.name, hits)
+        .join(ANA, ANA.c.agent_id == Agent.id)
+        .join(up, up.c.node_id == ANA.c.node_id)
+        .where(Agent.institution_id == institution_id)
+        .group_by(Agent.id, Agent.name)
+        .order_by(hits.desc(), Agent.name)
+        .limit(limit)
+    ).all()
 
 
 def _node_text_condition(pattern: str, scope: str):
@@ -293,10 +356,7 @@ def _pg_node_query(
         )
         params['classification_id'] = int(filters['classification_id'])
     if filters.get('agent_id'):
-        where.append(
-            "EXISTS (SELECT 1 FROM agent_node_association ana_f "
-            "WHERE ana_f.node_id = n.id AND ana_f.agent_id = :agent_id)"
-        )
+        where.append(_PG_AGENT_SUBTREE)
         params['agent_id'] = int(filters['agent_id'])
     if filters.get('date_from'):
         where.append("n.date_start >= :date_from")
@@ -429,12 +489,7 @@ def _sqlite_node_query(
             )
         )
     if filters.get('agent_id'):
-        from app.models.agent import agent_node_association as _ana
-        query = query.filter(
-            Node.id.in_(
-                sa.select(_ana.c.node_id).where(_ana.c.agent_id == int(filters['agent_id']))
-            )
-        )
+        query = query.filter(Node.id.in_(_agent_subtree_ids(int(filters['agent_id']))))
     if filters.get('date_from'):
         query = query.filter(Node.date_start >= filters['date_from'])
     if filters.get('date_to'):
@@ -680,10 +735,12 @@ def _sqlite_agent_query(
 AGENT_FACET_LIMIT = 15
 
 
-def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
-    """Facet counts for a search, respecting the query and all OTHER active filters."""
+def compute_facets(q: str, institution_id: int, filters: dict,
+                   types: Optional[list[str]] = None) -> dict:
+    """Facet counts for a search, respecting the query and all OTHER active filters.
+    Only facets for the record types actually searched are computed."""
     from app.models.node import Node
-    from app.models.agent import Agent, agent_node_association as ANA
+    from app.models.agent import Agent
     from app.models.hierarchy import HierarchyType
     from app.models.classification import Classification, classification_node_association as CNA
 
@@ -695,6 +752,10 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
                     'level': [], 'status': []}
     if not has_q and not filters.get('agent_id'):
         return facets
+
+    types = types or ['nodes', 'agents']
+    searches_nodes = 'nodes' in types
+    searches_agents = 'agents' in types and has_q and scope != 'attachments'
 
     def _node_base(exclude: str = ''):
         query = db.session.query(Node.id).filter(Node.institution_id == institution_id)
@@ -715,97 +776,74 @@ def compute_facets(q: str, institution_id: int, filters: dict) -> dict:
                 )
             )
         if exclude != 'agent' and filters.get('agent_id'):
-            query = query.filter(
-                Node.id.in_(
-                    sa.select(ANA.c.node_id).where(ANA.c.agent_id == int(filters['agent_id']))
-                )
-            )
+            query = query.filter(Node.id.in_(_agent_subtree_ids(int(filters['agent_id']))))
         if filters.get('date_from'):
             query = query.filter(Node.date_start >= filters['date_from'])
         if filters.get('date_to'):
             query = query.filter(Node.date_end <= filters['date_to'])
         return query
 
-    for level, count in (
-        db.session.query(Node.level_of_description, sa.func.count())
-        .filter(Node.id.in_(_node_base('level').subquery().select()))
-        .group_by(Node.level_of_description).all()
-    ):
-        if level:
-            facets['level'].append({'value': level, 'count': count})
-    facets['level'].sort(key=lambda x: -x['count'])
+    if searches_nodes:
+        for level, count in (
+            db.session.query(Node.level_of_description, sa.func.count())
+            .filter(Node.id.in_(_node_base('level').subquery().select()))
+            .group_by(Node.level_of_description).all()
+        ):
+            if level:
+                facets['level'].append({'value': level, 'count': count})
+        facets['level'].sort(key=lambda x: -x['count'])
 
-    for status, count in (
-        db.session.query(Node.status, sa.func.count())
-        .filter(Node.id.in_(_node_base('status').subquery().select()))
-        .group_by(Node.status).all()
-    ):
-        if status:
-            val = status.value if hasattr(status, 'value') else status
-            facets['status'].append({'value': val, 'count': count})
-    facets['status'].sort(key=lambda x: -x['count'])
+        for status, count in (
+            db.session.query(Node.status, sa.func.count())
+            .filter(Node.id.in_(_node_base('status').subquery().select()))
+            .group_by(Node.status).all()
+        ):
+            if status:
+                val = status.value if hasattr(status, 'value') else status
+                facets['status'].append({'value': val, 'count': count})
+        facets['status'].sort(key=lambda x: -x['count'])
 
-    for ht_id, name, count in (
-        db.session.query(HierarchyType.id, HierarchyType.name, sa.func.count(Node.id))
-        .join(Node, Node.hierarchy_type_id == HierarchyType.id)
-        .filter(Node.id.in_(_node_base('hierarchy_type').subquery().select()))
-        .group_by(HierarchyType.id, HierarchyType.name).all()
-    ):
-        facets['hierarchy_type'].append({'value': str(ht_id), 'label': name, 'count': count})
-    facets['hierarchy_type'].sort(key=lambda x: -x['count'])
+        for ht_id, name, count in (
+            db.session.query(HierarchyType.id, HierarchyType.name, sa.func.count(Node.id))
+            .join(Node, Node.hierarchy_type_id == HierarchyType.id)
+            .filter(Node.id.in_(_node_base('hierarchy_type').subquery().select()))
+            .group_by(HierarchyType.id, HierarchyType.name).all()
+        ):
+            facets['hierarchy_type'].append({'value': str(ht_id), 'label': name, 'count': count})
+        facets['hierarchy_type'].sort(key=lambda x: -x['count'])
 
-    base_ids = _node_base('classification').subquery().select()
-    rows = (
-        db.session.query(Classification.id, Classification.name, Classification.code, sa.func.count(CNA.c.node_id))
-        .join(CNA, CNA.c.classification_id == Classification.id)
-        .filter(CNA.c.node_id.in_(base_ids))
-        .group_by(Classification.id, Classification.name, Classification.code)
-        .all()
-    )
-    facets['classification'] = sorted(
-        [{'value': str(cid), 'label': f'{name}', 'code': code, 'count': cnt}
-         for cid, name, code, cnt in rows],
-        key=lambda x: -x['count']
-    )[:30]
-
-    agent_count = sa.func.count(ANA.c.node_id)
-    agent_query = (
-        db.session.query(Agent.id, Agent.name, agent_count)
-        .join(ANA, ANA.c.agent_id == Agent.id)
-        .filter(Agent.institution_id == institution_id)
-        .group_by(Agent.id, Agent.name)
-    )
-    if has_q:
-        agent_query = agent_query.filter(
-            ANA.c.node_id.in_(_node_base('agent').subquery().select())
+        base_ids = _node_base('classification').subquery().select()
+        rows = (
+            db.session.query(Classification.id, Classification.name, Classification.code, sa.func.count(CNA.c.node_id))
+            .join(CNA, CNA.c.classification_id == Classification.id)
+            .filter(CNA.c.node_id.in_(base_ids))
+            .group_by(Classification.id, Classification.name, Classification.code)
+            .all()
         )
-        facets['agent'] = [
-            {'value': str(aid), 'label': name, 'count': cnt}
-            for aid, name, cnt in agent_query.order_by(agent_count.desc(), Agent.name)
-            .limit(AGENT_FACET_LIMIT).all()
-        ]
+        facets['classification'] = sorted(
+            [{'value': str(cid), 'label': f'{name}', 'code': code, 'count': cnt}
+             for cid, name, code, cnt in rows],
+            key=lambda x: -x['count']
+        )[:30]
 
-    active_agent = filters.get('agent_id')
-    if active_agent and str(active_agent) not in {f['value'] for f in facets['agent']}:
-        active_query = (
-            db.session.query(Agent.id, Agent.name, agent_count)
-            .join(ANA, ANA.c.agent_id == Agent.id)
-            .filter(
-                Agent.id == int(active_agent),
-                Agent.institution_id == institution_id,
-                ANA.c.node_id.in_(_node_base().subquery().select()),
-            )
-            .group_by(Agent.id, Agent.name)
-        )
-        row = active_query.first()
-        if row:
-            facets['agent'].insert(0, {'value': str(row[0]), 'label': row[1], 'count': row[2]})
-        else:
+        if has_q:
+            facets['agent'] = [
+                {'value': str(aid), 'label': name, 'count': cnt}
+                for aid, name, cnt in _inherited_agent_counts(
+                    _node_base('agent').subquery().select(), institution_id, AGENT_FACET_LIMIT
+                )
+            ]
+
+        active_agent = filters.get('agent_id')
+        if active_agent and str(active_agent) not in {f['value'] for f in facets['agent']}:
             agent = db.session.get(Agent, int(active_agent))
             if agent and agent.institution_id == institution_id:
-                facets['agent'].insert(0, {'value': str(agent.id), 'label': agent.name, 'count': 0})
+                count = db.session.execute(
+                    sa.select(sa.func.count()).select_from(_node_base().subquery())
+                ).scalar() or 0
+                facets['agent'].insert(0, {'value': str(agent.id), 'label': agent.name, 'count': count})
 
-    if has_q and scope != 'attachments':
+    if searches_agents:
         agent_base = db.session.query(Agent.id).filter(
             Agent.institution_id == institution_id,
             _agent_text_condition(pattern, scope),
@@ -1008,5 +1046,5 @@ def search(
         'page': page,
         'per_page': limit,
         'pages': max(1, (total + limit - 1) // limit),
-        'facets': compute_facets(q, institution_id, filters),
+        'facets': compute_facets(q, institution_id, filters, types),
     }
