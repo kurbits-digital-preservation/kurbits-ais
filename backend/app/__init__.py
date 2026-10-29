@@ -62,7 +62,7 @@ def create_app(config_name: str = None) -> Flask:
 
 
         # Serve React SPA in production
-        frontend_dist = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist')
+        frontend_dist = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'dist') # TEMP
         if os.path.isdir(frontend_dist):
             from flask import send_from_directory
 

@@ -35,6 +35,11 @@ class DevelopmentConfig(Config):
                        f'sqlite:///{BASE_DIR / "kurbits_dev.db"}')
     )
     SQLALCHEMY_ECHO = False
+    # TEMP
+    SSL_CERT = os.getenv("SAML_CERT_PATH")
+    SSL_KEY = os.getenv("SAML_KEY_PATH")
+    HOST = "localhost"
+    PORT = 8443
 
 
 class ProductionConfig(Config):
