@@ -19,3 +19,4 @@ pytesseract
 pdf2image
 pdfplumber
 faster-whisper
+python3-saml==1.16.0

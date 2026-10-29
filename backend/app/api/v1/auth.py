@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from flask import request
 from flask_login import login_user, logout_user, login_required, current_user
 from app.api.v1 import bp
+from app.api.v1.auth_saml.saml import is_saml_enabled
 from app.api.v1.helpers import success, error
 from app.extensions import db
 from app.models import User, Institution
@@ -44,6 +45,8 @@ def _serialize_user(user: User) -> dict:
 
 @bp.route('/auth/login', methods=['POST'])
 def login():
+    if is_saml_enabled():
+        return error('Local login is disabled', 400)
     if current_user.is_authenticated:
         return success(_serialize_user(current_user))
 
@@ -274,6 +277,8 @@ def list_members():
 @bp.route('/auth/institutions/current/invite', methods=['POST'])
 @login_required
 def invite_user():
+    if is_saml_enabled():
+        return error('Local user creation is disabled', 400)
     if not current_user.active_institution_id:
         return error('No active institution', 400)
     inst = Institution.query.get(current_user.active_institution_id)
