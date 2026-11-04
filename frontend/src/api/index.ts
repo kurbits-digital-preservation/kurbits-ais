@@ -449,6 +449,12 @@ export const nodeRelationsApi = {
 }
 
 // ─── Institution admin ────────────────────────────────────────────────
+export interface UserSearchHit {
+  id: number
+  username: string
+  email: string
+}
+
 export const institutionApi = {
   getCurrent: () =>
     api.get<{ status: string; data: any }>('/auth/institutions/current'),
@@ -459,8 +465,14 @@ export const institutionApi = {
   listMembers: () =>
     api.get<{ status: string; data: any[] }>('/auth/institutions/current/members'),
 
+  searchUsers: (q: string) =>
+    api.get<{ status: string; data: UserSearchHit[] }>('/auth/institutions/current/users/search', { params: { q } }),
+
   inviteUser: (data: Record<string, unknown>) =>
     api.post<{ status: string; data: any }>('/auth/institutions/current/invite', data),
+
+  addMember: (institutionId: number, userId: number, role: string) =>
+    api.post(`/auth/institutions/${institutionId}/members`, { user_id: userId, role }),
 
   updateMemberRole: (institutionId: number, userId: number, role: string) =>
     api.patch(`/auth/institutions/${institutionId}/members/${userId}`, { role }),

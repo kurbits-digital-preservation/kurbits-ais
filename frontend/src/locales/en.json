@@ -31,7 +31,6 @@
       "account_disabled": "This account is disabled."
     }
   },
-
   "flags": {
     "title": "Flags",
     "all": "All",
@@ -447,7 +446,12 @@
       "lastLogin": "Last login: {{date}}",
       "removeFromInstitution": "Remove from institution",
       "removeConfirm": "Remove {{username}} from {{institution}}?",
-      "ssoManaged": "Users are created automatically on first SSO sign-in."
+      "addExistingUser": "Add existing user",
+      "search": "Search users",
+      "searchPlaceholder": "Username or email (at least 3 characters)",
+      "noResults": "No users found.",
+      "addFailed": "Failed to add user",
+      "ssoManaged": "Users must have signed in via SSO once to appear here."
     },
     "settings": {
       "institutionDetails": "Institution details",

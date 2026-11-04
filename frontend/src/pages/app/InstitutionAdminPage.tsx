@@ -96,6 +96,112 @@ function RolePicker({
   )
 }
 
+// ─── Add existing member (SSO) ────────────────────────────────────────
+
+function AddExistingMember({ institutionId, onClose }: { institutionId: number; onClose: () => void }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [query, setQuery] = useState('')
+  const [debouncedQ, setDebouncedQ] = useState('')
+  const [role, setRole] = useState('archivist')
+  const [formError, setFormError] = useState('')
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQ(query.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const searchEnabled = debouncedQ.length >= 3
+
+  const { data: hits = [], isFetching } = useQuery({
+    queryKey: ['member-search', debouncedQ],
+    queryFn: () => institutionApi.searchUsers(debouncedQ).then(r => r.data.data),
+    enabled: searchEnabled,
+  })
+
+  const addMutation = useMutation({
+    mutationFn: (userId: number) => institutionApi.addMember(institutionId, userId, role),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['institution-members'] })
+      queryClient.invalidateQueries({ queryKey: ['member-search'] })
+      setFormError('')
+    },
+    onError: (err: any) => {
+      setFormError(err.response?.data?.message ?? t('admin.members.addFailed'))
+    },
+  })
+
+  return (
+    <div className={styles.inviteForm}>
+      <div className={styles.inviteFormTitle}>
+        <UserPlus size={15} /> {t('admin.members.addExistingUser')}
+      </div>
+      <span className="form-hint">{t('admin.members.ssoManaged')}</span>
+
+      {formError && (
+        <div className={styles.formError}>
+          <AlertCircle size={14} /> {formError}
+        </div>
+      )}
+
+      <div className={styles.inviteGrid}>
+        <div className="form-group">
+          <label>{t('admin.members.search')}</label>
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder={t('admin.members.searchPlaceholder')}
+            autoFocus
+          />
+        </div>
+        <div className="form-group">
+          <label>{t('admin.members.role')}</label>
+          <select value={role} onChange={e => setRole(e.target.value)}>
+            {ROLE_VALUES.map(r => (
+              <option key={r} value={r}>{t(`admin.roles.${ROLE_KEY_MAP[r]}`)} — {t(`admin.roles.${ROLE_KEY_MAP[r]}Desc`)}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {searchEnabled && (
+        <div className={styles.searchResults}>
+          {isFetching && (
+            <div className={styles.searchEmpty}><Spinner size={13} /></div>
+          )}
+          {!isFetching && hits.length === 0 && (
+            <div className={styles.searchEmpty}>{t('admin.members.noResults')}</div>
+          )}
+          {!isFetching && hits.map(hit => (
+            <div key={hit.id} className={styles.searchResult}>
+              <div className={styles.memberInfo}>
+                <div className={styles.memberName}>{hit.username}</div>
+                <span className={styles.memberEmail}>{hit.email}</span>
+              </div>
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={addMutation.isPending}
+                onClick={() => addMutation.mutate(hit.id)}
+              >
+                {addMutation.isPending && addMutation.variables === hit.id
+                  ? <Spinner size={13} />
+                  : <Plus size={13} />}
+                {t('common.add')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className={styles.inviteFormActions}>
+        <button className="btn btn-ghost btn-sm" onClick={onClose}>
+          {t('common.close')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── Members tab ──────────────────────────────────────────────────────
 
 function MembersTab({ institution }: { institution: any }) {
@@ -140,14 +246,14 @@ function MembersTab({ institution }: { institution: any }) {
         <p className={styles.memberCount}>
           {t('admin.members.countLabel', { count: members?.length ?? 0 })}
         </p>
-        {ssoEnabled ? (
-          <span className="form-hint">{t('admin.members.ssoManaged')}</span>
-        ) : (
-          <button className="btn btn-primary btn-sm" onClick={() => setInviting(v => !v)}>
-            <UserPlus size={14} /> {t('admin.members.addUser')}
-          </button>
-        )}
+        <button className="btn btn-primary btn-sm" onClick={() => setInviting(v => !v)}>
+          <UserPlus size={14} /> {t('admin.members.addUser')}
+        </button>
       </div>
+
+      {inviting && ssoEnabled && (
+        <AddExistingMember institutionId={institution.id} onClose={() => setInviting(false)} />
+      )}
 
       {inviting && !ssoEnabled && (
         <div className={styles.inviteForm}>

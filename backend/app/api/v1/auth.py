@@ -273,6 +273,47 @@ def list_members():
     members.sort(key=lambda m: m['username'])
     return success(members)
 
+@bp.route('/auth/institutions/current/users/search', methods=['GET'])
+@login_required
+def search_users():
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+
+    inst = Institution.query.get(current_user.active_institution_id)
+    if not current_user.is_institution_admin_of(inst):
+        return error('Institution admin access required', 403)
+
+    q = (request.args.get('q') or '').strip()
+    if len(q) < 3:
+        return success([])
+
+    escaped = q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+    pattern = f'%{escaped}%'
+
+    member_ids = sa.select(user_institution_association.c.user_id).where(
+        user_institution_association.c.institution_id == inst.id
+    )
+
+    users = db.session.execute(
+        sa.select(User)
+        .where(
+            User.is_active.is_(True),
+            User.is_system_admin.is_(False),
+            User.id.not_in(member_ids),
+            sa.or_(
+                User.username.ilike(pattern, escape='\\'),
+                User.email.ilike(pattern, escape='\\'),
+            ),
+        )
+        .order_by(User.username)
+        .limit(10)
+    ).scalars().all()
+
+    return success([
+        {'id': u.id, 'username': u.username, 'email': u.email}
+        for u in users
+    ])
+
 
 @bp.route('/auth/institutions/current/invite', methods=['POST'])
 @login_required

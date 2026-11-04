@@ -31,7 +31,6 @@
       "account_disabled": "Kontot är inaktiverat."
     }
   },
-
   "flags": {
     "title": "Flaggor",
     "all": "Alla",
@@ -448,7 +447,12 @@
       "lastLogin": "Senast inloggad: {{date}}",
       "removeFromInstitution": "Ta bort från institutionen",
       "removeConfirm": "Ta bort {{username}} från {{institution}}?",
-      "ssoManaged": "Användare skapas automatiskt vid första SSO-inloggningen."
+      "addExistingUser": "Lägg till befintlig användare",
+      "search": "Sök användare",
+      "searchPlaceholder": "Användarnamn eller e-post (minst 3 tecken)",
+      "noResults": "Inga användare hittades.",
+      "addFailed": "Det gick inte att lägga till användaren",
+      "ssoManaged": "Användare måste ha loggat in via SSO en gång för att synas här."
     },
     "settings": {
       "institutionDetails": "Institutionsuppgifter",
