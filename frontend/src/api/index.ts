@@ -6,7 +6,15 @@ import type {
 
 
 // ─── Auth ────────────────────────────────────────────────────────────
+export interface AuthConfig {
+  saml_enabled: boolean
+  saml_login_url: string | null
+}
+
 export const authApi = {
+  config: () =>
+    api.get<{ status: string; data: AuthConfig }>('/auth/config'),
+
   login: (email: string, password: string) =>
     api.post<{ status: string; data: User }>('/auth/login', { email, password }),
 
