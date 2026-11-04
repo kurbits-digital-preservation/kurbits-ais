@@ -21,8 +21,17 @@
     "password": "Lösenord",
     "signIn": "Logga in",
     "signingIn": "Loggar in…",
-    "error": "Fel e-post eller lösenord"
+    "error": "Fel e-post eller lösenord",
+    "ssoSignIn": "Logga in med SSO",
+    "ssoHint": "Du skickas vidare till din organisations inloggning.",
+    "errors": {
+      "saml_failed": "Inloggningen via SSO misslyckades. Försök igen.",
+      "saml_missing_attribute": "Inloggningstjänsten skickade inte användarnamn eller e-post. Kontakta en administratör.",
+      "saml_email_conflict": "E-postadressen används redan av ett annat konto. Kontakta en administratör.",
+      "account_disabled": "Kontot är inaktiverat."
+    }
   },
+
   "flags": {
     "title": "Flaggor",
     "all": "Alla",
@@ -438,7 +447,8 @@
       "inactive": "inaktiv",
       "lastLogin": "Senast inloggad: {{date}}",
       "removeFromInstitution": "Ta bort från institutionen",
-      "removeConfirm": "Ta bort {{username}} från {{institution}}?"
+      "removeConfirm": "Ta bort {{username}} från {{institution}}?",
+      "ssoManaged": "Användare skapas automatiskt vid första SSO-inloggningen."
     },
     "settings": {
       "institutionDetails": "Institutionsuppgifter",

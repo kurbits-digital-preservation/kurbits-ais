@@ -19,6 +19,7 @@ import RecordsVocabularyTab from './RecordsVocabularyTab'
 import LabelDesigner from './LabelDesigner'
 import { Zap, RefreshCw, Globe } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { useAuthConfig } from '@/hooks/useAuthConfig'
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -101,6 +102,7 @@ function MembersTab({ institution }: { institution: any }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
+  const { ssoEnabled } = useAuthConfig()
   const [inviting, setInviting] = useState(false)
   const [form, setForm] = useState({
     username: '', email: '', password: '', role: 'archivist'
@@ -138,12 +140,16 @@ function MembersTab({ institution }: { institution: any }) {
         <p className={styles.memberCount}>
           {t('admin.members.countLabel', { count: members?.length ?? 0 })}
         </p>
-        <button className="btn btn-primary btn-sm" onClick={() => setInviting(v => !v)}>
-          <UserPlus size={14} /> {t('admin.members.addUser')}
-        </button>
+        {ssoEnabled ? (
+          <span className="form-hint">{t('admin.members.ssoManaged')}</span>
+        ) : (
+          <button className="btn btn-primary btn-sm" onClick={() => setInviting(v => !v)}>
+            <UserPlus size={14} /> {t('admin.members.addUser')}
+          </button>
+        )}
       </div>
 
-      {inviting && (
+      {inviting && !ssoEnabled && (
         <div className={styles.inviteForm}>
           <div className={styles.inviteFormTitle}>
             <UserPlus size={15} /> {t('admin.members.createNewUser')}
