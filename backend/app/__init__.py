@@ -1,5 +1,5 @@
 import os
-from flask import Flask
+from flask import Flask, Response
 from werkzeug.middleware.proxy_fix import ProxyFix
 from app.extensions import db, migrate, login_manager, cors
 from config import config
@@ -24,6 +24,11 @@ def create_app(config_name: str = None) -> Flask:
     migrate.init_app(app, db, include_object=include_object)
 
     login_manager.init_app(app)
+
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        return Response(status=401)
+
     from app.services import identifier_minting  # noqa: F401
 
     # CORS — allow the Vite dev server to make credentialed requests
@@ -57,7 +62,7 @@ def create_app(config_name: str = None) -> Flask:
 
 
         # Serve React SPA in production
-        frontend_dist = os.path.join(os.path.dirname(__file__), '..', 'frontend', 'dist')
+        frontend_dist = os.path.join(os.path.dirname(__file__), '..', '..', 'frontend', 'dist') # TEMP
         if os.path.isdir(frontend_dist):
             from flask import send_from_directory
 
