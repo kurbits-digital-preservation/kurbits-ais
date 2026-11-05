@@ -621,11 +621,6 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
     access_conditions = _va_access_conditions(sekretess, _txt(el, 'Arkiv_SekretessText'))
     metadata = _va_metadata(placement_note=placering)
 
-
-
-
-
-
     va_scheme = None
     existing_node = None
     if arkiv_id_org:
@@ -645,7 +640,13 @@ def _import_arkiv(el, agent, institution_id: int, ht, levels, db, log, system_us
         node.metadata_spec = {**(node.metadata_spec or {}), **metadata}
         log(f'    Fonds exists (Visual Arkiv ID {arkiv_id_org}) — updated: {node.ref_code} -- {name}')
     else:
-        local_ref = _make_unique_ref(nr, institution_id, None, db, Node)
+        # The Visual Arkiv record id is stable and unique within one VA database,
+        # unlike Arkiv_Nr which is only unique per archive creator.
+        base_ref = arkiv_id_org or nr
+        local_ref = _make_unique_ref(base_ref, institution_id, None, db, Node)
+        if local_ref != base_ref:
+            log(f'    WARNING: reference {base_ref} is already in use at the top level, '
+                f'fonds "{name}" gets {local_ref} instead')
         node = Node(
             institution_id=institution_id,
             parent_id=None,
