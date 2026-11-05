@@ -118,7 +118,32 @@
   padding-top: var(--space-2);
   border-top: 1px solid var(--color-border);
 }
+/* Add existing member */
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+}
 
+.searchResult {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.searchResult:last-child { border-bottom: none; }
+
+.searchEmpty {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+}
 /* Member list */
 .memberList {
   display: flex;

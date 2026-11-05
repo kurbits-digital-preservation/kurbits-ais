@@ -6,7 +6,15 @@ import type {
 
 
 // ─── Auth ────────────────────────────────────────────────────────────
+export interface AuthConfig {
+  saml_enabled: boolean
+  saml_login_url: string | null
+}
+
 export const authApi = {
+  config: () =>
+    api.get<{ status: string; data: AuthConfig }>('/auth/config'),
+
   login: (email: string, password: string) =>
     api.post<{ status: string; data: User }>('/auth/login', { email, password }),
 
@@ -441,6 +449,12 @@ export const nodeRelationsApi = {
 }
 
 // ─── Institution admin ────────────────────────────────────────────────
+export interface UserSearchHit {
+  id: number
+  username: string
+  email: string
+}
+
 export const institutionApi = {
   getCurrent: () =>
     api.get<{ status: string; data: any }>('/auth/institutions/current'),
@@ -451,8 +465,14 @@ export const institutionApi = {
   listMembers: () =>
     api.get<{ status: string; data: any[] }>('/auth/institutions/current/members'),
 
+  searchUsers: (q: string) =>
+    api.get<{ status: string; data: UserSearchHit[] }>('/auth/institutions/current/users/search', { params: { q } }),
+
   inviteUser: (data: Record<string, unknown>) =>
     api.post<{ status: string; data: any }>('/auth/institutions/current/invite', data),
+
+  addMember: (institutionId: number, userId: number, role: string) =>
+    api.post(`/auth/institutions/${institutionId}/members`, { user_id: userId, role }),
 
   updateMemberRole: (institutionId: number, userId: number, role: string) =>
     api.patch(`/auth/institutions/${institutionId}/members/${userId}`, { role }),
