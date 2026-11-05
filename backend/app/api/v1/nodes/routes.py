@@ -36,6 +36,8 @@ from app.api.v1.nodes.serializers import (
 
 from app.services.identifier_minting import MintError, build_context, mint_value, value_in_use
 from app.models.geo import NodePlace, Tag, PlaceType, TagCategory, node_tags_table
+from app.services.sources import current_lang
+from app.services.sources.node_mapping import finalize_imports
 
 def _get_node_or_404(node_id: int, institution_id: int):
     node = Node.query.filter_by(id=node_id, institution_id=institution_id).first()
@@ -332,6 +334,8 @@ def create_node():
             f'Invalid hierarchy: "{node.level_of_description}" is not allowed at this position', 422
         )
 
+    finalize_imports(node, data.get('record_source_imports'), current_user.id, current_lang())
+
     node.record_change(
         change_type='create',
         description=f'Created node "{node.title}"',
@@ -393,6 +397,8 @@ def update_node(node_id):
     if 'local_ref' in data and data['local_ref'] != node.local_ref:
         node.local_ref = data['local_ref']
         node.refresh_ref_code()
+
+    finalize_imports(node, data.get('record_source_imports'), current_user.id, current_lang())
 
     node.updated_by_id = current_user.id
     after_data = node.to_dict()

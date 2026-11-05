@@ -257,6 +257,23 @@
         "languagePlaceholder": "e.g. Swedish, English",
         "findingAids": "Finding aids",
         "findingAidsPlaceholder": "Reference to any finding aids…"
+      },
+      "recordSource": {
+        "title": "Fetch from source",
+        "searchPlaceholder": "Search…",
+        "noResults": "No matches",
+        "previewError": "Could not fetch the record",
+        "selectAll": "Select all",
+        "field": "Field",
+        "current": "Current",
+        "new": "From source",
+        "empty": "(empty)",
+        "unchanged": "Unchanged",
+        "alreadyAttached": "Already attached",
+        "apply_one": "Apply {{count}} field",
+        "apply_other": "Apply {{count}} fields",
+        "applied": "Applied from {{label}}. Review the form and save.",
+        "pendingTitle": "Identifiers added when you save"
       }
     },
     "accessions": {
@@ -645,7 +662,36 @@
       "levelsCount_one": "{{count}} level",
       "levelsCount_other": "{{count}} levels",
       "selectTypeToManage": "Select a hierarchy type to manage its levels",
-      "selectTypeSubtitle": "Levels define the structure of your archival descriptions"
+      "selectTypeSubtitle": "Levels define the structure of your archival descriptions",
+      "recordSources": {
+        "title": "Record sources",
+        "hint": "Prefill descriptions at this level from external systems. For each field the first source key with a value is used.",
+        "badge_one": "{{count}} source",
+        "badge_other": "{{count}} sources",
+        "noIntegrations": "No sources configured. Add one under Administration → Integrations.",
+        "addSource": "Add source",
+        "selectSource": "Select source…",
+        "removeSource": "Remove source",
+        "fillEmptyOnly": "Fill empty fields only",
+        "fillOverwrite": "Also suggest replacing existing values",
+        "noMappings": "No mappings yet.",
+        "addMapping": "Add mapping",
+        "useSuggested": "Use suggested mapping",
+        "replaceMappingsConfirm": "Replace the current mappings with the plugin's suggestion?",
+        "selectTarget": "Target field…",
+        "coreFields": "Description fields",
+        "levelFields": "Level fields",
+        "identifierGroup": "Identifier",
+        "identifierTarget": "Identifier (added on save)",
+        "schemePlaceholder": "Identifier scheme, e.g. SweCRIS",
+        "addSourceKey": "Source…",
+        "addFallback": "+ fallback…",
+        "or": "or",
+        "moveEarlier": "Try earlier",
+        "incomplete": "Every mapping needs a target and at least one source key, and identifiers need a scheme.",
+        "unsavedFieldsHint": "Only saved level fields can be mapped. Save the field schema first if you just added fields.",
+        "save": "Save sources"
+      }
     },
     "vocab": {
       "clickToEdit": "Click to edit",
@@ -728,7 +774,8 @@
     "integrations": {
       "entityTypes": {
         "agent": "Agent authority lookup",
-        "metadata": "Metadata vocabulary field"
+        "metadata": "Metadata vocabulary field",
+        "source": "Source plugin (prefill descriptions)"
       },
       "mappingHelp": "Map target fields to dot-paths in each result item.\n\nExample for {\"persons\": [{\"name_full\": \"...\", \"acc\": \"...\"}]}:\n{\n  \"name\":        \"name_full\",\n  \"identifier\":  \"acc\",\n  \"description\": \"aff_name_en\"\n}\n\nSupported target fields:\n  name, authorized_form, agent_type,\n  date_from, date_to, description,\n  identifier, website",
       "jsonInvalid": "Headers or field mappings contain invalid JSON",
@@ -747,10 +794,17 @@
       "disabled": "Disabled",
       "intro": "Configure external APIs for authority lookups and vocabulary fields. Searches are proxied through the server so credentials stay private.",
       "customIntegrations": "Custom integrations",
-      "customIntegrationsDesc": "Custom APIs searched alongside the built-ins above, or used in vocabulary metadata fields.",
-      "addIntegration": "Add integration",
+      "customIntegrationsDesc": "Lookups are searched alongside the built-ins above or used in vocabulary metadata fields. Sources use an installed plugin to prefill descriptions.",
+      "addIntegration": "Add lookup",
       "noneYet": "No custom integrations configured yet.",
-      "deleteConfirm": "Delete \"{{name}}\"?"
+      "deleteConfirm": "Delete \"{{name}}\"?",
+      "plugins": "Source plugins",
+      "pluginsDesc": "Installed plugins that can prefill descriptions from external systems. Disabled plugins cannot be used by this institution.",
+      "plugin": "Plugin",
+      "pluginNotInstalled": "Plugin not installed",
+      "addSource": "Add source",
+      "noEnabledPlugins": "No source plugins are enabled.",
+      "secretSet": "Saved — leave empty to keep"
     },
     "identifierSchemes": {
       "headersInvalid": "Headers is not valid JSON.",
@@ -1429,7 +1483,8 @@
       "selectPlaceholder": "Select…",
       "searchPlaceholder": "Search…",
       "noResults": "No results",
-      "typeToSearch": "Type to search"
+      "typeToSearch": "Type to search",
+      "openInResources": "Open related resource"
     },
     "agents": {
       "title": "Agents",
