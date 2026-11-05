@@ -4,9 +4,10 @@ import { Save, X, ChevronRight } from 'lucide-react'
 import { nodesApi } from '@/api'
 import api from '@/api/client'
 import { Spinner } from '@/components/ui'
-import type { NodeDetail, MetadataField } from '@/types'
+import type { NodeDetail, MetadataField, SourceApplyResult, SourceImport } from '@/types'
 import styles from './NodeForm.module.css'
 import { MetadataFieldInput } from './MetadataFieldRenderer'
+import RecordSourcePanel from './RecordSourcePanel'
 import { useTranslation } from 'react-i18next'
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -50,6 +51,12 @@ const EMPTY_FORM: NodeFormData = {
   date_certainty: '',
   metadata_spec: {} as Record<string, unknown>,
 }
+
+const SOURCE_NODE_FIELDS = [
+  'title', 'description', 'scope_and_content', 'arrangement',
+  'access_conditions', 'reproduction_conditions', 'language',
+  'finding_aids', 'extent', 'date_start', 'date_end',
+] as const
 
 function nodeToForm(node: NodeDetail): NodeFormData {
   return {
@@ -106,8 +113,8 @@ function MetadataFields({
 // ─── Main form ────────────────────────────────────────────────────────
 
 interface NodeFormProps {
-  node?: NodeDetail               // present when editing
-  parentId?: number | null        // present when adding child
+  node?: NodeDetail
+  parentId?: number | null
   onSaved: (nodeId: number) => void
   onCancel: () => void
 }
@@ -120,27 +127,26 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
   const [form, setForm] = useState<NodeFormData>(() =>
     node ? nodeToForm(node) : { ...EMPTY_FORM, parent_id: parentId ?? null }
   )
+  const [pendingImports, setPendingImports] = useState<SourceImport[]>([])
 
   const set = (field: keyof NodeFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [field]: e.target.value }))
 
-  // Fetch hierarchy types for this institution
+  // ─── Lookups ──────────────────────────────────────────────────────
+
   const { data: hierarchyTypes } = useQuery({
     queryKey: ['hierarchy-types', 'resource'],
     queryFn: () => api.get('/hierarchy/types', { params: { entity_type: 'resource' } }).then(r => r.data.data as any[]),
   })
 
-  // Fetch valid levels based on selected hierarchy type + parent
   const { data: parentNode } = useQuery({
     queryKey: ['node-parent', form.parent_id],
     queryFn: () => nodesApi.get(form.parent_id!).then(r => r.data.data),
     enabled: form.parent_id !== null && form.parent_id !== undefined,
   })
 
-  // When there is a parent, wait until parentNode is loaded before fetching valid levels
-  // so we can pass the correct parent_level. Without this, editing a child node
-  // fires the query with parent_level=null, returning only root levels.
+  // Wait for parentNode so valid levels are computed against the right parent level
   const parentReady = form.parent_id === null || !!parentNode
 
   const { data: validLevels } = useQuery({
@@ -155,7 +161,6 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
     enabled: !!form.hierarchy_type_id && parentReady,
   })
 
-  // Fetch metadata fields for selected level
   const { data: levelSchema } = useQuery({
     queryKey: ['level-schema', form.hierarchy_type_id, form.level_of_description],
     queryFn: () =>
@@ -168,20 +173,63 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
     enabled: !!form.hierarchy_type_id && !!form.level_of_description,
   })
 
-  // Clear level when hierarchy type changes — but skip on initial mount
-  // so that editing a node doesn't wipe the existing level_of_description
+  // ─── Reset dependent state (skip first render when editing) ──────
+
   const isFirstRender = useRef(true)
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return }
     setForm(f => ({ ...f, level_of_description: '', metadata_spec: {} }))
   }, [form.hierarchy_type_id])
 
-  // Clear metadata when level changes — also skip first render
   const isFirstLevelRender = useRef(true)
   useEffect(() => {
     if (isFirstLevelRender.current) { isFirstLevelRender.current = false; return }
     setForm(f => ({ ...f, metadata_spec: {} }))
+    setPendingImports([])
   }, [form.level_of_description])
+
+  // ─── Source handling ─────────────────────────────────────────────
+
+  const currentNodeValues: Record<string, unknown> = Object.fromEntries(
+    SOURCE_NODE_FIELDS.map(field => [field, form[field]])
+  )
+
+  const handleSourceApply = (result: SourceApplyResult) => {
+    setForm(f => {
+      const next: NodeFormData = { ...f, metadata_spec: { ...f.metadata_spec, ...result.meta } }
+      for (const [field, value] of Object.entries(result.node)) {
+        if ((SOURCE_NODE_FIELDS as readonly string[]).includes(field)) {
+          (next as any)[field] = value
+        }
+      }
+      return next
+    })
+    setPendingImports(prev => [
+      ...prev.filter(p => p.integration_id !== result.sourceImport.integration_id),
+      result.sourceImport,
+    ])
+  }
+
+  const removePendingIdentifier = (integrationId: number, scheme: string) =>
+    setPendingImports(prev => prev.map(imp =>
+      imp.integration_id !== integrationId
+        ? imp
+        : { ...imp, identifiers: imp.identifiers.filter(i => i.scheme !== scheme) }
+    ))
+
+  const importPayload = () => pendingImports.map(imp => ({
+    token: imp.token,
+    identifiers: imp.identifiers.map(i => i.scheme),
+  }))
+
+  const afterSave = (nodeId: number) => {
+    if (pendingImports.length) {
+      setPendingImports([])
+      queryClient.invalidateQueries({ queryKey: ['node-identifiers', nodeId] })
+    }
+  }
+
+  // ─── Save ────────────────────────────────────────────────────────
 
   const createMutation = useMutation({
     mutationFn: () => nodesApi.create({
@@ -192,11 +240,14 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
       date_end: form.date_end || null,
       date_certainty: form.date_certainty || null,
       metadata_spec: form.metadata_spec,
+      record_source_imports: importPayload(),
     }),
     onSuccess: (res) => {
+      const newId = res.data.data.id
+      afterSave(newId)
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
       queryClient.invalidateQueries({ queryKey: ['node-children', form.parent_id] })
-      onSaved(res.data.data.id)
+      onSaved(newId)
     },
   })
 
@@ -217,8 +268,10 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
       date_end: form.date_end || null,
       date_certainty: form.date_certainty || null,
       metadata_spec: form.metadata_spec,
+      record_source_imports: importPayload(),
     }),
     onSuccess: (res) => {
+      afterSave(node!.id)
       queryClient.invalidateQueries({ queryKey: ['node', node!.id] })
       queryClient.invalidateQueries({ queryKey: ['node-tree'] })
       queryClient.invalidateQueries({ queryKey: ['node-children', node!.parent_id] })
@@ -307,7 +360,6 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
                 disabled={isEditing}
               >
                 <option value="">{t('resources.form.fields.selectHierarchy')}</option>
-                {/* Fallback option while loading when editing */}
                 {isEditing && form.hierarchy_type_id && !hierarchyTypes?.find((ht: any) => String(ht.id) === String(form.hierarchy_type_id)) && (
                   <option value={form.hierarchy_type_id}>{node?.hierarchy_type_name ?? t('common.loading')}</option>
                 )}
@@ -330,7 +382,6 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
                 <option value="">
                   {form.hierarchy_type_id ? t('resources.form.fields.selectLevel') : t('resources.form.fields.selectHierarchyFirst')}
                 </option>
-                {/* If editing and validLevels not yet loaded, show current value so select isn't blank */}
                 {isEditing && form.level_of_description && !validLevels?.find((l: any) => l.name === form.level_of_description) && (
                   <option value={form.level_of_description}>{form.level_of_description}</option>
                 )}
@@ -342,6 +393,20 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
 
           </div>
         </div>
+
+        {/* Source lookup */}
+        {!!form.hierarchy_type_id && !!form.level_of_description && (
+          <RecordSourcePanel
+            hierarchyTypeId={Number(form.hierarchy_type_id)}
+            levelName={form.level_of_description}
+            nodeId={node?.id}
+            currentNode={currentNodeValues}
+            currentMeta={form.metadata_spec}
+            pendingImports={pendingImports}
+            onApply={handleSourceApply}
+            onRemovePendingIdentifier={removePendingIdentifier}
+          />
+        )}
 
         {/* Dates & Extent */}
         <div className={styles.section}>
@@ -471,12 +536,12 @@ export default function NodeForm({ node, parentId, onSaved, onCancel }: NodeForm
           <MetadataFields
             fields={metadataFields}
             values={form.metadata_spec}
-onChange={(key, value) =>
-  setForm(f => ({
-    ...f,
-    metadata_spec: { ...f.metadata_spec, [key]: value },
-  }))
-}
+            onChange={(key, value) =>
+              setForm(f => ({
+                ...f,
+                metadata_spec: { ...f.metadata_spec, [key]: value },
+              }))
+            }
           />
         )}
 

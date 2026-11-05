@@ -109,7 +109,6 @@
       "copied": "Kopierad"
     },
     "moveToParent": "Flytta till annan överordnad post",
-    "moveToParent": "Flytta till annan överordnad post",
     "deleteConfirmSimple": "Ta bort \"{{title}}\"? Detta kan inte ångras.",
     "deleteConfirmWithDescendants_one": "\"{{title}}\" har {{count}} underordnad post.\n\nOm du tar bort den raderas denna post OCH den underordnade posten permanent ({{total}} poster totalt). Detta kan inte ångras.\n\nÄr du helt säker?",
     "deleteConfirmWithDescendants_other": "\"{{title}}\" har {{count}} underordnade poster.\n\nOm du tar bort den raderas denna post OCH samtliga {{count}} underordnade poster permanent ({{total}} poster totalt). Detta kan inte ångras.\n\nÄr du helt säker?",
@@ -258,6 +257,23 @@
         "languagePlaceholder": "t.ex. svenska, engelska",
         "findingAids": "Sökmedel",
         "findingAidsPlaceholder": "Hänvisning till eventuella sökmedel…"
+      },
+      "recordSource": {
+        "title": "Hämta från källa",
+        "searchPlaceholder": "Sök…",
+        "noResults": "Inga träffar",
+        "previewError": "Kunde inte hämta posten",
+        "selectAll": "Markera alla",
+        "field": "Fält",
+        "current": "Nuvarande",
+        "new": "Från källan",
+        "empty": "(tomt)",
+        "unchanged": "Oförändrat",
+        "alreadyAttached": "Redan kopplad",
+        "apply_one": "Använd {{count}} fält",
+        "apply_other": "Använd {{count}} fält",
+        "applied": "Ifyllt från {{label}}. Granska formuläret och spara.",
+        "pendingTitle": "Identifierare som läggs till när du sparar"
       }
     },
     "accessions": {
@@ -646,7 +662,36 @@
       "levelsCount_one": "{{count}} nivå",
       "levelsCount_other": "{{count}} nivåer",
       "selectTypeToManage": "Välj en hierarkityp för att hantera dess nivåer",
-      "selectTypeSubtitle": "Nivåer definierar strukturen för dina arkivbeskrivningar"
+      "selectTypeSubtitle": "Nivåer definierar strukturen för dina arkivbeskrivningar",
+      "recordSources": {
+        "title": "Beskrivningskällor",
+        "hint": "Förifyll beskrivningar på den här nivån från externa system. För varje fält används den första källnyckeln som har ett värde.",
+        "badge_one": "{{count}} källa",
+        "badge_other": "{{count}} källor",
+        "noIntegrations": "Inga källor är konfigurerade. Lägg till en under Administration → Integrationer.",
+        "addSource": "Lägg till källa",
+        "selectSource": "Välj källa…",
+        "removeSource": "Ta bort källa",
+        "fillEmptyOnly": "Fyll bara tomma fält",
+        "fillOverwrite": "Föreslå även att ersätta befintliga värden",
+        "noMappings": "Inga mappningar ännu.",
+        "addMapping": "Lägg till mappning",
+        "useSuggested": "Använd föreslagen mappning",
+        "replaceMappingsConfirm": "Ersätta nuvarande mappningar med pluginens förslag?",
+        "selectTarget": "Målfält…",
+        "coreFields": "Beskrivningsfält",
+        "levelFields": "Nivåns fält",
+        "identifierGroup": "Identifierare",
+        "identifierTarget": "Identifierare (läggs till vid sparning)",
+        "schemePlaceholder": "Identifierarschema, t.ex. SweCRIS",
+        "addSourceKey": "Källa…",
+        "addFallback": "+ reserv…",
+        "or": "eller",
+        "moveEarlier": "Prova tidigare",
+        "incomplete": "Varje mappning behöver ett mål och minst en källnyckel, och identifierare behöver ett schema.",
+        "unsavedFieldsHint": "Bara sparade nivåfält kan mappas. Spara fältschemat först om du nyss lagt till fält.",
+        "save": "Spara källor"
+      }
     },
     "vocab": {
       "clickToEdit": "Klicka för att redigera",
@@ -729,7 +774,8 @@
     "integrations": {
       "entityTypes": {
         "agent": "Agentuppslagning (auktoritet)",
-        "metadata": "Metadatavokabulärfält"
+        "metadata": "Metadatavokabulärfält",
+        "source": "Källplugin (förifyllning)"
       },
       "mappingHelp": "Mappa målfält till dot-sökvägar i varje resultatobjekt.\n\nExempel för {\"persons\": [{\"name_full\": \"...\", \"acc\": \"...\"}]}:\n{\n  \"name\":        \"name_full\",\n  \"identifier\":  \"acc\",\n  \"description\": \"aff_name_en\"\n}\n\nStödda målfält:\n  name, authorized_form, agent_type,\n  date_from, date_to, description,\n  identifier, website",
       "jsonInvalid": "Rubriker eller fältmappningar innehåller ogiltig JSON",
@@ -748,10 +794,17 @@
       "disabled": "Inaktiverad",
       "intro": "Konfigurera externa API:er för auktoritetsuppslagningar och vokabulärfält. Sökningar proxas via servern så att autentiseringsuppgifter förblir privata.",
       "customIntegrations": "Anpassade integrationer",
-      "customIntegrationsDesc": "Anpassade API:er som söks tillsammans med de inbyggda ovan, eller används i vokabulär-metadatafält.",
-      "addIntegration": "Lägg till integration",
+      "customIntegrationsDesc": "Uppslagningar söks tillsammans med de inbyggda ovan eller används i vokabulär-metadatafält. Källor använder en installerad plugin för att förifylla beskrivningar.",
+      "addIntegration": "Lägg till uppslagning",
       "noneYet": "Inga anpassade integrationer konfigurerade ännu.",
-      "deleteConfirm": "Ta bort \"{{name}}\"?"
+      "deleteConfirm": "Ta bort \"{{name}}\"?",
+      "plugins": "Källplugins",
+      "pluginsDesc": "Installerade plugins som kan förifylla beskrivningar från externa system. Avstängda plugins kan inte användas av institutionen.",
+      "plugin": "Plugin",
+      "pluginNotInstalled": "Plugin saknas",
+      "addSource": "Lägg till källa",
+      "noEnabledPlugins": "Inga källplugins är aktiverade.",
+      "secretSet": "Sparad — lämna tomt för att behålla"
     },
     "identifierSchemes": {
       "headersInvalid": "Rubriker är inte giltig JSON.",

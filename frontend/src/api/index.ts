@@ -1,7 +1,10 @@
 import api from './client'
 import type {
   User, NodeStub, NodeDetail, AgentStub, AgentDetail,
-  LocationStub, LocationDetail, ClassificationStub,ApiResponse, ExternalIntegration, AgentNameForm, AgentNameFormType
+  LocationStub, LocationDetail, ClassificationStub, ApiResponse, ExternalIntegration,
+  AgentNameForm, AgentNameFormType,
+  SourcePluginInfo, SourceNodeTarget, SourceKeyInfo, SourceMapping,
+  LevelSourceOption, SourceHit, SourcePreview,
 } from '@/types'
 
 
@@ -763,7 +766,7 @@ export const integrationsApi = {
       params: entity_type ? { entity_type } : {},
     }).then(r => r.data.data!),
 
-  create: (data: Omit<ExternalIntegration, 'id'>) =>
+  create: (data: Partial<Omit<ExternalIntegration, 'id'>>) =>
     api.post<ApiResponse<ExternalIntegration>>('/integrations', data).then(r => r.data.data!),
 
   update: (id: number, data: Partial<Omit<ExternalIntegration, 'id'>>) =>
@@ -775,6 +778,46 @@ export const integrationsApi = {
   search: (id: number, q: string) =>
     api.get<ApiResponse<Record<string, any>[]>>(`/integrations/${id}/search`, { params: { q } })
       .then(r => r.data.data!),
+}
+
+// ─── Source plugins ───────────────────────────────────────────────────
+export const sourcesApi = {
+  plugins: () =>
+    api.get<ApiResponse<SourcePluginInfo[]>>('/sources/plugins').then(r => r.data.data ?? []),
+
+  setPluginEnabled: (key: string, enabled: boolean) =>
+    api.put(`/sources/plugins/${encodeURIComponent(key)}`, { enabled }),
+
+  nodeTargets: () =>
+    api.get<ApiResponse<SourceNodeTarget[]>>('/sources/node-targets').then(r => r.data.data ?? []),
+
+  sourceKeys: (integrationId: number) =>
+    api.get<ApiResponse<SourceKeyInfo[]>>(`/sources/integrations/${integrationId}/source-keys`)
+      .then(r => r.data.data ?? []),
+
+  suggestedMappings: (integrationId: number, levelId: number) =>
+    api.get<ApiResponse<SourceMapping[]>>(`/sources/integrations/${integrationId}/suggested-mappings`, {
+      params: { level_id: levelId },
+    }).then(r => r.data.data ?? []),
+
+  forLevel: (hierarchyTypeId: number, levelName: string) =>
+    api.get<ApiResponse<LevelSourceOption[]>>('/sources/for-level', {
+      params: { hierarchy_type_id: hierarchyTypeId, level_name: levelName },
+    }).then(r => r.data.data ?? []),
+
+  search: (integrationId: number, q: string) =>
+    api.get<ApiResponse<SourceHit[]>>(`/sources/integrations/${integrationId}/search`, { params: { q } })
+      .then(r => r.data.data ?? []),
+
+  nodePreview: (data: {
+    hierarchy_type_id: number
+    level_name: string
+    integration_id: number
+    external_id: string
+    node_id?: number | null
+    current: { node: Record<string, unknown>; meta: Record<string, unknown> }
+  }) =>
+    api.post<ApiResponse<SourcePreview>>('/sources/node-preview', data).then(r => r.data.data!),
 }
 
 export const representationsApi = {

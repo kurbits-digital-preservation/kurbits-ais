@@ -241,18 +241,23 @@ def get_current_institution():
 def update_current_institution():
     if not current_user.active_institution_id:
         return error('No active institution', 400)
-    if not current_user.is_institution_admin_of(
-        Institution.query.get(current_user.active_institution_id)
-    ):
+    inst = Institution.query.get(current_user.active_institution_id)
+    if not inst:
+        return error('Institution not found', 404)
+    if not current_user.is_institution_admin_of(inst):
         return error('Institution admin access required', 403)
 
-    inst = Institution.query.get(current_user.active_institution_id)
     data = request.get_json(silent=True) or {}
 
-    updatable = ['name', 'description', 'website', 'country_code', 'institution_code','settings']
+    updatable = ['name', 'description', 'website', 'country_code', 'institution_code']
     for field in updatable:
         if field in data:
             setattr(inst, field, data[field])
+
+    if 'settings' in data:
+        if not isinstance(data['settings'], dict):
+            return error('settings must be an object', 400)
+        inst.settings = {**(inst.settings or {}), **data['settings']}
 
     db.session.commit()
     return success(_serialize_institution(inst))

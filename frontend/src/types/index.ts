@@ -47,7 +47,7 @@ export interface HierarchyLevel {
   sort_order: number
   can_have_location: boolean
   is_object_level: boolean
-  metadata_schema: { fields: MetadataField[] } | null
+  metadata_schema: { fields: MetadataField[]; record_sources?: LevelSource[] } | null
 }
 
 // ─── Nodes ───────────────────────────────────────────────────────────
@@ -279,6 +279,12 @@ export interface ExternalIntegration {
   result_path: string
   field_mappings: Record<string, string>
   is_active: boolean
+  has_headers?: boolean
+  plugin?: string | null
+  plugin_label?: string
+  plugin_installed?: boolean
+  config?: Record<string, unknown>
+  secrets_set?: string[]
 }
 
 // ─── Representations ─────────────────────────────────────────────────
@@ -334,4 +340,109 @@ export interface RepresentationStub {
   rep_type_name: string | null
   label: string | null
   file_count: number
+}
+// ─── Source plugins ──────────────────────────────────────────────────
+export type SourceFillMode = 'empty_only' | 'overwrite'
+
+export interface SourceConfigField {
+  key: string
+  label: string
+  type: 'text' | 'url' | 'textarea' | 'json'
+  required: boolean
+  secret: boolean
+  default: unknown
+  help: string | null
+  placeholder: string | null
+}
+
+export interface SourcePluginInfo {
+  key: string
+  version: string
+  label: string
+  description: string
+  search_hint: string
+  supports: string[]
+  config_schema: SourceConfigField[]
+  enabled: boolean
+}
+
+export interface SourceNodeTarget {
+  target: string
+  field: string
+  label: string
+  type: string
+}
+
+export interface SourceKeyInfo {
+  key: string
+  label: string
+  group: string | null
+}
+
+export interface SourceMapping {
+  target: string
+  sources: string[]
+  scheme?: string
+}
+
+export interface LevelSource {
+  integration_id: number
+  fill_mode: SourceFillMode
+  mappings: SourceMapping[]
+}
+
+export interface LevelSourceOption {
+  integration_id: number
+  name: string
+  plugin: string
+  plugin_label: string
+  search_hint: string
+  fill_mode: SourceFillMode
+}
+
+export interface SourceHit {
+  external_id: string
+  label: string
+  description: string | null
+}
+
+export interface SourcePreviewRow {
+  key: string
+  kind: 'node' | 'meta' | 'identifier'
+  field: string
+  label: string
+  source_key: string | null
+  current: string
+  proposed: string
+  value: unknown
+  scheme: string | null
+  selectable: boolean
+  selected: boolean
+  status: 'unchanged' | 'attached' | 'conflict' | 'invalid' | null
+  message: string | null
+}
+
+export interface SourcePreview {
+  integration_id: number
+  integration_name: string
+  external_id: string
+  label: string
+  source_url: string | null
+  fill_mode: SourceFillMode
+  rows: SourcePreviewRow[]
+  import_token: string
+}
+
+export interface SourceImport {
+  integration_id: number
+  integration_name: string
+  external_id: string
+  token: string
+  identifiers: { scheme: string; value: string }[]
+}
+
+export interface SourceApplyResult {
+  node: Record<string, string>
+  meta: Record<string, unknown>
+  sourceImport: SourceImport
 }

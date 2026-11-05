@@ -6,6 +6,7 @@ from app.extensions import db
 from app.models import HierarchyType, HierarchyLevel, HierarchyEntityType
 from app.models.hierarchy import hierarchy_level_relationships
 import sqlalchemy as sa
+from app.services.sources.node_mapping import validate_level_sources
 
 
 def _serialize_type(ht: HierarchyType) -> dict:
@@ -40,6 +41,34 @@ def _serialize_level(level: HierarchyLevel) -> dict:
         'allowed_children_ids': allowed_children_ids,
         'is_object_level': level.is_object_level,
     }
+def _get_level_for_institution(type_id: int, level_id: int):
+    return db.session.execute(
+        sa.select(HierarchyLevel)
+        .join(HierarchyType, HierarchyType.id == HierarchyLevel.hierarchy_type_id)
+        .where(
+            HierarchyLevel.id == level_id,
+            HierarchyLevel.hierarchy_type_id == type_id,
+            HierarchyType.institution_id == current_user.active_institution_id,
+        )
+    ).scalar_one_or_none()
+
+
+def _merge_metadata_schema(existing, incoming):
+    if not isinstance(incoming, dict):
+        return None, 'metadata_schema must be an object'
+    merged = dict(existing) if isinstance(existing, dict) else {}
+    merged.update(incoming)
+    merged.setdefault('fields', [])
+    if 'record_sources' in incoming:
+        clean, errors = validate_level_sources(
+            incoming['record_sources'],
+            merged.get('fields') or [],
+            current_user.active_institution_id,
+        )
+        if errors:
+            return None, '; '.join(errors)
+        merged['record_sources'] = clean
+    return merged, None
 
 
 @bp.route('/hierarchy/types', methods=['GET'])
@@ -170,6 +199,10 @@ def create_level(type_id):
     if existing:
         return error(f'A level named "{data["name"]}" already exists in this hierarchy', 409)
 
+    schema, schema_err = _merge_metadata_schema({}, data.get('metadata_schema') or {'fields': []})
+    if schema_err:
+        return error(schema_err, 422)
+
     max_order = db.session.execute(
         sa.select(sa.func.max(HierarchyLevel.sort_order))
         .where(HierarchyLevel.hierarchy_type_id == type_id)
@@ -181,7 +214,7 @@ def create_level(type_id):
         description=data.get('description'),
         sort_order=data.get('sort_order', max_order + 1),
         can_have_location=data.get('can_have_location', False),
-        metadata_schema=data.get('metadata_schema', {'fields': []}),
+        metadata_schema=schema,
     )
     db.session.add(level)
     db.session.commit()
@@ -192,13 +225,16 @@ def create_level(type_id):
 @login_required
 @require_institution_admin
 def update_level(type_id, level_id):
-    level = HierarchyLevel.query.filter_by(
-        id=level_id, hierarchy_type_id=type_id
-    ).first()
+    level = _get_level_for_institution(type_id, level_id)
     if not level:
         return error('Level not found', 404)
 
     data = request.get_json(silent=True) or {}
+    if 'metadata_schema' in data:
+        schema, schema_err = _merge_metadata_schema(level.metadata_schema, data['metadata_schema'] or {})
+        if schema_err:
+            return error(schema_err, 422)
+        level.metadata_schema = schema
     if 'name' in data:
         level.name = data['name']
     if 'description' in data:
@@ -207,8 +243,6 @@ def update_level(type_id, level_id):
         level.sort_order = data['sort_order']
     if 'can_have_location' in data:
         level.save_can_have_location(data['can_have_location'])
-    if 'metadata_schema' in data:
-        level.metadata_schema = data['metadata_schema']
     if 'is_object_level' in data:
         level.is_object_level = bool(data['is_object_level'])
 

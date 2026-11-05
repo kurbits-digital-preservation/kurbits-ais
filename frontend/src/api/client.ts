@@ -28,6 +28,11 @@ function showServerWarnings(warnings: string[]) {
   setTimeout(() => alert(lines.join('\n')), 0)
 }
 
+api.interceptors.request.use(config => {
+  if (i18n.language) config.headers['Accept-Language'] = i18n.language
+  return config
+})
+
 api.interceptors.response.use(
   (res) => {
     const warnings = res.data?.warnings

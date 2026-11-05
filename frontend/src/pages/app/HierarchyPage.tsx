@@ -3,13 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Plus, Pencil, Trash2, X, Save, ChevronRight,
   GripVertical, Check, ArrowUpDown, Settings,
-  Database, MapPin, Tag, AlertCircle, BookOpen, Download, Layers
+  Database, MapPin, Tag, AlertCircle, BookOpen, Download, Layers, Plug
 } from 'lucide-react'
 import { hierarchyApi, templatesApi } from '@/api'
 import { Spinner, EmptyState } from '@/components/ui'
 import styles from './HierarchyPage.module.css'
 import api from '@/api/client'
 import { useTranslation } from 'react-i18next'
+import RecordSourceConfig from './RecordSourceConfig'
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -331,6 +332,8 @@ function LevelRow({
   const [parentDirty, setParentDirty] = useState(false)
   const [selectedParents, setSelectedParents] = useState<number[]>(level.allowed_parent_ids)
 
+  const sourceCount: number = level.metadata_schema?.record_sources?.length ?? 0
+
   const updateMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       hierarchyApi.updateLevel(typeId, level.id, data),
@@ -395,6 +398,11 @@ function LevelRow({
           {level.metadata_schema?.fields?.length > 0 && (
             <span className={styles.schemaBadge}>
               <Settings size={10} /> {t('admin.hierarchy.fieldsCount', { count: level.metadata_schema.fields.length })}
+            </span>
+          )}
+          {entityType === 'resource' && sourceCount > 0 && (
+            <span className={styles.schemaBadge}>
+              <Plug size={10} /> {t('admin.hierarchy.recordSources.badge', { count: sourceCount })}
             </span>
           )}
         </div>
@@ -534,12 +542,16 @@ function LevelRow({
               </button>
             </div>
           )}
+
+          {/* Record sources */}
+          {entityType === 'resource' && (
+            <RecordSourceConfig typeId={typeId} level={level} />
+          )}
         </div>
       )}
     </div>
   )
 }
-
 // ─── Type panel ───────────────────────────────────────────────────────
 
 function HierarchyTypePanel({
