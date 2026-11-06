@@ -1425,6 +1425,28 @@
     },
     "emptyState": {
       "title": "Välj en agent för att visa detaljer"
+    },
+    "wikidata": {
+      "button": "Exportera till Wikidata",
+      "title": "Exportera till Wikidata (QuickStatements)",
+      "intro": "Kommandona nedan lägger in uppgifterna i Wikidata. De körs i QuickStatements med ditt eget Wikidata-konto, och du kan granska varje påstående innan de körs. Inget ändras i Wikidata förrän du gör det.",
+      "createMissing": "Skapa nya Wikidata-objekt för agenter som saknar Wikidata-id",
+      "includeArchivesAt": "Lägg till \"arkiv finns hos\" (P485) för agenter som är arkivbildare",
+      "includeAliases": "Lägg till namnformer som alias",
+      "missingInstitutionQid": "Institutionens Wikidata-id är inte inställt i Wikidata-källan, så \"arkiv finns hos\" kan inte läggas till.",
+      "missingReferenceTemplate": "Ingen länkmall för portalen är inställd i Wikidata-källan, så påståendena får ingen källhänvisning.",
+      "action": {
+        "create": "Nytt objekt",
+        "update": "Uppdatera",
+        "skip": "Hoppas över"
+      },
+      "statements_one": "{{count}} påstående",
+      "statements_other": "{{count}} påståenden",
+      "noCommands": "Det finns inget att exportera med de valda inställningarna.",
+      "copy": "Kopiera kommandon",
+      "copied": "Kopierat",
+      "openQuickStatements": "Öppna QuickStatements",
+      "howTo": "I QuickStatements: logga in, välj New batch, klistra in kommandona, välj Import V1 commands och sedan Run."
     }
   },
   "ocr": {

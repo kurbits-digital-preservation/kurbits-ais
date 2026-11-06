@@ -28,6 +28,7 @@ import { MetadataFieldInput, MetadataFieldValue } from '@/components/node/Metada
 import type { MetadataField } from '@/components/node/MetadataFieldRenderer'
 import AgentSourcePanel from '@/components/agent/AgentSourcePanel'
 import type { AgentSourceApplyResult, AgentSourceImport } from '@/types'
+import WikidataExportDialog from '@/components/agent/WikidataExportDialog'
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -779,6 +780,7 @@ function AgentDetailPanel({
     queryKey: ['agent-counts', agentId],
     queryFn: () => agentsApi.counts(agentId).then(r => r.data.data),
   })
+  const [showWikidataExport, setShowWikidataExport] = useState(false)
 
   const deleteMutation = useMutation({
     mutationFn: () => agentsApi.delete(agentId),
@@ -840,6 +842,14 @@ function AgentDetailPanel({
             </a>
             <button className="btn btn-ghost btn-sm btn-icon" onClick={() => onEdit(agent)} title={t('common.edit')}>
               <Pencil size={14} />
+
+            </button>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              onClick={() => setShowWikidataExport(true)}
+              title={t('agents.wikidata.button')}
+            >
+              <Globe size={14} />
             </button>
             <button
               className="btn btn-ghost btn-sm btn-icon"
@@ -852,6 +862,12 @@ function AgentDetailPanel({
             </button>
           </div>
         </div>
+              {showWikidataExport && (
+        <WikidataExportDialog
+          agentIds={[agent.id]}
+          onClose={() => setShowWikidataExport(false)}
+        />
+      )}
       </div>
 
       <Tabs tabs={tabs} active={tab} onChange={setTab} />

@@ -1425,6 +1425,28 @@
     },
     "emptyState": {
       "title": "Select an agent to view details"
+    },
+    "wikidata": {
+      "button": "Export to Wikidata",
+      "title": "Export to Wikidata (QuickStatements)",
+      "intro": "The commands below add the information to Wikidata. They are run in QuickStatements with your own Wikidata account, and you can review every statement before running them. Nothing is changed in Wikidata until you do.",
+      "createMissing": "Create new Wikidata items for agents without a Wikidata ID",
+      "includeArchivesAt": "Add \"archives at\" (P485) for agents that are creators of records",
+      "includeAliases": "Add name forms as aliases",
+      "missingInstitutionQid": "The institution’s Wikidata ID is not set in the Wikidata source, so \"archives at\" cannot be added.",
+      "missingReferenceTemplate": "No portal URL template is set in the Wikidata source, so the statements get no reference.",
+      "action": {
+        "create": "New item",
+        "update": "Update",
+        "skip": "Skipped"
+      },
+      "statements_one": "{{count}} statement",
+      "statements_other": "{{count}} statements",
+      "noCommands": "There is nothing to export with the selected options.",
+      "copy": "Copy commands",
+      "copied": "Copied",
+      "openQuickStatements": "Open QuickStatements",
+      "howTo": "In QuickStatements: log in, choose New batch, paste the commands, then Import V1 commands and Run."
     }
   },
   "ocr": {

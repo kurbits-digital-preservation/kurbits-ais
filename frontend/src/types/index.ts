@@ -483,3 +483,23 @@ export interface AgentSourceApplyResult {
   meta: Record<string, unknown>
   sourceImport: AgentSourceImport
 }
+
+// ─── Wikidata export ─────────────────────────────────────────────────
+export interface QuickStatementsAgentSummary {
+  id: number
+  name: string
+  qid: string | null
+  action: 'create' | 'update' | 'skip'
+  statements: number
+  warnings: string[]
+}
+
+export interface QuickStatementsResult {
+  commands: string
+  agents: QuickStatementsAgentSummary[]
+  settings: {
+    has_institution_qid: boolean
+    has_reference_template: boolean
+    language: string
+  }
+}

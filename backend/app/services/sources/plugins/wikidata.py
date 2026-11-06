@@ -172,8 +172,8 @@ class WikidataPlugin(SourcePlugin):
             'language', {'sv': 'Föredraget språk', 'en': 'Preferred language'},
             default='sv', placeholder='sv',
             help={
-                'sv': 'Språkkod för namn och beskrivningar. Engelska används om det föredragna språket saknas.',
-                'en': 'Language code for names and descriptions. English is used if the preferred language is missing.',
+                'sv': 'Språkkod för namn och beskrivningar. Används också för etiketter och alias vid export.',
+                'en': 'Language code for names and descriptions. Also used for labels and aliases on export.',
             },
         ),
         ConfigField(
@@ -182,6 +182,22 @@ class WikidataPlugin(SourcePlugin):
             help={
                 'sv': 'Valfritt men rekommenderat. Wikimedia vill att anrop identifierar sig med en kontaktuppgift.',
                 'en': 'Optional but recommended. Wikimedia asks that requests identify themselves with contact details.',
+            },
+        ),
+        ConfigField(
+            'institution_qid', {'sv': 'Institutionens Wikidata-id', 'en': 'Institution Wikidata ID'},
+            placeholder='Q…',
+            help={
+                'sv': 'Används för "arkiv finns hos" (P485) vid export till QuickStatements.',
+                'en': 'Used for "archives at" (P485) when exporting to QuickStatements.',
+            },
+        ),
+        ConfigField(
+            'agent_url_template', {'sv': 'Länkmall för agenter i portalen', 'en': 'Portal URL template for agents'},
+            placeholder='https://arkiv.example.se/agents/{id}',
+            help={
+                'sv': 'Används som källhänvisning vid export. {id} ersätts med agentens id.',
+                'en': 'Used as reference on export. {id} is replaced with the agent ID.',
             },
         ),
     )
