@@ -4,7 +4,7 @@ import type {
   LocationStub, LocationDetail, ClassificationStub, ApiResponse, ExternalIntegration,
   AgentNameForm, AgentNameFormType,
   SourcePluginInfo, SourceNodeTarget, SourceKeyInfo, SourceMapping,
-  LevelSourceOption, SourceHit, SourcePreview,
+  LevelSourceOption, SourceHit, SourcePreview, AgentTypeSchemaInfo
 } from '@/types'
 
 
@@ -202,6 +202,13 @@ export const agentsApi = {
 
   getRelationTypes: () => api.get('/agents/relation-types'),
   getNodeRelationTypes: () => api.get('/agents/node-relation-types'),
+    getTypeSchemas: () =>
+    api.get<ApiResponse<AgentTypeSchemaInfo[]>>('/agents/type-schemas').then(r => r.data.data ?? []),
+  getTypeSchema: (agentType: string) =>
+    api.get<ApiResponse<AgentTypeSchemaInfo>>(`/agents/type-schemas/${agentType}`).then(r => r.data.data!),
+  updateTypeSchema: (agentType: string, metadata_schema: Record<string, unknown>) =>
+    api.patch<ApiResponse<AgentTypeSchemaInfo>>(`/agents/type-schemas/${agentType}`, { metadata_schema })
+      .then(r => r.data.data!),
    counts: (agentId: number) =>
     api.get<{ status: string; data: AgentCounts }>(`/agents/${agentId}/counts`),
     // Identifiers

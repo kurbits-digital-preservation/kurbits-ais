@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Users, Settings, Shield, Pencil, Trash2, BookOpen, Layers,
   X, Save, Plus, ChevronDown, Check, AlertCircle,
-  UserPlus, Building2, Link, Mic, Fingerprint, ListChecks, Printer
+  UserPlus, Building2, Link, Mic, Fingerprint, ListChecks, Printer, UserCog
 } from 'lucide-react'
 import { institutionApi, portalApi } from '@/api'
 import { useAuthStore } from '@/store/auth'
@@ -20,6 +20,7 @@ import LabelDesigner from './LabelDesigner'
 import { Zap, RefreshCw, Globe } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useAuthConfig } from '@/hooks/useAuthConfig'
+import AgentFieldsTab from './AgentFieldsTab'
 
 // ─── Constants ────────────────────────────────────────────────────────
 
@@ -704,6 +705,7 @@ export default function InstitutionAdminPage() {
     { key: 'vocabularies', icon: <BookOpen size={14} />, label: t('admin.page.tabs.vocabularies') },
     { key: 'hierarchies',  icon: <Layers size={14} />,   label: t('admin.page.tabs.hierarchies') },
     { key: 'templates',    icon: <Layers size={14} />,   label: t('admin.page.tabs.fieldTemplates') },
+        { key: 'agent-fields', icon: <UserCog size={14} />, label: t('admin.page.tabs.agentFields') },
     { key: 'integrations', icon: <Link size={14} />,     label: t('admin.page.tabs.integrations') },
     { key: 'ai',           icon: <Mic size={14} />,      label: t('admin.page.tabs.transcription') },
     { key: 'identifiers',  icon: <Fingerprint size={14} />, label: t('admin.page.tabs.identifierSchemes') },
@@ -734,6 +736,7 @@ export default function InstitutionAdminPage() {
         {tab === 'vocabularies' && <VocabulariesTab />}
         {tab === 'hierarchies'  && <HierarchyTab />}
         {tab === 'templates'    && <TemplatesTab />}
+        {tab === 'agent-fields' && <AgentFieldsTab />}
         {tab === 'integrations' && <IntegrationsTab />}
         {tab === 'ai'           && (
           <div className={styles.tabContent}>

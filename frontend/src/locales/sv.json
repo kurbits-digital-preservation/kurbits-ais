@@ -900,8 +900,13 @@
         "identifierSchemes": "Identifierarscheman",
         "recordsValues": "Poständevärden",
         "labelDesigner": "Etikettdesigner",
-        "portal": "Portal"
+        "portal": "Portal",
+        "agentFields": "Agentfält"
       }
+    },
+    "agentFields": {
+      "intro": "Egna metadatafält för varje agenttyp. Fälten visas i agentformuläret och bland agentens uppgifter, utöver de inbyggda fälten.",
+      "save": "Spara fält"
     }
   },
   "acquisitions": {
@@ -1343,7 +1348,8 @@
       "description": "Beskrivning / biografi",
       "descriptionPlaceholder": "Biografisk eller organisatorisk historik…",
       "newAgent": "Ny agent",
-      "editAgent": "Redigera: {{name}}"
+      "editAgent": "Redigera: {{name}}",
+      "typeSpecificFields": "Fält för {{type}}"
     },
     "details": {
       "authorizedForm": "Auktoriserad namnform",

@@ -191,7 +191,7 @@ function InlineIntegrationPicker({
 
 // ─── Metadata schema editor ───────────────────────────────────────────
 
-function MetadataSchemaEditor({
+export function MetadataSchemaEditor({
   fields,
   onChange,
   entityType = 'resource',

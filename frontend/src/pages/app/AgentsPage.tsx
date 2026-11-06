@@ -24,6 +24,8 @@ import AgentIdentifiersTab from '@/components/agent/AgentIdentifiersTab'
 import AgentAttachmentsTab from '@/components/agent/AgentAttachmentsTab'
 import AgentNameFormsTab from '@/components/agent/AgentNameFormsTab'
 import { useTranslation } from 'react-i18next'
+import { MetadataFieldInput, MetadataFieldValue } from '@/components/node/MetadataFieldRenderer'
+import type { MetadataField } from '@/components/node/MetadataFieldRenderer'
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -91,6 +93,7 @@ interface AgentFormData {
   date_from: string
   date_to: string
   website: string
+  metadata_spec: Record<string, unknown>
 }
 
 interface PendingIdentifier {
@@ -102,6 +105,7 @@ interface PendingIdentifier {
 const EMPTY_FORM: AgentFormData = {
   name: '', agent_type: 'person', authorized_form: '',
   description: '', date_from: '', date_to: '', website: '',
+  metadata_spec: {},
 }
 
 function AgentForm({
@@ -122,6 +126,16 @@ function AgentForm({
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [field]: e.target.value }))
 
+  const { data: typeSchema } = useQuery({
+    queryKey: ['agent-type-schema', form.agent_type],
+    queryFn: () => agentsApi.getTypeSchema(form.agent_type),
+    staleTime: 60_000,
+  })
+  const metadataFields = (typeSchema?.metadata_schema?.fields ?? []) as MetadataField[]
+
+  const setMetadata = (key: string, value: unknown) =>
+    setForm(f => ({ ...f, metadata_spec: { ...f.metadata_spec, [key]: value } }))
+
   const handleAuthorityApply = (result: AuthorityResult) => {
     setForm(f => ({
       ...f,
@@ -135,8 +149,6 @@ function AgentForm({
     }))
 
     if (result.identifier_value) {
-      // One pending identifier per scheme — re-applying the same source
-      // replaces rather than duplicates.
       setPendingIdentifiers(prev => [
         ...prev.filter(p => p.scheme !== result.identifier_scheme),
         { scheme: result.identifier_scheme, value: result.identifier_value, source_url: result.source_url },
@@ -211,6 +223,25 @@ function AgentForm({
           <textarea value={form.description} onChange={set('description')}
             rows={5} placeholder={t('agents.form.descriptionPlaceholder')} />
         </div>
+
+        {metadataFields.length > 0 && (
+          <>
+            <h3 style={{
+              gridColumn: '1 / -1', margin: 'var(--space-3) 0 0',
+              fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-ink)',
+            }}>
+              {t('agents.form.typeSpecificFields', { type: t(`agents.types.${form.agent_type}`) })}
+            </h3>
+            {metadataFields.map(field => (
+              <MetadataFieldInput
+                key={field.name}
+                field={field}
+                value={form.metadata_spec[field.name]}
+                onChange={setMetadata}
+              />
+            ))}
+          </>
+        )}
       </div>
 
       <div className={styles.formActions}>
@@ -234,6 +265,20 @@ function AgentForm({
 
 function DetailsTab({ agent }: { agent: AgentDetail }) {
   const { t } = useTranslation()
+
+  const { data: typeSchema } = useQuery({
+    queryKey: ['agent-type-schema', agent.agent_type],
+    queryFn: () => agentsApi.getTypeSchema(agent.agent_type),
+    staleTime: 60_000,
+  })
+
+  const schemaFields = (typeSchema?.metadata_schema?.fields ?? agent.metadata_fields ?? []) as MetadataField[]
+  const metadata = agent.metadata_spec ?? {}
+  const customFields = schemaFields.filter(f => {
+    const value = metadata[f.name]
+    return value !== undefined && value !== null && value !== '' && !(Array.isArray(value) && value.length === 0)
+  })
+
   return (
     <div className={styles.tabContent}>
       <FieldList fields={[
@@ -247,6 +292,10 @@ function DetailsTab({ agent }: { agent: AgentDetail }) {
                 {agent.website} <ExternalLink size={11} />
               </a>
             : null },
+        ...customFields.map(field => ({
+          label: field.label || field.name,
+          value: <MetadataFieldValue field={field} value={metadata[field.name]} />,
+        })),
       ]} />
       <div className={styles.detailFooter}>
         <span>{t('agents.details.createdBy', { name: agent.created_by || '—' })}</span>
@@ -1003,6 +1052,7 @@ export default function AgentsPage() {
                   date_from: editingAgent.date_from ?? '',
                   date_to: editingAgent.date_to ?? '',
                   website: editingAgent.website ?? '',
+                  metadata_spec: { ...(editingAgent.metadata_spec ?? {}) },
                 } : undefined}
                 onSave={(formData, pendingIdentifiers) => {
                   if (viewMode === 'create') createMutation.mutate({ formData, pendingIdentifiers })

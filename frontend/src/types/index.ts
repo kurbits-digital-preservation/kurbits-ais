@@ -192,6 +192,8 @@ export interface AgentDetail extends AgentStub {
   institution_id: number
   description: string | null
   website: string | null
+  metadata_spec: Record<string, unknown>
+  metadata_fields: MetadataField[]
   created_at: string
   updated_at: string
   created_by: string | null
@@ -445,4 +447,9 @@ export interface SourceApplyResult {
   node: Record<string, string>
   meta: Record<string, unknown>
   sourceImport: SourceImport
+}
+
+export interface AgentTypeSchemaInfo {
+  agent_type: AgentType
+  metadata_schema: { fields: MetadataField[] }
 }

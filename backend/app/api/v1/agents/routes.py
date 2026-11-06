@@ -178,6 +178,10 @@ def create_agent():
     if data['agent_type'] not in valid_types:
         return error(f'Invalid agent_type. Must be one of: {", ".join(valid_types)}', 400)
 
+    metadata_spec = data.get('metadata_spec') or {}
+    if not isinstance(metadata_spec, dict):
+        return error('metadata_spec must be an object', 400)
+
     agent = Agent(
         institution_id=institution_id,
         name=data['name'],
@@ -187,6 +191,7 @@ def create_agent():
         date_from=data.get('date_from'),
         date_to=data.get('date_to'),
         website=data.get('website'),
+        metadata_spec=metadata_spec,
         created_by_id=current_user.id,
     )
     db.session.add(agent)
@@ -215,9 +220,14 @@ def update_agent(agent_id):
             return error(f'Invalid agent_type. Must be one of: {", ".join(valid_types)}', 400)
         agent.agent_type = AgentType(data['agent_type'])
 
+    if 'metadata_spec' in data:
+        metadata_spec = data['metadata_spec'] or {}
+        if not isinstance(metadata_spec, dict):
+            return error('metadata_spec must be an object', 400)
+        agent.metadata_spec = metadata_spec
+
     db.session.commit()
     return success(serialize_agent_detail(agent))
-
 
 @bp.route('/agents/<int:agent_id>', methods=['DELETE'])
 @login_required

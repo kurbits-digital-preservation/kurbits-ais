@@ -1,11 +1,11 @@
 from flask import Blueprint
 
 bp = Blueprint('v1', __name__)
-
 from app.api.v1 import auth                          # noqa: F401
 from app.api.v1 import sources                       # noqa: F401
 from app.api.v1.nodes import routes                  # noqa: F401
 from app.api.v1.agents import routes                 # noqa: F401
+from app.api.v1 import agent_type_schemas            # noqa: F401
 from app.api.v1.auth_saml import routes              # noqa: F401
 from app.api.v1.locations import routes              # noqa: F401
 from app.api.v1.classifications import routes        # noqa: F401

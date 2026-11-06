@@ -44,9 +44,9 @@ export interface MetadataField {
   integration_id?: number   // only used when type === 'integration'
 }
 
-const ENTITY_TYPE_VALUES = ['resource', 'location', 'classification']
+const ENTITY_TYPE_VALUES = ['resource', 'location', 'classification', 'agent']
 const ENTITY_TYPE_NAV_KEY: Record<string, string> = {
-  resource: 'nav.resources', location: 'nav.locations', classification: 'nav.classifications',
+  resource: 'nav.resources', location: 'nav.locations', classification: 'nav.classifications', agent: 'nav.agents',
 }
 
 function emptyField(): MetadataField {

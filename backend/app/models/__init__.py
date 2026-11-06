@@ -1,53 +1,55 @@
-from app.models.institution import Institution, user_institution_association
-from app.models.user import User, UserRole
-from app.models.hierarchy import (
-    HierarchyType,
-    HierarchyLevel,
-    HierarchyEntityType,
-    hierarchy_level_relationships,
+from app.models.institution import Institution, user_institution_association# noqa: F401
+from app.models.user import User, UserRole# noqa: F401
+from app.models.hierarchy import (# noqa: F401
+    HierarchyType,# noqa: F401
+    HierarchyLevel,# noqa: F401
+    HierarchyEntityType,# noqa: F401
+    hierarchy_level_relationships,# noqa: F401
 )
-from app.models.node import (
-    Node,
-    NodeChange,
-    NodeAttachment,
-    NodeNote,
-    NodeStatus,
-    NodeRelationType,
-    node_association,
-    IdentifierScheme,
-    NodeIdentifier,
+from app.models.node import (# noqa: F401
+    Node,# noqa: F401
+    NodeChange,# noqa: F401
+    NodeAttachment,# noqa: F401
+    NodeNote,# noqa: F401
+    NodeStatus,# noqa: F401
+    NodeRelationType,# noqa: F401
+    node_association,# noqa: F401
+    IdentifierScheme,# noqa: F401
+    NodeIdentifier,# noqa: F401
 )
-from app.models.agent import (
-    Agent,
-    AgentType,
-    AgentRelationType,
-    AgentNodeRelationType,
-    AgentNote,
-    AgentNameForm,
-    AgentNameFormType,
-    agent_node_association,
-    agent_to_agent_association,
+from app.models.agent import (# noqa: F401
+    Agent,# noqa: F401
+    AgentType,# noqa: F401
+    AgentRelationType,# noqa: F401
+    AgentNodeRelationType,# noqa: F401
+    AgentNote,# noqa: F401
+    AgentNameForm,# noqa: F401
+    AgentNameFormType,# noqa: F401
+    agent_node_association,# noqa: F401
+    agent_to_agent_association,# noqa: F401
 )
-from app.models.location import (
-    Location,
-    LocationMovement,
-    location_node_association,
+from app.models.location import (# noqa: F401
+    Location,# noqa: F401
+    LocationMovement,# noqa: F401
+    location_node_association,# noqa: F401
 )
-from app.models.classification import (
-    Classification,
-    ClassificationChange,
-    BpmnTaskLink,
-    classification_node_association,
-    RecordsVocabularyTerm
+from app.models.classification import ( # noqa: F401
+    Classification, # noqa: F401
+    ClassificationChange,# noqa: F401
+    BpmnTaskLink,# noqa: F401
+    classification_node_association,# noqa: F401
+    RecordsVocabularyTerm# noqa: F401
 )
 
-from app.models.integration import ExternalIntegration
-from app.models.representation import RepresentationType, NodeRepresentation
-from app.models.saved_search import SavedSearch
-from app.models.history import RecentItem, Bookmark
+from app.models.integration import ExternalIntegration # noqa: F401
+from app.models.representation import RepresentationType, NodeRepresentation # noqa: F401
+from app.models.saved_search import SavedSearch # noqa: F401
+from app.models.history import RecentItem, Bookmark # noqa: F401
 from app.models.ai_config import InstitutionAIConfig # noqa: F401
 from app.models.background_task import BackgroundTask  # noqa: F401
 from app.models.label_template import LabelTemplate # noqa: F401
+from app.models.agent_type_schema import AgentTypeSchema # noqa: F401
+
 __all__ = [
     'Institution',
     'user_institution_association',
@@ -92,6 +94,7 @@ __all__ = [
     'BpmnTaskLink',
     'RecordsVocabularyTerm',
     'LabelTemplate',
+    'AgentTypeSchema',
 ]
 from app.models.metadata_template import MetadataTemplate  # noqa: F401
 
