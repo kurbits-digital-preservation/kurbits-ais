@@ -1,4 +1,5 @@
 from app.models.agent import Agent, AgentNote, AgentRelationType, AgentNodeRelationType
+from app.models.agent_type_schema import AgentTypeSchema
 
 OTHER_NAMES_IN_STUB = 3
 
@@ -27,6 +28,8 @@ def serialize_agent_detail(agent: Agent) -> dict:
         'date_from': agent.date_from,
         'date_to': agent.date_to,
         'website': agent.website,
+        'metadata_spec': agent.metadata_spec or {},
+        'metadata_fields': AgentTypeSchema.fields_for(agent.institution_id, agent.agent_type),
         'created_at': agent.created_at.isoformat(),
         'updated_at': agent.updated_at.isoformat(),
         'created_by': agent.created_by.username if agent.created_by else None,

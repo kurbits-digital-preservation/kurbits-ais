@@ -1,0 +1,67 @@
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.intro {
+  font-size: var(--text-sm);
+  color: var(--color-ink-faint);
+  line-height: 1.5;
+  max-width: 720px;
+}
+
+.typeSwitcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.typeButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--text-sm);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+}
+.typeButton:hover { background: var(--color-bg-subtle); }
+
+.typeButtonActive {
+  border-color: var(--color-accent);
+  background: var(--color-accent-subtle, var(--color-bg-subtle));
+  font-weight: 600;
+}
+
+.count {
+  font-size: var(--text-xs);
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-bg-subtle);
+  color: var(--color-ink-faint);
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--color-danger, #c0392b);
+}
+
+.saveBar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}

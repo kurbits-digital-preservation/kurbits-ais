@@ -106,6 +106,7 @@ class Agent(db.Model):
 
     # Contact / identity
     website: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+    metadata_spec: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True)
 
     created_at: so.Mapped[datetime] = so.mapped_column(default=lambda: datetime.now(timezone.utc))
     updated_at: so.Mapped[datetime] = so.mapped_column(

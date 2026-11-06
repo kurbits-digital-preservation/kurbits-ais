@@ -900,8 +900,13 @@
         "identifierSchemes": "Identifier schemes",
         "recordsValues": "Records values",
         "labelDesigner": "Label designer",
-        "portal": "Portal"
+        "portal": "Portal",
+        "agentFields": "Agent fields"
       }
+    },
+    "agentFields": {
+      "intro": "Custom metadata fields for each agent type. The fields are shown in the agent form and on the agent details, in addition to the built-in fields.",
+      "save": "Save fields"
     }
   },
   "acquisitions": {
@@ -1343,7 +1348,8 @@
       "description": "Description / biography",
       "descriptionPlaceholder": "Biographical or organizational history…",
       "newAgent": "New agent",
-      "editAgent": "Edit: {{name}}"
+      "editAgent": "Edit: {{name}}",
+      "typeSpecificFields": "Fields for {{type}}"
     },
     "details": {
       "authorizedForm": "Authorized form",
