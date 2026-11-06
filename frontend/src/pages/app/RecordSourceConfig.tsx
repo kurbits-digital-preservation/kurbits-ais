@@ -31,7 +31,7 @@ function isComplete(m: SourceMapping): boolean {
 
 // ─── Ordered source keys (first non-empty wins) ───────────────────────
 
-function SourceKeyChain({
+export function SourceKeyChain({
   value, keys, onChange,
 }: {
   value: string[]

@@ -135,8 +135,10 @@ class SourcePlugin:
     description: ClassVar[LText] = ''
     search_hint: ClassVar[LText] = ''
     supports: ClassVar[frozenset] = frozenset({'node'})
+    agent_types: ClassVar[frozenset] = frozenset()
     config_schema: ClassVar[tuple] = ()
     suggested_mappings: ClassVar[tuple] = ()
+    suggested_agent_mappings: ClassVar[dict] = {}
     timeout: ClassVar[int] = 10
 
     def __init__(self, config: Optional[dict] = None):
@@ -155,8 +157,13 @@ class SourcePlugin:
             'description': localize(cls.description, lang),
             'search_hint': localize(cls.search_hint, lang),
             'supports': sorted(cls.supports),
+            'agent_types': sorted(cls.agent_types),
             'config_schema': [f.describe(lang) for f in cls.config_schema],
         }
+
+    @classmethod
+    def handles_agent_type(cls, agent_type: str) -> bool:
+        return 'agent' in cls.supports and (not cls.agent_types or agent_type in cls.agent_types)
 
     # ─── To implement in each plugin ──────────────────────────────────
 

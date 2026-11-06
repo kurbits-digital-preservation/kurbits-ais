@@ -906,7 +906,16 @@
     },
     "agentFields": {
       "intro": "Egna metadatafält för varje agenttyp. Fälten visas i agentformuläret och bland agentens uppgifter, utöver de inbyggda fälten.",
-      "save": "Spara fält"
+      "save": "Spara fält",
+      "sourcesTitle": "Källor",
+      "sourcesHint": "Förifyll agenter av den här typen från externa system. För varje fält används den första källnyckeln som har ett värde. Namnformer slår ihop alla valda källnycklar.",
+      "noSourceIntegrations": "Inga källor för den här agenttypen. Lägg till en källa med en plugin som stöder agenter under Administration → Integrationer.",
+      "agentFieldsGroup": "Agentfält",
+      "nameFormGroup": "Namnform",
+      "nameFormTarget": "Namnformer (läggs till vid sparning)",
+      "nameFormTypePlaceholder": "Namnformstyp, t.ex. Alternativt namn",
+      "incomplete": "Varje mappning behöver ett mål och minst en källnyckel. Identifierare behöver ett schema och namnformer en namnformstyp.",
+      "saveSources": "Spara källor"
     }
   },
   "acquisitions": {
@@ -1349,7 +1358,12 @@
       "descriptionPlaceholder": "Biografisk eller organisatorisk historik…",
       "newAgent": "Ny agent",
       "editAgent": "Redigera: {{name}}",
-      "typeSpecificFields": "Fält för {{type}}"
+      "typeSpecificFields": "Fält för {{type}}",
+      "source": {
+        "pendingTitle": "Identifierare och namnformer som läggs till när du sparar",
+        "nameCount_one": "{{count}} namn",
+        "nameCount_other": "{{count}} namn"
+      }
     },
     "details": {
       "authorizedForm": "Auktoriserad namnform",

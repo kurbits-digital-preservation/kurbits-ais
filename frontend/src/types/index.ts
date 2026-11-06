@@ -364,6 +364,7 @@ export interface SourcePluginInfo {
   description: string
   search_hint: string
   supports: string[]
+  agent_types: string[]
   config_schema: SourceConfigField[]
   enabled: boolean
 }
@@ -410,7 +411,7 @@ export interface SourceHit {
 
 export interface SourcePreviewRow {
   key: string
-  kind: 'node' | 'meta' | 'identifier'
+  kind: 'node' | 'meta' | 'identifier' | 'agent' | 'name_form'
   field: string
   label: string
   source_key: string | null
@@ -418,6 +419,7 @@ export interface SourcePreviewRow {
   proposed: string
   value: unknown
   scheme: string | null
+  name_form_type?: string | null
   selectable: boolean
   selected: boolean
   status: 'unchanged' | 'attached' | 'conflict' | 'invalid' | null
@@ -451,5 +453,33 @@ export interface SourceApplyResult {
 
 export interface AgentTypeSchemaInfo {
   agent_type: AgentType
-  metadata_schema: { fields: MetadataField[] }
+  metadata_schema: { fields: MetadataField[]; sources?: AgentSource[] }
+}
+// ─── Agent sources ───────────────────────────────────────────────────
+export interface AgentSourceMapping {
+  target: string
+  sources: string[]
+  scheme?: string
+  name_form_type?: string
+}
+
+export interface AgentSource {
+  integration_id: number
+  fill_mode: SourceFillMode
+  mappings: AgentSourceMapping[]
+}
+
+export interface AgentSourceImport {
+  integration_id: number
+  integration_name: string
+  external_id: string
+  token: string
+  identifiers: { scheme: string; value: string }[]
+  name_forms: { type: string; names: string[] }[]
+}
+
+export interface AgentSourceApplyResult {
+  agent: Record<string, string>
+  meta: Record<string, unknown>
+  sourceImport: AgentSourceImport
 }

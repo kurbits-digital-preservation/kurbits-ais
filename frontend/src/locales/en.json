@@ -906,7 +906,16 @@
     },
     "agentFields": {
       "intro": "Custom metadata fields for each agent type. The fields are shown in the agent form and on the agent details, in addition to the built-in fields.",
-      "save": "Save fields"
+      "save": "Save fields",
+      "sourcesTitle": "Sources",
+      "sourcesHint": "Prefill agents of this type from external systems. For each field the first source key with a value is used. Name forms combine all selected source keys.",
+      "noSourceIntegrations": "No sources for this agent type. Add a source with a plugin that supports agents under Administration → Integrations.",
+      "agentFieldsGroup": "Agent fields",
+      "nameFormGroup": "Name form",
+      "nameFormTarget": "Name forms (added on save)",
+      "nameFormTypePlaceholder": "Name form type, e.g. Alternative name",
+      "incomplete": "Every mapping needs a target and at least one source key. Identifiers need a scheme and name forms a name form type.",
+      "saveSources": "Save sources"
     }
   },
   "acquisitions": {
@@ -1349,7 +1358,12 @@
       "descriptionPlaceholder": "Biographical or organizational history…",
       "newAgent": "New agent",
       "editAgent": "Edit: {{name}}",
-      "typeSpecificFields": "Fields for {{type}}"
+      "typeSpecificFields": "Fields for {{type}}",
+      "source": {
+        "pendingTitle": "Identifiers and name forms added when you save",
+        "nameCount_one": "{{count}} name",
+        "nameCount_other": "{{count}} names"
+      }
     },
     "details": {
       "authorizedForm": "Authorized form",

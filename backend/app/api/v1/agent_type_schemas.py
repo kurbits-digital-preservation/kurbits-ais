@@ -10,6 +10,7 @@ from app.api.v1.helpers import success, error, require_institution_admin
 from app.extensions import db
 from app.models.agent import AgentType
 from app.models.agent_type_schema import AgentTypeSchema
+from app.services.sources.agent_mapping import validate_agent_sources
 
 AGENT_TYPES = [t.value for t in AgentType]
 FIELD_TYPES = {
@@ -24,6 +25,7 @@ _FIELD_NAME_RE = re.compile(r'^[a-z0-9][a-z0-9_]*$')
 def _serialize(agent_type: str, schema: AgentTypeSchema | None) -> dict:
     metadata_schema = dict(schema.metadata_schema or {}) if schema else {}
     metadata_schema.setdefault('fields', [])
+    metadata_schema.setdefault('sources', [])
     return {'agent_type': agent_type, 'metadata_schema': metadata_schema}
 
 
@@ -104,6 +106,14 @@ def update_agent_type_schema(agent_type):
             return error('; '.join(errors), 422)
         merged['fields'] = fields
     merged.setdefault('fields', [])
+
+    if 'sources' in incoming:
+        sources, errors = validate_agent_sources(
+            incoming['sources'], merged['fields'], institution_id, agent_type,
+        )
+        if errors:
+            return error('; '.join(errors), 422)
+        merged['sources'] = sources
 
     schema.metadata_schema = merged
     db.session.commit()

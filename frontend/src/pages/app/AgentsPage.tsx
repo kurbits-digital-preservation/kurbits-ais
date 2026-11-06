@@ -26,6 +26,8 @@ import AgentNameFormsTab from '@/components/agent/AgentNameFormsTab'
 import { useTranslation } from 'react-i18next'
 import { MetadataFieldInput, MetadataFieldValue } from '@/components/node/MetadataFieldRenderer'
 import type { MetadataField } from '@/components/node/MetadataFieldRenderer'
+import AgentSourcePanel from '@/components/agent/AgentSourcePanel'
+import type { AgentSourceApplyResult, AgentSourceImport } from '@/types'
 
 // ─── Constants ───────────────────────────────────────────────────────
 
@@ -94,6 +96,7 @@ interface AgentFormData {
   date_to: string
   website: string
   metadata_spec: Record<string, unknown>
+  record_source_imports?: { token: string; identifiers: string[]; name_forms: string[] }[]
 }
 
 interface PendingIdentifier {
@@ -108,13 +111,19 @@ const EMPTY_FORM: AgentFormData = {
   metadata_spec: {},
 }
 
+const SOURCE_AGENT_FIELDS = [
+  'name', 'authorized_form', 'description', 'date_from', 'date_to', 'website',
+] as const
+
 function AgentForm({
   initial,
+  agentId,
   onSave,
   onCancel,
   isSaving,
 }: {
   initial?: Partial<AgentFormData>
+  agentId?: number
   onSave: (data: AgentFormData, pendingIdentifiers: PendingIdentifier[]) => void
   onCancel: () => void
   isSaving: boolean
@@ -122,6 +131,7 @@ function AgentForm({
   const { t } = useTranslation()
   const [form, setForm] = useState<AgentFormData>({ ...EMPTY_FORM, ...initial })
   const [pendingIdentifiers, setPendingIdentifiers] = useState<PendingIdentifier[]>([])
+  const [pendingImports, setPendingImports] = useState<AgentSourceImport[]>([])
   const set = (field: keyof AgentFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm(f => ({ ...f, [field]: e.target.value }))
@@ -133,8 +143,20 @@ function AgentForm({
   })
   const metadataFields = (typeSchema?.metadata_schema?.fields ?? []) as MetadataField[]
 
+  const isFirstTypeRender = useRef(true)
+  useEffect(() => {
+    if (isFirstTypeRender.current) { isFirstTypeRender.current = false; return }
+    setPendingImports([])
+  }, [form.agent_type])
+
   const setMetadata = (key: string, value: unknown) =>
     setForm(f => ({ ...f, metadata_spec: { ...f.metadata_spec, [key]: value } }))
+
+  const currentAgentValues: Record<string, unknown> = Object.fromEntries(
+    SOURCE_AGENT_FIELDS.map(field => [field, form[field]])
+  )
+
+  // ─── Built-in authority lookup ──────────────────────────────────
 
   const handleAuthorityApply = (result: AuthorityResult) => {
     setForm(f => ({
@@ -159,8 +181,53 @@ function AgentForm({
   const removePendingIdentifier = (scheme: string) =>
     setPendingIdentifiers(prev => prev.filter(p => p.scheme !== scheme))
 
+  // ─── Source plugins ─────────────────────────────────────────────
+
+  const handleSourceApply = (result: AgentSourceApplyResult) => {
+    setForm(f => {
+      const next: AgentFormData = { ...f, metadata_spec: { ...f.metadata_spec, ...result.meta } }
+      for (const [field, value] of Object.entries(result.agent)) {
+        if ((SOURCE_AGENT_FIELDS as readonly string[]).includes(field)) {
+          (next as any)[field] = value
+        }
+      }
+      return next
+    })
+    setPendingImports(prev => [
+      ...prev.filter(p => p.integration_id !== result.sourceImport.integration_id),
+      result.sourceImport,
+    ])
+  }
+
+  const removePendingImportItem = (integrationId: number, kind: 'identifier' | 'name_form', key: string) =>
+    setPendingImports(prev => prev.map(imp => {
+      if (imp.integration_id !== integrationId) return imp
+      return kind === 'identifier'
+        ? { ...imp, identifiers: imp.identifiers.filter(i => i.scheme !== key) }
+        : { ...imp, name_forms: imp.name_forms.filter(nf => nf.type !== key) }
+    }))
+
+  const handleSave = () => onSave({
+    ...form,
+    record_source_imports: pendingImports.map(imp => ({
+      token: imp.token,
+      identifiers: imp.identifiers.map(i => i.scheme),
+      name_forms: imp.name_forms.map(nf => nf.type),
+    })),
+  }, pendingIdentifiers)
+
   return (
     <div className={styles.form}>
+      <AgentSourcePanel
+        agentType={form.agent_type}
+        agentId={agentId}
+        currentAgent={currentAgentValues}
+        currentMeta={form.metadata_spec}
+        pendingImports={pendingImports}
+        onApply={handleSourceApply}
+        onRemovePending={removePendingImportItem}
+      />
+
       <AuthorityLookup onApply={handleAuthorityApply} />
 
       {pendingIdentifiers.length > 0 && (
@@ -250,7 +317,7 @@ function AgentForm({
         </button>
         <button
           className="btn btn-primary"
-          onClick={() => onSave(form, pendingIdentifiers)}
+          onClick={handleSave}
           disabled={!form.name || isSaving}
         >
           {isSaving ? <Spinner size={14} /> : <Save size={14} />}
@@ -1044,6 +1111,7 @@ export default function AgentsPage() {
             </div>
             <div className={styles.formPanelBody}>
                             <AgentForm
+                            agentId={editingAgent?.id}
                 initial={editingAgent ? {
                   name: editingAgent.name,
                   agent_type: editingAgent.agent_type,
