@@ -17,8 +17,6 @@ import {
 import type { TabDef } from '@/components/ui'
 import type { AgentDetail, AgentStub, AgentType } from '@/types'
 import styles from './AgentsPage.module.css'
-import AuthorityLookup from '@/components/ui/AuthorityLookup'
-import type { AuthorityResult } from '@/components/ui/AuthorityLookup'
 import BookmarkButton from '@/components/layout/BookmarkButton'
 import AgentIdentifiersTab from '@/components/agent/AgentIdentifiersTab'
 import AgentAttachmentsTab from '@/components/agent/AgentAttachmentsTab'
@@ -125,13 +123,12 @@ function AgentForm({
 }: {
   initial?: Partial<AgentFormData>
   agentId?: number
-  onSave: (data: AgentFormData, pendingIdentifiers: PendingIdentifier[]) => void
+  onSave: (data: AgentFormData) => void
   onCancel: () => void
   isSaving: boolean
 }) {
   const { t } = useTranslation()
   const [form, setForm] = useState<AgentFormData>({ ...EMPTY_FORM, ...initial })
-  const [pendingIdentifiers, setPendingIdentifiers] = useState<PendingIdentifier[]>([])
   const [pendingImports, setPendingImports] = useState<AgentSourceImport[]>([])
   const set = (field: keyof AgentFormData) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -156,31 +153,6 @@ function AgentForm({
   const currentAgentValues: Record<string, unknown> = Object.fromEntries(
     SOURCE_AGENT_FIELDS.map(field => [field, form[field]])
   )
-
-  // ─── Built-in authority lookup ──────────────────────────────────
-
-  const handleAuthorityApply = (result: AuthorityResult) => {
-    setForm(f => ({
-      ...f,
-      name:             result.name || f.name,
-      authorized_form:  result.authorized_form || f.authorized_form,
-      agent_type:       result.agent_type || f.agent_type,
-      date_from:        result.date_from || f.date_from,
-      date_to:          result.date_to || f.date_to,
-      description:      result.description || f.description,
-      website:          result.website || f.website,
-    }))
-
-    if (result.identifier_value) {
-      setPendingIdentifiers(prev => [
-        ...prev.filter(p => p.scheme !== result.identifier_scheme),
-        { scheme: result.identifier_scheme, value: result.identifier_value, source_url: result.source_url },
-      ])
-    }
-  }
-
-  const removePendingIdentifier = (scheme: string) =>
-    setPendingIdentifiers(prev => prev.filter(p => p.scheme !== scheme))
 
   // ─── Source plugins ─────────────────────────────────────────────
 
@@ -215,7 +187,7 @@ function AgentForm({
       identifiers: imp.identifiers.map(i => i.scheme),
       name_forms: imp.name_forms.map(nf => nf.type),
     })),
-  }, pendingIdentifiers)
+  })
 
   return (
     <div className={styles.form}>
@@ -228,26 +200,6 @@ function AgentForm({
         onApply={handleSourceApply}
         onRemovePending={removePendingImportItem}
       />
-
-      <AuthorityLookup onApply={handleAuthorityApply} />
-
-      {pendingIdentifiers.length > 0 && (
-        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', margin: 'var(--space-2) 0 var(--space-3)' }}>
-          {pendingIdentifiers.map(p => (
-            <span key={p.scheme} className="ref-code" style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-              <Fingerprint size={11} /> {p.scheme}: {p.value}
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm btn-icon"
-                onClick={() => removePendingIdentifier(p.scheme)}
-                aria-label={`Remove ${p.scheme} identifier`}
-              >
-                <X size={11} />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
 
       <div className={styles.formGrid}>
         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
@@ -1020,12 +972,10 @@ export default function AgentsPage() {
     }).then(r => r.data),
   })
 
-  const createMutation = useMutation({
-    mutationFn: ({ formData }: { formData: AgentFormData; pendingIdentifiers: PendingIdentifier[] }) =>
-      agentsApi.create(formData as any),
-    onSuccess: async (res, variables) => {
+    const createMutation = useMutation({
+    mutationFn: (formData: AgentFormData) => agentsApi.create(formData as any),
+    onSuccess: (res) => {
       const agentId = res.data.data.id
-      await attachPendingIdentifiers(agentId, variables.pendingIdentifiers)
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       setSelectedId(agentId)
       setViewMode('detail')
@@ -1033,11 +983,9 @@ export default function AgentsPage() {
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ formData }: { formData: AgentFormData; pendingIdentifiers: PendingIdentifier[] }) =>
-      agentsApi.update(editingAgent!.id, formData as any),
-    onSuccess: async (res, variables) => {
+    mutationFn: (formData: AgentFormData) => agentsApi.update(editingAgent!.id, formData as any),
+    onSuccess: (res) => {
       const agentId = res.data.data.id
-      await attachPendingIdentifiers(agentId, variables.pendingIdentifiers)
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       queryClient.invalidateQueries({ queryKey: ['agent', agentId] })
       queryClient.invalidateQueries({ queryKey: ['agent-identifiers', agentId] })
@@ -1138,9 +1086,9 @@ export default function AgentsPage() {
                   website: editingAgent.website ?? '',
                   metadata_spec: { ...(editingAgent.metadata_spec ?? {}) },
                 } : undefined}
-                onSave={(formData, pendingIdentifiers) => {
-                  if (viewMode === 'create') createMutation.mutate({ formData, pendingIdentifiers })
-                  else updateMutation.mutate({ formData, pendingIdentifiers })
+                onSave={(formData) => {
+                  if (viewMode === 'create') createMutation.mutate(formData)
+                  else updateMutation.mutate(formData)
                 }}
                 onCancel={() => {
                   setViewMode('detail')

@@ -788,8 +788,6 @@
       "headersHint": "auktoriseringsrubriker, API-nycklar",
       "fieldMappingsJson": "Fältmappningar (JSON)",
       "fieldMappingsHint": "målfält → käll-dot-sökväg",
-      "builtinSources": "Inbyggda auktoritetskällor",
-      "builtinSourcesDesc": "Dessa är alltid tillgängliga i auktoritetsuppslagningen. Inaktivera de som inte är relevanta för din institution.",
       "enabled": "Aktiverad",
       "disabled": "Inaktiverad",
       "intro": "Konfigurera externa API:er för auktoritetsuppslagningar och vokabulärfält. Sökningar proxas via servern så att autentiseringsuppgifter förblir privata.",

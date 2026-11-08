@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, X, Save, AlertCircle, Lock } from 'lucide-react'
-import { integrationsApi, institutionApi, sourcesApi } from '@/api'
+import { integrationsApi, sourcesApi } from '@/api'
 import type { ExternalIntegration, SourceConfigField, SourcePluginInfo } from '@/types'
 import { Spinner } from '@/components/ui'
 import { useTranslation } from 'react-i18next'
@@ -17,12 +17,13 @@ const BUILTINS = [
 
 // ─── Lookup integration types ─────────────────────────────────────────
 
-const LOOKUP_TYPE_VALUES = ['agent', 'metadata']
+const LOOKUP_TYPE_VALUES = ['metadata']
+const LEGACY_LOOKUP_TYPES = ['agent']
 const SOURCE_TYPE = 'source'
 
 const EMPTY_LOOKUP: Omit<ExternalIntegration, 'id'> = {
   name:           '',
-  entity_type:    'agent',
+  entity_type:    'metadata',
   base_url:       '',
   search_path:    'search?query={query}',
   headers:        {},
@@ -78,10 +79,13 @@ function LookupIntegrationForm({
         <input value={form.name} onChange={set('name')} placeholder="LC Subject Headings" />
       </div>
 
-      <div className={styles.formGroup}>
+<div className={styles.formGroup}>
         <label>{t('admin.integrations.usedFor')}</label>
         <select value={form.entity_type} onChange={set('entity_type')}>
-          {LOOKUP_TYPE_VALUES.map(et => (
+          {(LOOKUP_TYPE_VALUES.includes(form.entity_type)
+            ? LOOKUP_TYPE_VALUES
+            : [form.entity_type, ...LOOKUP_TYPE_VALUES]
+          ).map(et => (
             <option key={et} value={et}>{t(`admin.integrations.entityTypes.${et}`)}</option>
           ))}
         </select>
@@ -295,72 +299,7 @@ function SourceIntegrationForm({
   )
 }
 
-// ─── Built-in toggles ─────────────────────────────────────────────────
 
-function BuiltinToggles() {
-  const { t } = useTranslation()
-  const queryClient = useQueryClient()
-
-  const { data: institution } = useQuery({
-    queryKey: ['institution-current'],
-    queryFn: () => institutionApi.getCurrent().then(r => r.data.data),
-  })
-
-  const disabled: string[] = institution?.settings?.disabled_builtins ?? []
-
-  const mutation = useMutation({
-    mutationFn: (disabled_builtins: string[]) =>
-      institutionApi.updateCurrent({ settings: { disabled_builtins } } as any),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['institution-current'] }),
-  })
-
-  const toggle = (key: string) => {
-    const next = disabled.includes(key)
-      ? disabled.filter(k => k !== key)
-      : [...disabled, key]
-    mutation.mutate(next)
-  }
-
-  return (
-    <div className={styles.section}>
-      <div className={styles.sectionHeader}>
-        <div>
-          <div className={styles.sectionTitle}>{t('admin.integrations.builtinSources')}</div>
-          <div className={styles.sectionDesc}>
-            {t('admin.integrations.builtinSourcesDesc')}
-          </div>
-        </div>
-      </div>
-      <div className={styles.list}>
-        {BUILTINS.map(b => {
-          const isEnabled = !disabled.includes(b.key)
-          return (
-            <div key={b.key} className={styles.row}>
-              <div className={styles.rowBody}>
-                <span
-                  className={styles.rowBadge}
-                  style={{ background: isEnabled ? b.colour : undefined, color: isEnabled ? '#fff' : undefined }}
-                >
-                  {b.label}
-                </span>
-                <span className={styles.rowName}>{b.label}</span>
-              </div>
-              <div className={styles.rowActions}>
-                <button
-                  className={`btn btn-sm ${isEnabled ? 'btn-ghost' : 'btn-secondary'}`}
-                  onClick={() => toggle(b.key)}
-                  disabled={mutation.isPending}
-                >
-                  {isEnabled ? t('admin.integrations.enabled') : t('admin.integrations.disabled')}
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 // ─── Plugin toggles ───────────────────────────────────────────────────
 
@@ -455,7 +394,9 @@ export default function IntegrationsTab() {
 
   const enabledPlugins = plugins.filter(p => p.enabled)
   const entityLabel = (et: string) =>
-    [...LOOKUP_TYPE_VALUES, SOURCE_TYPE].includes(et) ? t(`admin.integrations.entityTypes.${et}`) : et
+    [...LOOKUP_TYPE_VALUES, ...LEGACY_LOOKUP_TYPES, SOURCE_TYPE].includes(et)
+      ? t(`admin.integrations.entityTypes.${et}`)
+      : et
   const mutationError = (createMutation.error || updateMutation.error) as any
   const idle = creating === null && editing === null
 
@@ -465,7 +406,6 @@ export default function IntegrationsTab() {
         {t('admin.integrations.intro')}
       </p>
 
-      <BuiltinToggles />
       <PluginToggles plugins={plugins} />
 
       <div className={styles.section}>

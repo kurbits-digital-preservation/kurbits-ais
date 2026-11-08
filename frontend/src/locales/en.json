@@ -788,8 +788,6 @@
       "headersHint": "auth headers, API keys",
       "fieldMappingsJson": "Field mappings (JSON)",
       "fieldMappingsHint": "target field → source dot-path",
-      "builtinSources": "Built-in authority sources",
-      "builtinSourcesDesc": "These are always available in the authority lookup. Disable any that are not relevant to your institution.",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "intro": "Configure external APIs for authority lookups and vocabulary fields. Searches are proxied through the server so credentials stay private.",
