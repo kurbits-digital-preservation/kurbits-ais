@@ -132,6 +132,8 @@ def create_integration():
         return error('name is required', 400)
     if entity_type not in ENTITY_TYPES:
         return error(f'entity_type must be one of: {", ".join(ENTITY_TYPES)}', 400)
+    if entity_type == 'agent':
+        return error('Agent lookups are replaced by source plugins. Create a source instead.', 400)
 
     if entity_type == SOURCE_TYPE:
         plugin_key = (data.get('plugin') or '').strip()

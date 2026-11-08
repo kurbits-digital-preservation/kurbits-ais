@@ -7,6 +7,7 @@ import { Spinner } from '@/components/ui'
 import { useTranslation } from 'react-i18next'
 import { MetadataSchemaEditor } from './HierarchyPage'
 import type { MetadataField } from './MetadataTemplatesPage'
+import AgentSourceConfig from './AgentSourceConfig'
 import styles from './AgentFieldsTab.module.css'
 
 const AGENT_TYPES: AgentType[] = ['person', 'organization', 'family', 'software']
@@ -18,7 +19,7 @@ const AGENT_TYPE_ICONS: Record<AgentType, typeof User> = {
   software: Bot,
 }
 
-// ─── Editor for one agent type ────────────────────────────────────────
+// ─── Fields for one agent type ────────────────────────────────────────
 
 function AgentTypeSchemaEditor({ schema }: { schema: AgentTypeSchemaInfo }) {
   const { t } = useTranslation()
@@ -112,7 +113,12 @@ export default function AgentFieldsTab() {
         })}
       </div>
 
-      {current && <AgentTypeSchemaEditor key={active} schema={current} />}
+      {current && (
+        <>
+          <AgentTypeSchemaEditor key={`fields-${active}`} schema={current} />
+          <AgentSourceConfig key={`sources-${active}`} agentType={active} schema={current} />
+        </>
+      )}
     </div>
   )
 }

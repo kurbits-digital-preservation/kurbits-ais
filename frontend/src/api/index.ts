@@ -4,7 +4,7 @@ import type {
   LocationStub, LocationDetail, ClassificationStub, ApiResponse, ExternalIntegration,
   AgentNameForm, AgentNameFormType,
   SourcePluginInfo, SourceNodeTarget, SourceKeyInfo, SourceMapping,
-  LevelSourceOption, SourceHit, SourcePreview, AgentTypeSchemaInfo
+  LevelSourceOption, SourceHit, SourcePreview, AgentTypeSchemaInfo, QuickStatementsResult
 } from '@/types'
 
 
@@ -227,6 +227,13 @@ export const agentsApi = {
     api.patch<{ status: string; data: AgentNameForm }>(`/agents/${agentId}/name-forms/${formId}`, data),
   deleteNameForm: (agentId: number, formId: number) =>
     api.delete(`/agents/${agentId}/name-forms/${formId}`),
+      quickStatements: (data: {
+    agent_ids: number[]
+    create_missing: boolean
+    include_aliases: boolean
+    include_archives_at: boolean
+  }) =>
+    api.post<ApiResponse<QuickStatementsResult>>('/agents/quickstatements', data).then(r => r.data.data!),
 
   // Attachments
   getAttachments: (agentId: number) => api.get(`/agents/${agentId}/attachments`),
@@ -825,6 +832,27 @@ export const sourcesApi = {
     current: { node: Record<string, unknown>; meta: Record<string, unknown> }
   }) =>
     api.post<ApiResponse<SourcePreview>>('/sources/node-preview', data).then(r => r.data.data!),
+      agentTargets: () =>
+    api.get<ApiResponse<SourceNodeTarget[]>>('/sources/agent-targets').then(r => r.data.data ?? []),
+
+  suggestedAgentMappings: (integrationId: number, agentType: string) =>
+    api.get<ApiResponse<SourceMapping[]>>(`/sources/integrations/${integrationId}/suggested-agent-mappings`, {
+      params: { agent_type: agentType },
+    }).then(r => r.data.data ?? []),
+
+  forAgentType: (agentType: string) =>
+    api.get<ApiResponse<LevelSourceOption[]>>('/sources/for-agent-type', {
+      params: { agent_type: agentType },
+    }).then(r => r.data.data ?? []),
+
+  agentPreview: (data: {
+    agent_type: string
+    integration_id: number
+    external_id: string
+    agent_id?: number | null
+    current: { agent: Record<string, unknown>; meta: Record<string, unknown> }
+  }) =>
+    api.post<ApiResponse<SourcePreview>>('/sources/agent-preview', data).then(r => r.data.data!),
 }
 
 export const representationsApi = {

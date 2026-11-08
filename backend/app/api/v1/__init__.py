@@ -22,6 +22,7 @@ from app.api.v1.history import routes as history_routes  # noqa
 from app.api.v1.ai import routes as ai_routes # noqa
 from app.api.v1.tasks import routes as task_routes  # noqa: F401
 from app.api.v1.portal import routes as portal_routes  # noqa: F401
+from app.api.v1 import wikidata_export # noqa: F401
 
 @bp.route('/health', methods=['GET'])
 def health():

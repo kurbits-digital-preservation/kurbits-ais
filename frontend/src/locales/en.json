@@ -788,8 +788,6 @@
       "headersHint": "auth headers, API keys",
       "fieldMappingsJson": "Field mappings (JSON)",
       "fieldMappingsHint": "target field → source dot-path",
-      "builtinSources": "Built-in authority sources",
-      "builtinSourcesDesc": "These are always available in the authority lookup. Disable any that are not relevant to your institution.",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "intro": "Configure external APIs for authority lookups and vocabulary fields. Searches are proxied through the server so credentials stay private.",
@@ -906,7 +904,16 @@
     },
     "agentFields": {
       "intro": "Custom metadata fields for each agent type. The fields are shown in the agent form and on the agent details, in addition to the built-in fields.",
-      "save": "Save fields"
+      "save": "Save fields",
+      "sourcesTitle": "Sources",
+      "sourcesHint": "Prefill agents of this type from external systems. For each field the first source key with a value is used. Name forms combine all selected source keys.",
+      "noSourceIntegrations": "No sources for this agent type. Add a source with a plugin that supports agents under Administration → Integrations.",
+      "agentFieldsGroup": "Agent fields",
+      "nameFormGroup": "Name form",
+      "nameFormTarget": "Name forms (added on save)",
+      "nameFormTypePlaceholder": "Name form type, e.g. Alternative name",
+      "incomplete": "Every mapping needs a target and at least one source key. Identifiers need a scheme and name forms a name form type.",
+      "saveSources": "Save sources"
     }
   },
   "acquisitions": {
@@ -1349,7 +1356,12 @@
       "descriptionPlaceholder": "Biographical or organizational history…",
       "newAgent": "New agent",
       "editAgent": "Edit: {{name}}",
-      "typeSpecificFields": "Fields for {{type}}"
+      "typeSpecificFields": "Fields for {{type}}",
+      "source": {
+        "pendingTitle": "Identifiers and name forms added when you save",
+        "nameCount_one": "{{count}} name",
+        "nameCount_other": "{{count}} names"
+      }
     },
     "details": {
       "authorizedForm": "Authorized form",
@@ -1411,6 +1423,28 @@
     },
     "emptyState": {
       "title": "Select an agent to view details"
+    },
+    "wikidata": {
+      "button": "Export to Wikidata",
+      "title": "Export to Wikidata (QuickStatements)",
+      "intro": "The commands below add the information to Wikidata. They are run in QuickStatements with your own Wikidata account, and you can review every statement before running them. Nothing is changed in Wikidata until you do.",
+      "createMissing": "Create new Wikidata items for agents without a Wikidata ID",
+      "includeArchivesAt": "Add \"archives at\" (P485) for agents that are creators of records",
+      "includeAliases": "Add name forms as aliases",
+      "missingInstitutionQid": "The institution’s Wikidata ID is not set in the Wikidata source, so \"archives at\" cannot be added.",
+      "missingReferenceTemplate": "No portal URL template is set in the Wikidata source, so the statements get no reference.",
+      "action": {
+        "create": "New item",
+        "update": "Update",
+        "skip": "Skipped"
+      },
+      "statements_one": "{{count}} statement",
+      "statements_other": "{{count}} statements",
+      "noCommands": "There is nothing to export with the selected options.",
+      "copy": "Copy commands",
+      "copied": "Copied",
+      "openQuickStatements": "Open QuickStatements",
+      "howTo": "In QuickStatements: log in, choose New batch, paste the commands, then Import V1 commands and Run."
     }
   },
   "ocr": {

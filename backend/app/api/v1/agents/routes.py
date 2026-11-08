@@ -25,6 +25,10 @@ from app.models.agent import (
 )
 from app.models.geo import AgentPlace, agent_tags_table
 import sqlalchemy.orm as so
+
+from app.services.sources import current_lang
+from app.services.sources.agent_mapping import finalize_agent_imports
+
 BUILTIN_SCHEME_DEFAULTS = {
     'wikidata': {'name': 'Wikidata', 'url_template': 'https://www.wikidata.org/wiki/{value}'},
     'viaf':     {'name': 'VIAF',     'url_template': 'https://viaf.org/viaf/{value}'},
@@ -195,8 +199,13 @@ def create_agent():
         created_by_id=current_user.id,
     )
     db.session.add(agent)
+    db.session.flush()
+
+    finalize_agent_imports(agent, data.get('record_source_imports'), current_user.id, current_lang())
+
     db.session.commit()
     return success(serialize_agent_detail(agent), 201)
+
 
 
 @bp.route('/agents/<int:agent_id>', methods=['PATCH'])
@@ -225,6 +234,8 @@ def update_agent(agent_id):
         if not isinstance(metadata_spec, dict):
             return error('metadata_spec must be an object', 400)
         agent.metadata_spec = metadata_spec
+
+    finalize_agent_imports(agent, data.get('record_source_imports'), current_user.id, current_lang())
 
     db.session.commit()
     return success(serialize_agent_detail(agent))

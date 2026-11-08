@@ -21,6 +21,7 @@ class GenericJsonPlugin(SourcePlugin):
         'en': 'Any JSON API with one search call and one call per record. Source keys are defined in the field mapping.',
     }
     search_hint = {'sv': 'Sök…', 'en': 'Search…'}
+    supports = frozenset({'node', 'agent'})
     config_schema = (
         ConfigField('base_url', {'sv': 'Bas-URL', 'en': 'Base URL'}, type='url', required=True,
                     placeholder='https://api.example.com'),

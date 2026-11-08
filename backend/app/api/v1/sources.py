@@ -18,7 +18,13 @@ from app.services.sources.node_mapping import (
     build_preview, core_targets, find_level_source, level_sources, suggested_for_level,
 )
 
+from app.models.agent import Agent, AgentType
+from app.models.agent_type_schema import AgentTypeSchema
+from app.services.sources.agent_mapping import (
+    agent_targets, build_agent_preview, find_type_source, suggested_for_agent_type, type_sources,
+)
 
+AGENT_TYPES = [t.value for t in AgentType]
 # ─── Helpers ──────────────────────────────────────────────────────────
 
 def _institution():
@@ -247,5 +253,115 @@ def preview_node_source():
         current_meta=current_meta,
         node_id=_own_node_id(data.get('node_id')),
         institution_id=current_user.active_institution_id,
+        lang=current_lang(),
+    ))
+
+# ─── Agents ───────────────────────────────────────────────────────────
+
+def _own_agent_id(raw) -> int | None:
+    try:
+        agent_id = int(raw)
+    except (TypeError, ValueError):
+        return None
+    agent = db.session.get(Agent, agent_id)
+    return agent_id if agent and agent.institution_id == current_user.active_institution_id else None
+
+
+@bp.route('/sources/agent-targets', methods=['GET'])
+@login_required
+def list_agent_targets():
+    return success(agent_targets(current_lang()))
+
+
+@bp.route('/sources/integrations/<int:intg_id>/suggested-agent-mappings', methods=['GET'])
+@login_required
+def suggested_agent_source_mappings(intg_id):
+    agent_type = (request.args.get('agent_type') or '').strip()
+    if agent_type not in AGENT_TYPES:
+        return error(f'Invalid agent_type. Must be one of: {", ".join(AGENT_TYPES)}', 400)
+    try:
+        _, plugin_cls = _load_source(intg_id, active_only=False, require_enabled=False)
+    except SourceError as e:
+        return error(e.message, e.status)
+    fields = AgentTypeSchema.fields_for(current_user.active_institution_id, agent_type)
+    return success(suggested_for_agent_type(plugin_cls, agent_type, fields))
+
+
+@bp.route('/sources/for-agent-type', methods=['GET'])
+@login_required
+def sources_for_agent_type():
+    if not current_user.active_institution_id:
+        return error('No active institution', 400)
+    agent_type = (request.args.get('agent_type') or '').strip()
+    if agent_type not in AGENT_TYPES:
+        return error(f'Invalid agent_type. Must be one of: {", ".join(AGENT_TYPES)}', 400)
+
+    schema = AgentTypeSchema.for_type(current_user.active_institution_id, agent_type)
+    lang = current_lang()
+    result = []
+    for entry in type_sources(schema):
+        try:
+            intg, plugin_cls = _load_source(entry.get('integration_id'))
+        except SourceError:
+            continue
+        if not plugin_cls.handles_agent_type(agent_type):
+            continue
+        result.append({
+            'integration_id': intg.id,
+            'name': intg.name,
+            'plugin': plugin_cls.key,
+            'plugin_label': localize(plugin_cls.label, lang),
+            'search_hint': localize(plugin_cls.search_hint, lang),
+            'fill_mode': entry.get('fill_mode') or 'empty_only',
+        })
+    return success(result)
+
+
+@bp.route('/sources/agent-preview', methods=['POST'])
+@login_required
+def preview_agent_source():
+    institution_id = current_user.active_institution_id
+    if not institution_id:
+        return error('No active institution', 400)
+
+    data = request.get_json(silent=True) or {}
+    agent_type = str(data.get('agent_type') or '').strip()
+    if agent_type not in AGENT_TYPES:
+        return error(f'Invalid agent_type. Must be one of: {", ".join(AGENT_TYPES)}', 400)
+    try:
+        integration_id = int(data.get('integration_id'))
+    except (TypeError, ValueError):
+        return error('integration_id is required', 400)
+    external_id = str(data.get('external_id') or '').strip()
+    if not external_id:
+        return error('external_id is required', 400)
+
+    schema = AgentTypeSchema.for_type(institution_id, agent_type)
+    entry = find_type_source(schema, integration_id) if schema else None
+    if not entry:
+        return error('This source is not configured for the agent type', 404)
+
+    current = data.get('current') if isinstance(data.get('current'), dict) else {}
+    current_agent = current.get('agent') if isinstance(current.get('agent'), dict) else {}
+    current_meta = current.get('meta') if isinstance(current.get('meta'), dict) else {}
+
+    try:
+        intg, plugin_cls = _load_source(integration_id)
+        if not plugin_cls.handles_agent_type(agent_type):
+            raise SourceError(f'Plugin "{plugin_cls.key}" cannot describe agents of type {agent_type}', 400)
+        record = plugin_for(intg).fetch(external_id)
+    except SourceError as e:
+        return error(e.message, e.status)
+
+    return success(build_agent_preview(
+        entry=entry,
+        record=record,
+        integration=intg,
+        agent_type=agent_type,
+        fields=schema.get_metadata_fields(),
+        current_agent=current_agent,
+        current_meta=current_meta,
+        agent_id=_own_agent_id(data.get('agent_id')),
+        institution_id=institution_id,
         lang=current_lang(),
     ))
