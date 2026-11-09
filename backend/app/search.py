@@ -17,6 +17,11 @@ Scopes (filters['scope']) limit which text a query is matched against:
   description  titles, ref codes and descriptive fields   (weights A, B)
   notes        notes                                        (weight C)
   attachments  extracted attachment text — nodes only, always available
+
+Node state filters (independent of each other):
+  description_status  draft | final
+  access_status       open | review | restricted
+  portal_published    true | false
 """
 from __future__ import annotations
 from typing import Optional
@@ -68,6 +73,50 @@ def _pg_scope_sql(scopes: dict, scope: str) -> tuple[list[str], str]:
         rank_vector = f"ts_filter({column}, '{weights}')"
         where.append(f"{rank_vector} @@ {_PG_TSQUERY}")
     return where, f"ts_rank({rank_vector}, {_PG_TSQUERY})"
+
+
+# ─── Node state filters ───────────────────────────────────────────────
+
+def _bool_param(value) -> Optional[bool]:
+    text = str(value if value is not None else '').strip().lower()
+    if text in ('true', '1', 'yes'):
+        return True
+    if text in ('false', '0', 'no'):
+        return False
+    return None
+
+
+def _pg_state_where(where: list, params: dict, filters: dict) -> None:
+    if filters.get('description_status'):
+        where.append("n.description_status = :description_status")
+        params['description_status'] = str(filters['description_status'])
+    if filters.get('access_status'):
+        where.append("n.access_status = :access_status")
+        params['access_status'] = str(filters['access_status'])
+    published = _bool_param(filters.get('portal_published'))
+    if published is not None:
+        where.append("n.portal_published = :portal_published")
+        params['portal_published'] = published
+
+
+def _orm_state_filter(query, filters: dict, exclude: str = ''):
+    from app.models.node import Node
+    if exclude != 'description_status' and filters.get('description_status'):
+        query = query.filter(Node.description_status == str(filters['description_status']))
+    if exclude != 'access_status' and filters.get('access_status'):
+        query = query.filter(Node.access_status == str(filters['access_status']))
+    published = _bool_param(filters.get('portal_published'))
+    if exclude != 'portal_published' and published is not None:
+        query = query.filter(Node.portal_published.is_(published))
+    return query
+
+
+def _state_fields(obj) -> dict:
+    return {
+        'description_status': obj.description_status,
+        'access_status': obj.access_status,
+        'portal_published': bool(obj.portal_published),
+    }
 
 
 # Nodes linked to an agent plus all their descendants (PostgreSQL, raw SQL).
@@ -240,7 +289,6 @@ def search_attachment_text(
     Search inside extracted attachment text.
     Returns nodes that have attachments containing the query string.
     """
-    from app.models.node import NodeStatus
     filters = filters or {}
     pg = _is_postgres()
 
@@ -260,8 +308,7 @@ def search_attachment_text(
             "OR na.extracted_text ILIKE :ilike_pattern)",
         ]
 
-        if filters.get('status'):
-            _add_enum_where(where, params, 'n.status', 'status', NodeStatus, filters['status'])
+        _pg_state_where(where, params, filters)
         if filters.get('level'):
             where.append("n.level_of_description = :level")
             params['level'] = filters['level']
@@ -270,7 +317,8 @@ def search_attachment_text(
         sql = sa.text(f"""
             SELECT DISTINCT ON (n.id)
                 n.id, n.ref_code, n.title, n.level_of_description,
-                n.status, n.date_start, n.date_end,
+                n.description_status, n.access_status, n.portal_published,
+                n.date_start, n.date_end,
                 na.original_filename as matched_file,
                 0.5 AS rank
             FROM nodes n
@@ -285,7 +333,7 @@ def search_attachment_text(
                 'type': 'node', 'id': row.id,
                 'ref_code': row.ref_code, 'title': row.title,
                 'level': row.level_of_description,
-                'status': _enum_value(NodeStatus, row.status),
+                **_state_fields(row),
                 'date_start': row.date_start.year if row.date_start else None,
                 'date_end': row.date_end.year if row.date_end else None,
                 'meta': f'Found in: {row.matched_file}',
@@ -305,8 +353,7 @@ def search_attachment_text(
             NodeAttachment.extracted_text.ilike(pattern),
         )
     )
-    if filters.get('status'):
-        query = query.filter(Node.status == filters['status'])
+    query = _orm_state_filter(query, filters)
     if filters.get('level'):
         query = query.filter(Node.level_of_description == filters['level'])
 
@@ -314,7 +361,8 @@ def search_attachment_text(
         {
             'type': 'node', 'id': n.id,
             'ref_code': n.ref_code, 'title': n.title,
-            'level': n.level_of_description, 'status': n.status.value,
+            'level': n.level_of_description,
+            **_state_fields(n),
             'date_start': n.date_start.year if n.date_start else None,
             'date_end': n.date_end.year if n.date_end else None,
             'meta': f'Found in: {att.original_filename}',
@@ -330,7 +378,6 @@ def _pg_node_query(
     q: str, institution_id: int,
     filters: dict, limit: int, offset: int
 ) -> tuple[list[dict], int]:
-    from app.models.node import NodeStatus
     has_q = _has_query(q)
     where = ["n.institution_id = :institution_id"]
     params: dict = {'institution_id': institution_id, 'limit': limit, 'offset': offset}
@@ -341,8 +388,7 @@ def _pg_node_query(
         where.extend(scope_where)
         params['q'] = q
 
-    if filters.get('status'):
-        _add_enum_where(where, params, 'n.status', 'status', NodeStatus, filters['status'])
+    _pg_state_where(where, params, filters)
     if filters.get('level'):
         where.append("n.level_of_description = :level")
         params['level'] = filters['level']
@@ -432,7 +478,8 @@ def _pg_node_query(
     sql = sa.text(f"""
         SELECT
             n.id, n.ref_code, n.title, n.level_of_description,
-            n.status, n.date_start, n.date_end, n.hierarchy_type_id,
+            n.description_status, n.access_status, n.portal_published,
+            n.date_start, n.date_end, n.hierarchy_type_id,
             {rank_sql} AS rank,
             COUNT(*) OVER() AS total_count
         FROM nodes n
@@ -451,7 +498,7 @@ def _pg_node_query(
             'ref_code': row.ref_code,
             'title': row.title,
             'level': row.level_of_description,
-            'status': _enum_value(NodeStatus, row.status),
+            **_state_fields(row),
             'date_start': row.date_start.year if row.date_start else None,
             'date_end': row.date_end.year if row.date_end else None,
             'hierarchy_type_id': row.hierarchy_type_id,
@@ -473,8 +520,7 @@ def _sqlite_node_query(
     if has_q:
         query = query.filter(_node_text_condition(pattern, search_scope(filters)))
 
-    if filters.get('status'):
-        query = query.filter(Node.status == filters['status'])
+    query = _orm_state_filter(query, filters)
     if filters.get('level'):
         query = query.filter(Node.level_of_description == filters['level'])
     if filters.get('hierarchy_type_id'):
@@ -617,7 +663,7 @@ def _sqlite_node_query(
             'ref_code': n.ref_code,
             'title': n.title,
             'level': n.level_of_description,
-            'status': n.status.value,
+            **_state_fields(n),
             'date_start': n.date_start.year if n.date_start else None,
             'date_end': n.date_end.year if n.date_end else None,
             'hierarchy_type_id': n.hierarchy_type_id,
@@ -649,6 +695,7 @@ def _attach_other_names(results: list[dict]) -> list[dict]:
         r['other_names'] = all_names[:OTHER_NAMES_IN_RESULT]
         r['other_names_total'] = len(all_names)
     return results
+
 
 def _pg_agent_query(
     q: str, institution_id: int,
@@ -748,8 +795,10 @@ def compute_facets(q: str, institution_id: int, filters: dict,
     has_q = _has_query(q)
     scope = search_scope(filters)
     pattern = f'%{q}%'
-    facets: dict = {'agent': [], 'agent_type': [], 'classification': [], 'hierarchy_type': [],
-                    'level': [], 'status': []}
+    facets: dict = {
+        'agent': [], 'agent_type': [], 'classification': [], 'hierarchy_type': [],
+        'level': [], 'description_status': [], 'access_status': [], 'portal_published': [],
+    }
     if not has_q and not filters.get('agent_id'):
         return facets
 
@@ -761,8 +810,7 @@ def compute_facets(q: str, institution_id: int, filters: dict,
         query = db.session.query(Node.id).filter(Node.institution_id == institution_id)
         if has_q:
             query = query.filter(_node_text_condition(pattern, scope))
-        if exclude != 'status' and filters.get('status'):
-            query = query.filter(Node.status == filters['status'])
+        query = _orm_state_filter(query, filters, exclude)
         if exclude != 'level' and filters.get('level'):
             query = query.filter(Node.level_of_description == filters['level'])
         if exclude != 'hierarchy_type' and filters.get('hierarchy_type_id'):
@@ -783,6 +831,21 @@ def compute_facets(q: str, institution_id: int, filters: dict,
             query = query.filter(Node.date_end <= filters['date_to'])
         return query
 
+    def _value_counts(column, facet_key: str) -> list[dict]:
+        rows = (
+            db.session.query(column, sa.func.count())
+            .filter(Node.id.in_(_node_base(facet_key).subquery().select()))
+            .group_by(column).all()
+        )
+        values = []
+        for value, count in rows:
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                value = 'true' if value else 'false'
+            values.append({'value': str(value), 'count': count})
+        return sorted(values, key=lambda x: -x['count'])
+
     if searches_nodes:
         for level, count in (
             db.session.query(Node.level_of_description, sa.func.count())
@@ -793,15 +856,9 @@ def compute_facets(q: str, institution_id: int, filters: dict,
                 facets['level'].append({'value': level, 'count': count})
         facets['level'].sort(key=lambda x: -x['count'])
 
-        for status, count in (
-            db.session.query(Node.status, sa.func.count())
-            .filter(Node.id.in_(_node_base('status').subquery().select()))
-            .group_by(Node.status).all()
-        ):
-            if status:
-                val = status.value if hasattr(status, 'value') else status
-                facets['status'].append({'value': val, 'count': count})
-        facets['status'].sort(key=lambda x: -x['count'])
+        facets['description_status'] = _value_counts(Node.description_status, 'description_status')
+        facets['access_status'] = _value_counts(Node.access_status, 'access_status')
+        facets['portal_published'] = _value_counts(Node.portal_published, 'portal_published')
 
         for ht_id, name, count in (
             db.session.query(HierarchyType.id, HierarchyType.name, sa.func.count(Node.id))

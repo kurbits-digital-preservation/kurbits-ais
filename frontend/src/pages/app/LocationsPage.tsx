@@ -14,6 +14,7 @@ import HierarchyLevelSelect from '@/components/ui/HierarchyLevelSelect'
 import type { LocationDetail, LocationStub } from '@/types'
 import { useTranslation } from 'react-i18next'
 import styles from './LocationsPage.module.css'
+import NodeStatusBadges from '@/components/node/NodeStatusBadges'
 
 // ─── Location form ────────────────────────────────────────────────────
 
@@ -539,8 +540,8 @@ function CheckInModal({
                     <span className={styles.searchResultTitle}>{node.title}</span>
                     <span className="ref-code">{node.ref_code}</span>
                   </div>
-                  <span className={`badge badge-${node.status}`}>{t(`resources.status.${node.status}`, { defaultValue: node.status })}</span>
-                </button>
+                                    <NodeStatusBadges node={node} size="xs" />
+                  </button>
               ))}
             </div>
           )}

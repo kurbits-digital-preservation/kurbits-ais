@@ -32,7 +32,7 @@ def global_search():
 
     filters = {}
     int_keys = ('hierarchy_type_id', 'classification_id', 'agent_id')
-    for key in ('status', 'level', 'hierarchy_type_id', 'classification_id',
+    for key in ('description_status', 'access_status', 'portal_published', 'level', 'hierarchy_type_id', 'classification_id',
                 'date_from', 'date_to', 'agent_type', 'agent_id',
                 'file_mime', 'file_pronom', 'file_min_size', 'file_max_size',
                 'file_has_checksum', 'file_min_width', 'file_min_height'):

@@ -83,7 +83,11 @@ def serialize_node(node: Node, include_children: bool = True) -> dict:
 
 
         'metadata_spec': node.metadata_spec or {},
-        'status': node.status.value,
+        'description_status': node.description_status,
+        'access_status': node.access_status,
+        'access_basis': node.access_basis,
+        'access_restricted_until': _date_str(node.access_restricted_until),
+        'portal_published': bool(node.portal_published),
 
 
         'agents': agents,

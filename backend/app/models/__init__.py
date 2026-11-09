@@ -11,7 +11,8 @@ from app.models.node import (# noqa: F401
     NodeChange,# noqa: F401
     NodeAttachment,# noqa: F401
     NodeNote,# noqa: F401
-    NodeStatus,# noqa: F401
+    DescriptionStatus, # noqa: F401
+    AccessStatus, # noqa: F401
     NodeRelationType,# noqa: F401
     node_association,# noqa: F401
     IdentifierScheme,# noqa: F401

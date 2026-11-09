@@ -5,9 +5,9 @@ import { useLocation, useSearchParams, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import {
   Plus, Edit2, Trash2, ChevronRight, FileText,
-  Calendar, Globe, Lock, Archive, RotateCcw,
+  Calendar, Globe, Archive, RotateCcw,
   Paperclip, StickyNote, History, Link,
-  Download, Upload, X, Save, AlertCircle, MoveRight, Zap, MapPin, Tag, Link2, Check, Flag, Search, RefreshCw,
+  Download, Upload, X, AlertCircle, MoveRight, Zap, MapPin, Tag, Link2, Check, Flag, Search,
   CheckSquare, Square, Quote
 } from 'lucide-react'
 import { nodesApi, exportApi, oaiApi, hierarchyApi, eadApi } from '@/api'
@@ -23,7 +23,9 @@ import { acquisitionsApi } from '@/api'
 import TagsPanel from '@/components/geo/TagsPanel'
 import MoveNodeDialog from '@/components/node/MoveNodeDialog'
 import RapidEntryModal from '@/components/node/RapidEntryModal'
-import type { NodeStub, NodeDetail, NodeStatus } from '@/types'
+import NodeStatusPanel from '@/components/node/NodeStatusPanel'
+import NodeStatusBadges from '@/components/node/NodeStatusBadges'
+import type { NodeStub, NodeDetail } from '@/types'
 import styles from './ResourcesPage.module.css'
 import RepresentationsTab from '@/components/node/RepresentationsTab'
 import NodeIdentifiersTab from '@/components/node/NodeIdentifiersTab'
@@ -32,27 +34,14 @@ import BookmarkButton from '@/components/layout/BookmarkButton'
 import OcrButton from '@/components/node/OcrButton'
 import { useTranslation } from 'react-i18next'
 
-// ─── Status badge ─────────────────────────────────────────────────────
+// ─── Placeholder for a node selected by id before it has loaded ──────
 
-const STATUS_ICONS: Record<NodeStatus, typeof Globe> = {
-  draft: Archive, published: Globe, restricted: Lock,
-}
-
-const STATUS_TRANSITIONS: Record<NodeStatus, NodeStatus[]> = {
-  draft: ['published', 'restricted'],
-  published: ['draft', 'restricted'],
-  restricted: ['draft', 'published'],
-}
-
-function StatusBadge({ status }: { status: NodeStatus }) {
-  const { t } = useTranslation()
-  const Icon = STATUS_ICONS[status]
-  return (
-    <span className={`badge badge-${status}`}>
-      <Icon size={10} />
-      {t(`resources.status.${status}`)}
-    </span>
-  )
+function placeholderNode(id: number): NodeStub {
+  return {
+    id, title: '', ref_code: '', local_ref: '', level_of_description: '',
+    description_status: 'draft', access_status: 'open', portal_published: false,
+    date_start: null, date_end: null, has_children: false, parent_id: null,
+  }
 }
 
 
@@ -179,7 +168,6 @@ function ImportModal({ onClose, onImported }: {
       setOaiInfo(infoRes.data.data)
       const fmts = fmtRes.data.data
       setOaiFormats(fmts)
-      // Auto-select first available format
       if (fmts.length > 0) setOaiPrefix(fmts[0].prefix)
     } catch (e: any) {
       setImportError(e.response?.data?.message ?? t('resources.modals.import.couldNotConnect'))
@@ -563,11 +551,9 @@ function NodeAccessionsTab({ nodeId }: { nodeId: number }) {
   const [search, setSearch] = useState('')
   const [linking, setLinking] = useState(false)
 
-  // Accessions this node is already linked to
   const { data: linkedAccessions = [], isLoading } = useQuery({
     queryKey: ['node-accessions', nodeId],
     queryFn: async () => {
-      // Find accessions that have this node linked
       const all = await acquisitionsApi.listAccessions().then(r => r.data.data)
       const linked = []
       for (const acc of all) {
@@ -772,15 +758,6 @@ function NodeDetailPanel({
     queryFn: () => nodesApi.counts(nodeId).then(r => r.data.data),
   })
 
-  const statusMutation = useMutation({
-    mutationFn: (status: NodeStatus) => nodesApi.updateStatus(nodeId, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['node', nodeId] })
-      queryClient.invalidateQueries({ queryKey: ['node-tree'] })
-      queryClient.invalidateQueries({ queryKey: ['node-children'] })
-    },
-  })
-
   const deleteMutation = useMutation({
     mutationFn: (force: boolean) => nodesApi.delete(nodeId, force),
     onSuccess: () => {
@@ -815,8 +792,6 @@ function NodeDetailPanel({
 
   if (isLoading) return <div className={styles.detailLoading}>{t('common.loading')}</div>
   if (!data) return null
-
-  const transitions = STATUS_TRANSITIONS[data.status]
 
   return (
     <div className={styles.detailPanel}>
@@ -862,7 +837,7 @@ function NodeDetailPanel({
 
         <div className={styles.detailTitleRow}>
           <h2 className={styles.detailTitle}>{data.title}</h2>
-          <StatusBadge status={data.status} />
+          <NodeStatusBadges node={data} showPortal />
         </div>
 
         <div className={styles.detailMeta}>
@@ -887,20 +862,7 @@ function NodeDetailPanel({
           )}
         </div>
 
-        {transitions.length > 0 && (
-          <div className={styles.statusActions}>
-            {transitions.map(s => (
-              <button
-                key={s}
-                className="btn btn-secondary btn-sm"
-                onClick={() => statusMutation.mutate(s)}
-                disabled={statusMutation.isPending}
-              >
-                {t('resources.setStatus', { status: t(`resources.status.${s}`) })}
-              </button>
-            ))}
-          </div>
-        )}
+        <NodeStatusPanel node={data} />
       </div>
 
       {/* Tabs */}
@@ -950,19 +912,19 @@ function NodeDetailPanel({
         />
       )}
       <div className={styles.detailContent}>
-        {activeTab === 'details'     && <DetailsTab node={data} onSelectChild={onSelectChild} />}
+        {activeTab === 'details'         && <DetailsTab node={data} onSelectChild={onSelectChild} />}
         {activeTab === 'relations'       && <NodeRelationsTab nodeId={nodeId} />}
         {activeTab === 'identifiers'     && <NodeIdentifiersTab nodeId={nodeId} />}
         {activeTab === 'locations'       && <NodeLocationsTab nodeId={nodeId} />}
         {activeTab === 'classifications' && <NodeClassificationsTab nodeId={nodeId} />}
         {activeTab === 'places'          && <PlacesPanel entityType="node" entityId={nodeId} />}
         {activeTab === 'tags'            && <TagsPanel entityType="node" entityId={nodeId} />}
-        {activeTab === 'flags'          && <FlagsTab nodeId={nodeId} />}
-        {activeTab === 'accessions'     && <NodeAccessionsTab nodeId={nodeId} />}
-        {activeTab === 'notes'       && <NotesTab node={data} />}
-        {activeTab === 'attachments' && <AttachmentsTab node={data} />}
+        {activeTab === 'flags'           && <FlagsTab nodeId={nodeId} />}
+        {activeTab === 'accessions'      && <NodeAccessionsTab nodeId={nodeId} />}
+        {activeTab === 'notes'           && <NotesTab node={data} />}
+        {activeTab === 'attachments'     && <AttachmentsTab node={data} />}
         {activeTab === 'representations' && <RepresentationsTab node={data} />}
-        {activeTab === 'history'     && <HistoryTab nodeId={nodeId} />}
+        {activeTab === 'history'         && <HistoryTab nodeId={nodeId} />}
       </div>
     </div>
   )
@@ -985,7 +947,6 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
   })
   const total: number = (countData as any)?.meta?.total ?? 0
 
-  // The full, searchable, paginated list — only fetched once expanded.
   const { data, isLoading } = useQuery({
     queryKey: ['node-children-list', nodeId, search, page],
     queryFn: () => nodesApi.list({ parent_id: nodeId, q: search || undefined, page, per_page: PER_PAGE }).then(r => r.data),
@@ -1039,11 +1000,7 @@ function ChildrenTab({ nodeId, onSelect }: { nodeId: number; onSelect: (node: No
                   {child.level_of_description && (
                     <span className={styles.childRowLevel}>{child.level_of_description}</span>
                   )}
-                  {child.status !== 'published' && (
-                    <span className={`badge badge-${child.status}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
-                      {t(`resources.status.${child.status}`)}
-                    </span>
-                  )}
+                  <NodeStatusBadges node={child} size="xs" />
                 </div>
               </div>
               <ChevronRight size={12} className={styles.childRowArrow} />
@@ -1318,9 +1275,6 @@ function AttachmentsTab({ node }: { node: NodeDetail }) {
       {node.attachments.map((att: any) => {
         const downloadUrl = nodesApi.getDownloadUrl(node.id, att.id)
         const thumbUrl = nodesApi.getThumbnailUrl(node.id, att.id)
-        const mime = att.mime_type ?? ''
-        const isImage = mime.startsWith('image/')
-        const isPdf = mime === 'application/pdf'
         const hasThumb = att.has_thumbnail
         const isExpanded = expandedId === att.id
 
@@ -1535,25 +1489,18 @@ export default function ResourcesPage() {
   }
 
   const [selectedNode, setSelectedNode] = useState<NodeStub | null>(
-    initialNodeId
-      ? { id: initialNodeId, title: '', ref_code: '', local_ref: '',
-          level_of_description: '', status: 'draft' as unknown as NodeStatus,
-          date_start: null, date_end: null, has_children: false, parent_id: null }
-      : null
+    initialNodeId ? placeholderNode(initialNodeId) : null
   )
   const [viewMode, setViewMode] = useState<ViewMode>('detail')
   const [editingNode, setEditingNode] = useState<NodeDetail | null>(null)
   const [addChildParentId, setAddChildParentId] = useState<number | null>(null)
 
-  // When navigating here from search (even if already on this page),
-  // location.state changes but useState initializer doesn't re-run.
-  // This effect picks up the new selectNodeId.
+  // location.state changes when navigating here from search, but the useState
+  // initializer does not re-run, so pick up the new selectNodeId here.
   useEffect(() => {
     const id = location.state?.selectNodeId ?? (searchParams.get('node') ? parseInt(searchParams.get('node')!) : null)
     if (id) {
-      setSelectedNode({ id, title: '', ref_code: '', local_ref: '',
-        level_of_description: '', status: 'draft' as unknown as NodeStatus,
-        date_start: null, date_end: null, has_children: false, parent_id: null })
+      setSelectedNode(placeholderNode(id))
       setViewMode('detail')
       setEditingNode(null)
     }

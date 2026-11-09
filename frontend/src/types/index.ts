@@ -51,7 +51,14 @@ export interface HierarchyLevel {
 }
 
 // ─── Nodes ───────────────────────────────────────────────────────────
-export type NodeStatus = 'draft' | 'published' | 'restricted'
+export type DescriptionStatus = 'draft' | 'final'
+export type AccessStatus = 'open' | 'review' | 'restricted'
+
+export interface NodeState {
+  description_status: DescriptionStatus
+  access_status: AccessStatus
+  portal_published: boolean
+}
 
 export interface NodeStub {
   id: number
@@ -59,7 +66,9 @@ export interface NodeStub {
   ref_code: string
   local_ref: string
   level_of_description: string
-  status: NodeStatus
+  description_status: DescriptionStatus
+  access_status: AccessStatus
+  portal_published: boolean
   date_start: string | null
   date_end: string | null
   has_children: boolean
@@ -99,6 +108,9 @@ export interface NodeDetail extends NodeStub {
   institution_id: number
   hierarchy_type_id: number
   hierarchy_type_name: string | null
+  portal_published_at: string | null
+  access_basis: string | null
+  access_restricted_until: string | null
   description: string | null
   scope_and_content: string | null
   arrangement: string | null
@@ -120,7 +132,7 @@ export interface NodeDetail extends NodeStub {
   attachments: NodeAttachment[]
   notes: NodeNote[]
   is_object: boolean
-  representations: RepresentationStub[] 
+  representations: RepresentationStub[]
   identifiers: NodeIdentifier[]
 }
 
@@ -290,7 +302,6 @@ export interface ExternalIntegration {
 }
 
 // ─── Representations ─────────────────────────────────────────────────
-
 export interface RepresentationType {
   id: number
   name: string
@@ -343,6 +354,7 @@ export interface RepresentationStub {
   label: string | null
   file_count: number
 }
+
 // ─── Source plugins ──────────────────────────────────────────────────
 export type SourceFillMode = 'empty_only' | 'overwrite'
 
@@ -455,6 +467,7 @@ export interface AgentTypeSchemaInfo {
   agent_type: AgentType
   metadata_schema: { fields: MetadataField[]; sources?: AgentSource[] }
 }
+
 // ─── Agent sources ───────────────────────────────────────────────────
 export interface AgentSourceMapping {
   target: string
@@ -500,6 +513,7 @@ export interface QuickStatementsResult {
   settings: {
     has_institution_qid: boolean
     has_reference_template: boolean
+    has_relation_properties: boolean
     language: string
   }
 }

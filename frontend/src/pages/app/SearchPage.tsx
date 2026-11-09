@@ -9,19 +9,23 @@ import {
 import { searchApi, hierarchyApi, savedSearchesApi } from '@/api'
 import { Spinner } from '@/components/ui'
 import ResizablePanels from '@/components/ui/ResizablePanels'
+import NodeStatusBadges from '@/components/node/NodeStatusBadges'
 import styles from './SearchPage.module.css'
 import SearchFacets from './SearchFacets'
 import FileFilters from './FileFilters'
 import FileResults from './FileResults'
 import { useTranslation } from 'react-i18next'
+
 // ─── Constants ────────────────────────────────────────────────────────
 
 const AGENT_ICONS: Record<string, typeof User> = {
   person: User, organization: Building2, family: UsersRound, software: Bot,
 }
-const NODE_STATUSES = ['draft', 'published', 'restricted']
-const AGENT_TYPES   = ['person', 'organization', 'family', 'software']
-const FILTER_KEYS = ['status', 'level', 'date_from', 'date_to', 'agent_type', 'types', 'classification_id', 'hierarchy_type_id', 'agent_id', 'scope']
+const STATE_FILTER_KEYS = ['description_status', 'access_status', 'portal_published']
+const FILTER_KEYS = [
+  ...STATE_FILTER_KEYS, 'level', 'date_from', 'date_to', 'agent_type', 'types',
+  'classification_id', 'hierarchy_type_id', 'agent_id', 'scope',
+]
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -36,7 +40,16 @@ function paramsToObject(params: URLSearchParams): Record<string, string> {
 function summariseParams(params: Record<string, string>, t?: (key: string, opts?: any) => string): string {
   const parts: string[] = []
   if (params.q) parts.push(`"${params.q}"`)
-  if (params.status) parts.push(t ? t(`resources.status.${params.status}`, { defaultValue: params.status }) : params.status)
+  if (params.description_status) {
+    parts.push(t ? t(`resources.descriptionStatus.${params.description_status}`, { defaultValue: params.description_status }) : params.description_status)
+  }
+  if (params.access_status) {
+    parts.push(t ? t(`resources.access.${params.access_status}`, { defaultValue: params.access_status }) : params.access_status)
+  }
+  if (params.portal_published) {
+    const key = params.portal_published === 'true' ? 'resources.portal.published' : 'resources.portal.notPublished'
+    parts.push(t ? t(key) : params.portal_published)
+  }
   if (params.level) parts.push(params.level)
   if (params.date_from || params.date_to) parts.push(`${params.date_from ?? '…'}–${params.date_to ?? '…'}`)
   if (params.agent_type) parts.push(t ? t(`agents.types.${params.agent_type}`, { defaultValue: params.agent_type }) : params.agent_type)
@@ -48,6 +61,7 @@ function summariseParams(params: Record<string, string>, t?: (key: string, opts?
 
 function NodeRow({ item, onClick }: { item: any; onClick: () => void }) {
   const { t } = useTranslation()
+  const hasState = item.description_status === 'draft' || (item.access_status && item.access_status !== 'open')
   return (
     <button className={styles.resultRow} onClick={onClick}>
       <div className={styles.resultIconWrap}><FileText size={15} /></div>
@@ -57,9 +71,9 @@ function NodeRow({ item, onClick }: { item: any; onClick: () => void }) {
           {item.ref_code && <span className={styles.resultRef}>{item.ref_code}</span>}
           {item.ref_code && item.level && <span className={styles.dot}>·</span>}
           {item.level && <span className={styles.resultLevel}>{item.level}</span>}
-          {item.status && item.status !== 'published' && (
+          {hasState && (
             <><span className={styles.dot}>·</span>
-            <span className={styles.statusBadge} data-status={item.status}>{t(`resources.status.${item.status}`, { defaultValue: item.status })}</span></>
+            <NodeStatusBadges node={item} size="xs" /></>
           )}
         </div>
       </div>
@@ -270,24 +284,6 @@ export default function SearchPage() {
 
   useEffect(() => { setInputValue(searchParams.get('q') ?? '') }, [searchParams])
 
-  // ── Hierarchy levels for filter panel ─────────────────────────────
-  const { data: hierarchyTypes } = useQuery({
-    queryKey: ['hierarchy-types-search'],
-    queryFn: () => hierarchyApi.listTypes().then((r: any) => r.data.data as any[]),
-  })
-
-  const { data: allLevels } = useQuery({
-    queryKey: ['all-levels', hierarchyTypes?.map((h: any) => h.id)],
-    queryFn: async () => {
-      if (!hierarchyTypes?.length) return []
-      const results = await Promise.all(
-        hierarchyTypes.map((ht: any) => hierarchyApi.listLevels(ht.id).then((r: any) => r.data.data as any[]))
-      )
-      return [...new Set(results.flat().map((l: any) => l.name))] as string[]
-    },
-    enabled: !!hierarchyTypes?.length,
-  })
-
   // ── Search ────────────────────────────────────────────────────────
   const { data, isFetching } = useQuery({
     queryKey: ['full-search', Object.fromEntries(searchParams)],
@@ -324,7 +320,7 @@ export default function SearchPage() {
     next.set('page', '1')
     setSearchParams(next)
     if (params.q) setInputValue(params.q)
-    if (['status', 'level', 'date_from', 'date_to', 'agent_type'].some(k => params[k])) setShowFilters(true)
+    if ([...STATE_FILTER_KEYS, 'level', 'date_from', 'date_to', 'agent_type'].some(k => params[k])) setShowFilters(true)
   }
 
   const hasFilters = FILTER_KEYS.some(k => searchParams.has(k))

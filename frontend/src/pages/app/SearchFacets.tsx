@@ -17,7 +17,9 @@ interface Facets {
   classification?: FacetValue[]
   hierarchy_type?: FacetValue[]
   level?: FacetValue[]
-  status?: FacetValue[]
+  description_status?: FacetValue[]
+  access_status?: FacetValue[]
+  portal_published?: FacetValue[]
 }
 
 // The facet key -> URL param key it filters on.
@@ -27,20 +29,34 @@ const FACET_PARAM: Record<string, string> = {
   classification: 'classification_id',
   hierarchy_type: 'hierarchy_type_id',
   level: 'level',
-  status: 'status',
+  description_status: 'description_status',
+  access_status: 'access_status',
+  portal_published: 'portal_published',
 }
 
-// The facet key -> translation key under search.facets.*
+// The facet key -> translation key for its title
 const FACET_TITLE_KEYS: Record<string, string> = {
   agent: 'search.facets.agent',
   agent_type: 'search.facets.agentType',
   classification: 'search.facets.classification',
   hierarchy_type: 'search.facets.hierarchy',
   level: 'search.facets.level',
-  status: 'flags.status',
+  description_status: 'search.facets.descriptionStatus',
+  access_status: 'search.facets.accessStatus',
+  portal_published: 'search.facets.portal',
 }
 
-const FACET_ORDER = ['classification', 'agent', 'agent_type', 'hierarchy_type', 'level', 'status']
+const FACET_ORDER = [
+  'classification', 'agent', 'agent_type', 'hierarchy_type', 'level',
+  'description_status', 'access_status', 'portal_published',
+]
+
+// The facet key -> translation key for a raw value, for facets whose values are codes
+const FACET_VALUE_KEYS: Record<string, (value: string) => string> = {
+  description_status: v => `resources.descriptionStatus.${v}`,
+  access_status: v => `resources.access.${v}`,
+  portal_published: v => (v === 'true' ? 'resources.portal.published' : 'resources.portal.notPublished'),
+}
 
 // value -> translation key under search.facets.* / nav.* / resources.tabs.*
 const RECORD_TYPE_KEYS: Record<string, string> = {
@@ -65,25 +81,27 @@ type ClearParam = (k: string) => void
 
 // ─── Shared facet value list ──────────────────────────────────────────
 
-function FacetValueList({ values, active, paramKey, setParam, clearParam }: {
+function FacetValueList({ values, active, paramKey, setParam, clearParam, labelFor }: {
   values: FacetValue[]
   active: string | null
   paramKey: string
   setParam: SetParam
   clearParam: ClearParam
+  labelFor?: (fv: FacetValue) => string
 }) {
   return (
     <div className={styles.facetValues}>
       {values.map(fv => {
         const isActive = active === fv.value
+        const label = labelFor ? labelFor(fv) : (fv.label ?? fv.value)
         return (
           <button
             key={fv.value}
             className={`${styles.facetValue} ${isActive ? styles.facetValueActive : ''}`}
             onClick={() => isActive ? clearParam(paramKey) : setParam(paramKey, fv.value)}
-            title={fv.code ? `${fv.code} — ${fv.label ?? fv.value}` : undefined}
+            title={fv.code ? `${fv.code} — ${label}` : undefined}
           >
-            <span className={styles.facetLabel}>{fv.label ?? fv.value}</span>
+            <span className={styles.facetLabel}>{label}</span>
             <span className={styles.facetCount}>{fv.count}</span>
           </button>
         )
@@ -196,6 +214,12 @@ export default function SearchFacets({ facets, params, setParam, clearParam }: {
   const currentScope = params.get('scope') ?? 'all'
   const availableScopes = SEARCH_SCOPES.filter(sc => sc !== 'attachments' || searchesNodes)
 
+  const labelFor = (facetKey: string) => {
+    const valueKey = FACET_VALUE_KEYS[facetKey]
+    if (!valueKey) return undefined
+    return (fv: FacetValue) => fv.label ?? t(valueKey(fv.value), { defaultValue: fv.value })
+  }
+
   return (
     <div className={styles.facets}>
       {/* Record type — decides which facets are relevant, so it lives here */}
@@ -267,6 +291,7 @@ export default function SearchFacets({ facets, params, setParam, clearParam }: {
               paramKey={paramKey}
               setParam={setParam}
               clearParam={clearParam}
+              labelFor={labelFor(facetKey)}
             />
           </div>
         )

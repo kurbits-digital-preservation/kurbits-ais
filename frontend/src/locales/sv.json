@@ -339,6 +339,49 @@
       "noneYet": "Ingen historik ännu.",
       "revertConfirm": "Återställ till denna version?",
       "revert": "Återställ"
+    },
+    "descriptionStatus": {
+      "draft": "Utkast",
+      "final": "Klar"
+    },
+    "access": {
+      "open": "Fri",
+      "review": "Prövas före utlämnande",
+      "restricted": "Begränsad"
+    },
+    "accessShort": {
+      "review": "Prövas",
+      "restricted": "Begränsad"
+    },
+    "portal": {
+      "published": "I portalen",
+      "notPublished": "Ej i portalen",
+      "publishedAt": "Publicerad {{date}}"
+    },
+    "statusPanel": {
+      "description": "Beskrivning",
+      "portal": "Portal",
+      "access": "Åtkomst",
+      "publish": "Publicera",
+      "publishDescendants": "Publicera underliggande",
+      "unpublish": "Avpublicera",
+      "includeDescendants": "inklusive underliggande poster",
+      "publishNeedsFinal": "Markera beskrivningen som klar för att kunna publicera den.",
+      "draftNeedsUnpublish": "Avpublicera posten innan den sätts till utkast.",
+      "publishResult": "{{published}} publicerade, {{skipped}} hoppades över (utkast, eller överordnad post inte publicerad).",
+      "unpublishConfirm": "Ta bort posten och alla underliggande poster från portalen?",
+      "unpublishResult": "{{count}} poster togs bort från portalen.",
+      "editAccess": "Ändra",
+      "accessBasis": "Lagrum",
+      "accessBasisPlaceholder": "t.ex. 24 kap. 8 § OSL",
+      "accessUntil": "Gäller till och med",
+      "until": "t.o.m. {{date}}",
+      "applyToDescendants": "Tillämpa på alla underliggande poster",
+      "accessUpdated": "{{count}} poster uppdaterades.",
+      "filesNotPublished": "Beskrivningen finns i portalen, men filerna skickas inte dit så länge åtkomsten inte är fri.",
+      "publishWithDescendants": "Publicera inklusive underliggande",
+      "unpublishHint": "Tar också bort alla underliggande poster",
+      "filesNotPublishedShort": "Filerna skickas inte till portalen"
     }
   },
   "bookmark": {
@@ -1292,7 +1335,10 @@
       "clear": "rensa",
       "agent": "Agent",
       "agentPlaceholder": "Sök agent…",
-      "agentNoMatch": "Inga matchande agenter"
+      "agentNoMatch": "Inga matchande agenter",
+      "descriptionStatus": "Beskrivningsstatus",
+      "accessStatus": "Åtkomst",
+      "portal": "Portal"
     },
     "fileFilters": {
       "title": "Filfilter",
@@ -1444,7 +1490,9 @@
       "copy": "Kopiera kommandon",
       "copied": "Kopierat",
       "openQuickStatements": "Öppna QuickStatements",
-      "howTo": "I QuickStatements: logga in, välj New batch, klistra in kommandona, välj Import V1 commands och sedan Run."
+      "howTo": "I QuickStatements: logga in, välj New batch, klistra in kommandona, välj Import V1 commands och sedan Run.",
+      "includeRelations": "Lägg till relationer till andra agenter som har Wikidata-id",
+      "missingRelationProperties": "Inga relationstyper är kopplade till Wikidata-egenskaper i Wikidata-källan, så inga relationer exporteras."
     }
   },
   "ocr": {

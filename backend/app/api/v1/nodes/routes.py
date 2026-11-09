@@ -1,7 +1,6 @@
 import os
 import uuid
-from datetime import datetime, date
-
+from datetime import datetime, date, timezone
 from flask import request, current_app, send_from_directory, make_response
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
@@ -15,7 +14,7 @@ from app.api.v1.nodes.serializers import (
 )
 from app.extensions import db
 from app.models import (
-    Node, NodeStatus, NodeChange, NodeAttachment, NodeNote,
+    Node, DescriptionStatus, AccessStatus, NodeChange, NodeAttachment, NodeNote,
     Agent, Location, LocationMovement, Classification, Institution,
     NodeRelationType,
 )
@@ -60,7 +59,7 @@ def get_tree():
         Node.parent_id.is_(None)
     )
     if not include_drafts:
-        query = query.where(Node.status == NodeStatus.PUBLISHED)
+        query = query.where(Node.description_status == DescriptionStatus.FINAL.value)
 
     roots = db.session.execute(query.order_by(*Node.sibling_order())).scalars().all()
     with_children = compute_has_children(roots)
@@ -86,7 +85,7 @@ def get_children(node_id):
 
     children_q = sa.select(Node).where(Node.parent_id == node.id)
     if not include_drafts:
-        children_q = children_q.where(Node.status == NodeStatus.PUBLISHED)
+        children_q = children_q.where(Node.description_status == DescriptionStatus.FINAL.value)
     children_q = children_q.order_by(*Node.sibling_order())
 
     paginated = db.paginate(children_q, page=page, per_page=per_page, error_out=False)
@@ -188,7 +187,9 @@ def list_nodes():
     page = request.args.get('page', 1, type=int)
     per_page = min(request.args.get('per_page', 25, type=int), 100)
     search = request.args.get('q', '').strip()
-    status_filter = request.args.get('status')
+    description_status = request.args.get('description_status')
+    access_status = request.args.get('access_status')
+    portal_published = request.args.get('portal_published')
     level_filter = request.args.get('level')
     hierarchy_type_id = request.args.get('hierarchy_type_id', type=int)
     has_scope_note = request.args.get('has_scope_note')
@@ -207,8 +208,12 @@ def list_nodes():
                 Node.description.ilike(f'%{search}%'),
             )
         )
-    if status_filter:
-        query = query.where(Node.status == status_filter)
+    if description_status:
+        query = query.where(Node.description_status == description_status)
+    if access_status:
+        query = query.where(Node.access_status == access_status)
+    if portal_published in ('true', 'false'):
+        query = query.where(Node.portal_published.is_(portal_published == 'true'))
     if level_filter:
         query = query.where(sa.func.lower(Node.level_of_description) == level_filter.lower())
     if hierarchy_type_id:
@@ -285,6 +290,10 @@ def create_node():
         if not parent:
             return error('Parent node not found', 404)
 
+    description_status = data.get('description_status') or DescriptionStatus.DRAFT.value
+    if description_status not in DESCRIPTION_STATUSES:
+        return error(f'description_status must be one of: {", ".join(DESCRIPTION_STATUSES)}', 400)
+
     node = Node(
         institution_id=institution_id,
         title=data['title'],
@@ -302,10 +311,15 @@ def create_node():
         extent=data.get('extent'),
         date_certainty=data.get('date_certainty'),
         metadata_spec=data.get('metadata_spec', {}),
-        status=NodeStatus.DRAFT,
+        description_status=description_status,
+        portal_published=False,
         created_by_id=current_user.id,
         updated_by_id=current_user.id,
     )
+    node.inherit_access_from(parent)
+    access_err = _apply_access(node, data)
+    if access_err:
+        return error(access_err, 400)
 
     if data.get('date_start'):
         try:
@@ -492,6 +506,36 @@ def _collect_subtree_ids(root_id: int) -> list:
         frontier = rows
     return all_ids
 
+DESCRIPTION_STATUSES = [s.value for s in DescriptionStatus]
+ACCESS_STATUSES = [s.value for s in AccessStatus]
+
+
+def _parse_optional_date(value):
+    if value in (None, ''):
+        return None, None
+    try:
+        return date.fromisoformat(str(value)), None
+    except ValueError:
+        return None, 'Invalid date. Use YYYY-MM-DD'
+
+
+def _apply_access(node: Node, data: dict) -> str | None:
+    if 'access_status' in data:
+        if data['access_status'] not in ACCESS_STATUSES:
+            return f'access_status must be one of: {", ".join(ACCESS_STATUSES)}'
+        node.access_status = data['access_status']
+    if 'access_basis' in data:
+        node.access_basis = (data['access_basis'] or '').strip()[:300] or None
+    if 'access_restricted_until' in data:
+        until, err = _parse_optional_date(data['access_restricted_until'])
+        if err:
+            return err
+        node.access_restricted_until = until
+    if node.access_status == AccessStatus.OPEN.value:
+        node.access_basis = None
+        node.access_restricted_until = None
+    return None
+
 
 @bp.route('/nodes/<int:node_id>', methods=['DELETE'])
 @login_required
@@ -599,43 +643,181 @@ def bulk_delete_nodes():
     return success({'deleted': deleted, 'errors': errors})
 
 
-@bp.route('/nodes/<int:node_id>/status', methods=['PATCH'])
+# ─── Description status, access and portal publication ───────────────
+
+@bp.route('/nodes/<int:node_id>/description-status', methods=['PATCH'])
 @login_required
 @require_write
-def update_status(node_id):
+def update_description_status(node_id):
+    node = _get_node_or_404(node_id, current_user.active_institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    data = request.get_json(silent=True) or {}
+    new_status = data.get('description_status')
+    if new_status not in DESCRIPTION_STATUSES:
+        return error(f'description_status must be one of: {", ".join(DESCRIPTION_STATUSES)}', 400)
+    if new_status == DescriptionStatus.DRAFT.value and node.portal_published:
+        return error('Unpublish the record from the portal before setting it to draft', 409)
+
+    if node.description_status != new_status:
+        before_data = node.to_dict()
+        node.description_status = new_status
+        node.updated_by_id = current_user.id
+        node.record_change(
+            change_type='status_change',
+            description=f'Description status changed to {new_status}',
+            created_by_id=current_user.id,
+            before_data=before_data,
+            after_data=node.to_dict(),
+        )
+        db.session.commit()
+
+    return success(serialize_node_detail(node))
+
+
+@bp.route('/nodes/<int:node_id>/access', methods=['PATCH'])
+@login_required
+@require_write
+def update_node_access(node_id):
     institution_id = current_user.active_institution_id
     node = _get_node_or_404(node_id, institution_id)
     if not node:
         return error('Node not found', 404)
 
     data = request.get_json(silent=True) or {}
-    new_status = data.get('status')
+    if 'access_status' not in data:
+        return error('access_status is required', 400)
 
-    valid = [s.value for s in NodeStatus]
-    if new_status not in valid:
-        return error(f'Invalid status. Must be one of: {", ".join(valid)}', 400)
+    if data.get('apply_to_descendants'):
+        ids = _collect_subtree_ids(node.id)
+        targets = db.session.execute(sa.select(Node).where(Node.id.in_(ids))).scalars().all()
+    else:
+        targets = [node]
 
-    before_data = node.to_dict()
-    old_status = node.status
-    node.status = NodeStatus(new_status)
-    node.updated_by_id = current_user.id
+    for target in targets:
+        before_data = target.to_dict()
+        access_err = _apply_access(target, data)
+        if access_err:
+            db.session.rollback()
+            return error(access_err, 400)
+        after_data = target.to_dict()
+        if before_data != after_data:
+            target.updated_by_id = current_user.id
+            target.record_change(
+                change_type='access_change',
+                description=f'Access changed to {target.access_status}',
+                created_by_id=current_user.id,
+                before_data=before_data,
+                after_data=after_data,
+            )
 
-    node.record_change(
-        change_type='status_change',
-        description=f'Status changed to {new_status}',
-        created_by_id=current_user.id,
-        before_data=before_data,
-        after_data=node.to_dict(),
-    )
     db.session.commit()
 
-    from app.portal.publisher import publish_node, unpublish_node
-    if node.status == NodeStatus.PUBLISHED:
-        publish_node(node)
-    elif old_status == NodeStatus.PUBLISHED:
-        unpublish_node(node)
+    from app.portal.publisher import publish_node
+    for target in targets:
+        if target.portal_published:
+            publish_node(target)
 
-    return success({'status': node.status.value})
+    return success(serialize_node_detail(node), meta={'updated': len(targets)})
+
+
+@bp.route('/nodes/<int:node_id>/publish', methods=['POST'])
+@login_required
+@require_write
+def publish_node_to_portal(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    if node.description_status != DescriptionStatus.FINAL.value:
+        return error('Only records with description status "final" can be published', 409)
+    if node.parent is not None and not node.parent.portal_published:
+        return error('The parent record must be published first', 409)
+
+    data = request.get_json(silent=True) or {}
+    include_descendants = bool(data.get('include_descendants'))
+
+    ids = _collect_subtree_ids(node.id) if include_descendants else [node.id]
+    nodes_by_id = {
+        n.id: n for n in db.session.execute(sa.select(Node).where(Node.id.in_(ids))).scalars().all()
+    }
+
+    now = datetime.now(timezone.utc)
+    published_ids = {node.parent_id} if node.parent_id else set()
+    newly_published: list[Node] = []
+    skipped = 0
+
+    for nid in ids:
+        target = nodes_by_id.get(nid)
+        if target is None:
+            continue
+        parent_ok = target.parent_id is None or target.parent_id in published_ids
+        if target.description_status != DescriptionStatus.FINAL.value or not parent_ok:
+            if not target.portal_published:
+                skipped += 1
+            continue
+        published_ids.add(target.id)
+        if target.portal_published:
+            continue
+        target.portal_published = True
+        target.portal_published_at = now
+        snapshot = target.to_dict()
+        target.record_change(
+            change_type='publish',
+            description='Published to portal',
+            created_by_id=current_user.id,
+            before_data=snapshot,
+            after_data=snapshot,
+        )
+        newly_published.append(target)
+
+    db.session.commit()
+
+    from app.portal.publisher import publish_node
+    for target in newly_published:
+        publish_node(target)
+
+    return success(serialize_node_detail(node), meta={
+        'published': len(newly_published),
+        'skipped': skipped,
+    })
+
+
+@bp.route('/nodes/<int:node_id>/unpublish', methods=['POST'])
+@login_required
+@require_write
+def unpublish_node_from_portal(node_id):
+    institution_id = current_user.active_institution_id
+    node = _get_node_or_404(node_id, institution_id)
+    if not node:
+        return error('Node not found', 404)
+
+    ids = _collect_subtree_ids(node.id)
+    targets = db.session.execute(
+        sa.select(Node).where(Node.id.in_(ids), Node.portal_published.is_(True))
+    ).scalars().all()
+
+    for target in targets:
+        target.portal_published = False
+        target.portal_published_at = None
+        snapshot = target.to_dict()
+        target.record_change(
+            change_type='unpublish',
+            description='Removed from portal',
+            created_by_id=current_user.id,
+            before_data=snapshot,
+            after_data=snapshot,
+        )
+
+    db.session.commit()
+
+    from app.portal.publisher import unpublish_node
+    for target in targets:
+        unpublish_node(target)
+
+    return success(serialize_node_detail(node), meta={'unpublished': len(targets)})
 
 
 @bp.route('/nodes/<int:node_id>/move', methods=['PATCH'])
@@ -1666,12 +1848,13 @@ def batch_create_nodes():
             hierarchy_type_id=hierarchy_type_id,
             parent=parent,
             description=entry.get('description') or None,
-            status=NodeStatus.DRAFT,
+            description_status=DescriptionStatus.DRAFT.value,
+            portal_published=False,
             created_by_id=current_user.id,
             updated_by_id=current_user.id,
             metadata_spec=_clean_metadata_spec(entry.get('metadata_spec')),
         )
-
+        node.inherit_access_from(parent)
         for field in ('date_start', 'date_end'):
             val = (entry.get(field) or '').strip()
             if val:
@@ -2252,7 +2435,11 @@ def duplicate_node(node_id):
         language=source.language,
         finding_aids=source.finding_aids,
         metadata_spec=dict(source.metadata_spec) if source.metadata_spec else {},
-        status=NodeStatus.DRAFT,
+        description_status=DescriptionStatus.DRAFT.value,
+        portal_published=False,
+        access_status=source.access_status,
+        access_basis=source.access_basis,
+        access_restricted_until=source.access_restricted_until,
         created_by_id=current_user.id,
         updated_by_id=current_user.id,
     )
