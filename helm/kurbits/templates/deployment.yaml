@@ -1,75 +1,143 @@
+{{- include "kurbits.validate" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "kurbits.fullname" . }}
   labels:
     {{- include "kurbits.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
-      {{- include "kurbits.selectorLabels" . | nindent 6 }}
+      {{- include "kurbits.selectorLabels" (dict "ctx" . "component" "app") | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "kurbits.selectorLabels" . | nindent 8 }}
+        {{- include "kurbits.labels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "kurbits.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      containers:
-        - name: kurbits
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.postgresql.enabled }}
+      initContainers:
+        - name: wait-for-db
+          image: {{ include "kurbits.postgresql.image" . }}
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - >-
+              until pg_isready -h {{ include "kurbits.postgresql.fullname" . }}
+              -p {{ .Values.postgresql.service.port }}
+              -U {{ .Values.postgresql.auth.username }};
+              do echo "Waiting for PostgreSQL"; sleep 2; done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
           securityContext:
             {{- toYaml .Values.containerSecurityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+      {{- end }}
+      containers:
+        - name: app
+          image: {{ include "kurbits.image" . }}
+          imagePullPolicy: {{ include "kurbits.imagePullPolicy" . }}
           ports:
             - name: http
               containerPort: 8080
               protocol: TCP
           env:
-            - name: FLASK_ENV
-              value: {{ .Values.app.env | quote }}
             - name: PORT
               value: "8080"
+            - name: FLASK_ENV
+              value: {{ .Values.app.flaskEnv | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.app.logLevel | quote }}
             - name: GUNICORN_WORKERS
-              value: {{ .Values.app.gunicornWorkers | quote }}
+              value: {{ .Values.app.gunicorn.workers | quote }}
             - name: GUNICORN_THREADS
-              value: {{ .Values.app.gunicornThreads | quote }}
+              value: {{ .Values.app.gunicorn.threads | quote }}
+            - name: KURBITS_TASK_WORKERS
+              value: {{ .Values.app.taskWorkers | quote }}
             - name: UPLOAD_FOLDER
               value: /app/uploads
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "kurbits.fullname" . }}
+                  name: {{ include "kurbits.appSecretName" . }}
                   key: SECRET_KEY
+            - name: AI_CONFIG_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kurbits.appSecretName" . }}
+                  key: AI_CONFIG_ENCRYPTION_KEY
+            {{- if .Values.postgresql.enabled }}
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kurbits.postgresql.secretName" . }}
+                  key: database-password
+            - name: DATABASE_URL
+              value: "postgresql://{{ .Values.postgresql.auth.username }}:$(DB_PASSWORD)@{{ include "kurbits.postgresql.fullname" . }}:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.auth.database }}"
+            {{- else if .Values.externalDatabase.existingSecret }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "kurbits.fullname" . }}
+                  name: {{ .Values.externalDatabase.existingSecret }}
+                  key: {{ .Values.externalDatabase.existingSecretKey }}
+            {{- else }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "kurbits.appSecretName" . }}
                   key: DATABASE_URL
+            {{- end }}
+            {{- with .Values.app.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.app.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
           livenessProbe:
-            {{- toYaml .Values.livenessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
           readinessProbe:
-            {{- toYaml .Values.readinessProbe | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
           volumeMounts:
             - name: uploads
               mountPath: /app/uploads
       volumes:
         - name: uploads
-          {{- if .Values.persistence.enabled }}
+          {{- if .Values.persistence.uploads.enabled }}
           persistentVolumeClaim:
-            claimName: {{ include "kurbits.fullname" . }}-uploads
+            claimName: {{ include "kurbits.uploadsClaimName" . }}
           {{- else }}
           emptyDir: {}
           {{- end }}
@@ -77,11 +145,11 @@ spec:
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       {{- with .Values.tolerations }}
       tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
