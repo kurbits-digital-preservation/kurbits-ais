@@ -3,6 +3,8 @@ from app.models.agent_type_schema import AgentTypeSchema
 
 OTHER_NAMES_IN_STUB = 3
 
+OTHER_NAMES_IN_STUB = 3
+
 
 def serialize_agent_stub(agent: Agent) -> dict:
     return {
