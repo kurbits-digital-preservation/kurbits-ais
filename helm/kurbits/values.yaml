@@ -1,128 +1,134 @@
-# ─── Kurbits AIS — Base Helm values ──────────────────────────────────
-# Use with one of the platform overlays:
-#   Kubernetes:  -f values-kubernetes.yaml
-#   OpenShift:   -f values-openshift.yaml
-
-replicaCount: 1
-
+# ── Image ────────────────────────────────────────────────────────────
 image:
-  repository: ghcr.io/your-org/kurbits
-  pullPolicy: IfNotPresent
-  tag: ""  # defaults to Chart.appVersion
+  repository: ghcr.io/kurbits-digital-preservation/kurbits-ais
+  tag: latest
+  pullPolicy: ""
 
 imagePullSecrets: []
+
 nameOverride: ""
 fullnameOverride: ""
 
-# ── Application ────────────────────────────────────────────────────────
+replicaCount: 1
+
+# ── Applikation ──────────────────────────────────────────────────────
 app:
-  env: production
-  secretKey: ""        # REQUIRED — set via --set or a values override
+  flaskEnv: production
   logLevel: info
-  gunicornWorkers: 2
-  gunicornThreads: 2
+  gunicorn:
+    workers: 2
+    threads: 2
+  taskWorkers: 3
+  secretKey: ""
+  encryptionKey: ""
+  existingSecret: ""
+  extraEnv: []
+  extraEnvFrom: []
 
-# ── Database ───────────────────────────────────────────────────────────
-postgresql:
-  enabled: true
-  auth:
-    username: kurbits
-    password: ""       # REQUIRED — set via --set or a values override
-    database: kurbits
-  primary:
-    persistence:
-      enabled: true
-      size: 10Gi
-
-# When postgresql.enabled=false provide the full connection string
-externalDatabaseUrl: ""
-
-# ── Uploads persistence ────────────────────────────────────────────────
-persistence:
-  enabled: true
-  size: 10Gi
-  storageClass: ""
-  accessMode: ReadWriteOnce
-
-# ── Service ────────────────────────────────────────────────────────────
+# ── Service & Route ──────────────────────────────────────────────────
 service:
   type: ClusterIP
   port: 8080
 
-# ── Ingress (standard Kubernetes) ─────────────────────────────────────
-ingress:
-  enabled: false
-  className: ""
-  annotations: {}
-  hosts:
-    - host: kurbits.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls: []
-
-# ── OpenShift Route ────────────────────────────────────────────────────
 route:
-  enabled: false
+  enabled: true
   host: ""
+  path: /
+  annotations:
+    haproxy.router.openshift.io/timeout: 300s
   tls:
+    enabled: true
     termination: edge
     insecureEdgeTerminationPolicy: Redirect
 
-# ── Resources ──────────────────────────────────────────────────────────
+# ── Lagring ──────────────────────────────────────────────────────────
+persistence:
+  uploads:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 20Gi
+    keep: true
+
+# ── Resurser & probes ────────────────────────────────────────────────
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
-    cpu: 1000m
+    cpu: 250m
     memory: 512Mi
+  limits:
+    memory: 2Gi
 
-# ── Pod security context ───────────────────────────────────────────────
-podSecurityContext:
-  runAsNonRoot: true
-  fsGroup: 0
+startupProbe:
+  tcpSocket:
+    port: http
+  periodSeconds: 5
+  failureThreshold: 60
 
-containerSecurityContext:
-  allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: false
-  runAsNonRoot: true
-  capabilities:
-    drop:
-      - ALL
-
-# ── Probes ─────────────────────────────────────────────────────────────
 livenessProbe:
-  httpGet:
-    path: /api/v1/health
-    port: 8080
-  initialDelaySeconds: 30
-  periodSeconds: 30
-  timeoutSeconds: 10
+  tcpSocket:
+    port: http
+  periodSeconds: 20
+  timeoutSeconds: 5
   failureThreshold: 3
 
 readinessProbe:
-  httpGet:
-    path: /api/v1/health
-    port: 8080
-  initialDelaySeconds: 10
+  tcpSocket:
+    port: http
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
 
-# ── Autoscaling ────────────────────────────────────────────────────────
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 4
-  targetCPUUtilizationPercentage: 70
+# ── Säkerhet & schemaläggning ────────────────────────────────────────
+podAnnotations: {}
+podSecurityContext: {}
 
-# ── Service account ────────────────────────────────────────────────────
-serviceAccount:
-  create: true
-  annotations: {}
-  name: ""
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
 
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# ── PostgreSQL (inbyggd) ─────────────────────────────────────────────
+postgresql:
+  enabled: true
+  image:
+    repository: quay.io/sclorg/postgresql-16-c9s
+    tag: latest
+    pullPolicy: IfNotPresent
+  auth:
+    username: kurbits
+    database: kurbits
+    password: ""
+    existingSecret: ""
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 10Gi
+    keep: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  extraEnv: []
+
+# ── Extern databas (när postgresql.enabled=false) ────────────────────
+externalDatabase:
+  url: ""
+  existingSecret: ""
+  existingSecretKey: DATABASE_URL

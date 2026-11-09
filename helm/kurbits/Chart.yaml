@@ -1,12 +1,6 @@
 apiVersion: v2
-name: kurbits
-description: Kurbits Archival Information System
+name: kurbits-ais
+description: Kurbits AIS
 type: application
 version: 0.1.0
-appVersion: "0.1.0"
-keywords:
-  - archival
-  - ead
-  - oai-pmh
-maintainers:
-  - name: Kurbits Team
+appVersion: "1.1.3"
