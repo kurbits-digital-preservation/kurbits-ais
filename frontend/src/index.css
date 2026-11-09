@@ -156,6 +156,11 @@ code, kbd, pre {
   color: var(--color-warning);
   border-color: var(--color-warning-border);
 }
+.badge-review {
+  background: var(--color-info-bg, var(--color-bg-subtle));
+  color: var(--color-info, var(--color-accent));
+  border-color: var(--color-info-border, var(--color-border));
+}
 
 /* ─── Buttons ────────────────────────────────────────────────────────── */
 .btn {

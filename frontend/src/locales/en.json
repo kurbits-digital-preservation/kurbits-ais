@@ -339,6 +339,49 @@
       "noneYet": "No history yet.",
       "revertConfirm": "Revert to this version?",
       "revert": "Revert"
+    },
+    "descriptionStatus": {
+      "draft": "Draft",
+      "final": "Final"
+    },
+    "access": {
+      "open": "Open",
+      "review": "Review before release",
+      "restricted": "Restricted"
+    },
+    "accessShort": {
+      "review": "Review",
+      "restricted": "Restricted"
+    },
+    "portal": {
+      "published": "In portal",
+      "notPublished": "Not in portal",
+      "publishedAt": "Published {{date}}"
+    },
+    "statusPanel": {
+      "description": "Description",
+      "portal": "Portal",
+      "access": "Access",
+      "publish": "Publish",
+      "publishDescendants": "Publish records below",
+      "unpublish": "Unpublish",
+      "includeDescendants": "including records below",
+      "publishNeedsFinal": "Mark the description as final to be able to publish it.",
+      "draftNeedsUnpublish": "Unpublish the record before setting it to draft.",
+      "publishResult": "{{published}} published, {{skipped}} skipped (draft, or parent not published).",
+      "unpublishConfirm": "Remove this record and all records below it from the portal?",
+      "unpublishResult": "{{count}} records removed from the portal.",
+      "editAccess": "Change",
+      "accessBasis": "Legal basis",
+      "accessBasisPlaceholder": "e.g. Chapter 24 Section 8 OSL",
+      "accessUntil": "Applies until",
+      "until": "until {{date}}",
+      "applyToDescendants": "Apply to all records below",
+      "accessUpdated": "{{count}} records updated.",
+      "filesNotPublished": "The description is in the portal, but files are not sent there while access is not open.",
+      "publishWithDescendants": "Publish including records below",
+      "unpublishHint": "Also removes all records below it",
+      "filesNotPublishedShort": "Files are not sent to the portal"
     }
   },
   "bookmark": {
@@ -1292,7 +1335,10 @@
       "clear": "clear",
       "agent": "Agent",
       "agentPlaceholder": "Find agent…",
-      "agentNoMatch": "No matching agents"
+      "agentNoMatch": "No matching agents",
+      "descriptionStatus": "Description status",
+      "accessStatus": "Access",
+      "portal": "Portal"
     },
     "fileFilters": {
       "title": "File filters",
@@ -1444,7 +1490,9 @@
       "copy": "Copy commands",
       "copied": "Copied",
       "openQuickStatements": "Open QuickStatements",
-      "howTo": "In QuickStatements: log in, choose New batch, paste the commands, then Import V1 commands and Run."
+      "howTo": "In QuickStatements: log in, choose New batch, paste the commands, then Import V1 commands and Run.",
+      "includeRelations": "Add relations to other agents that have a Wikidata ID",
+      "missingRelationProperties": "No relation types are linked to Wikidata properties in the Wikidata source, so no relations are exported."
     }
   },
   "ocr": {

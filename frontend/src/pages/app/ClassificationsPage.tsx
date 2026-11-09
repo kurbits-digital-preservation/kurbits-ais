@@ -15,6 +15,7 @@ import HierarchyLevelSelect from '@/components/ui/HierarchyLevelSelect'
 import type { ClassificationStub } from '@/types'
 import { useTranslation } from 'react-i18next'
 import styles from './ClassificationsPage.module.css'
+import NodeStatusBadges from '@/components/node/NodeStatusBadges'
 
 // ─── Form ─────────────────────────────────────────────────────────────
 
@@ -337,7 +338,7 @@ function LinkedNodesTab({ classification }: { classification: any }) {
                 </div>
               </button>
               <div className={styles.linkedNodeActions}>
-                <span className={`badge badge-${node.status}`}>{t(`resources.status.${node.status}`, { defaultValue: node.status })}</span>
+                                  <NodeStatusBadges node={node} size="xs" />
                 <button
                   className="btn btn-ghost btn-sm btn-icon"
                   onClick={() => { if (confirm(t('classifications.linkedNodes.removeConfirm'))) removeMutation.mutate(node.id) }}

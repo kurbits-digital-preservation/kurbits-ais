@@ -25,15 +25,17 @@ export default function WikidataExportDialog({
   const [createMissing, setCreateMissing] = useState(false)
   const [includeAliases, setIncludeAliases] = useState(false)
   const [includeArchivesAt, setIncludeArchivesAt] = useState(true)
+  const [includeRelations, setIncludeRelations] = useState(true)
   const [copied, setCopied] = useState(false)
 
   const { data, isFetching, error } = useQuery({
-    queryKey: ['quickstatements', agentIds, createMissing, includeAliases, includeArchivesAt],
+    queryKey: ['quickstatements', agentIds, createMissing, includeAliases, includeArchivesAt, includeRelations],
     queryFn: () => agentsApi.quickStatements({
       agent_ids: agentIds,
       create_missing: createMissing,
       include_aliases: includeAliases,
       include_archives_at: includeArchivesAt,
+      include_relations: includeRelations,
     }),
     staleTime: 0,
   })
@@ -70,6 +72,10 @@ export default function WikidataExportDialog({
               {t('agents.wikidata.includeArchivesAt')}
             </label>
             <label className={styles.option}>
+              <input type="checkbox" checked={includeRelations} onChange={e => setIncludeRelations(e.target.checked)} />
+              {t('agents.wikidata.includeRelations')}
+            </label>
+            <label className={styles.option}>
               <input type="checkbox" checked={includeAliases} onChange={e => setIncludeAliases(e.target.checked)} />
               {t('agents.wikidata.includeAliases')}
             </label>
@@ -83,6 +89,11 @@ export default function WikidataExportDialog({
           {data && !data.settings.has_reference_template && (
             <div className={styles.notice}>
               <AlertTriangle size={13} /> {t('agents.wikidata.missingReferenceTemplate')}
+            </div>
+          )}
+          {data && !data.settings.has_relation_properties && includeRelations && (
+            <div className={styles.notice}>
+              <AlertTriangle size={13} /> {t('agents.wikidata.missingRelationProperties')}
             </div>
           )}
 

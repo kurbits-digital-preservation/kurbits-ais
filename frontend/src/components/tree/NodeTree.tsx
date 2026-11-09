@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, Loader2, FilePlus } from 'lucide-react'
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { nodesApi } from '@/api'
 import type { NodeStub } from '@/types'
+import NodeStatusBadges from '@/components/node/NodeStatusBadges'
 import styles from './NodeTree.module.css'
 import { useAuthStore } from '@/store/auth'
 
@@ -100,11 +101,7 @@ function NodeRow({ node, depth, selectedId, expandedIds, onToggle, onSelect, onA
           <div className={styles.nodeMeta}>
             <span className={`ref-code ${styles.refCode}`}>{node.ref_code}</span>
             <span className={styles.level}>{node.level_of_description}</span>
-            {node.status !== 'published' && (
-              <span className={`${styles.statusBadge} ${styles[`status_${node.status}`]}`}>
-                {node.status}
-              </span>
-            )}
+            <NodeStatusBadges node={node} size="xs" />
           </div>
         </div>
 
@@ -177,8 +174,7 @@ export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery
     enabled: (searchQuery?.length ?? 0) >= 2,
   })
 
-  // When selectedId changes (e.g. from search), fetch the breadcrumb
-  // and expand all ancestor nodes so the selected node is visible
+  // Expand all ancestors of the selected node (e.g. when selected from search)
   const { data: selectedNode } = useQuery({
     queryKey: ['node', selectedId],
     queryFn: () => nodesApi.get(selectedId!).then(r => r.data.data),
@@ -188,7 +184,7 @@ export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery
   useEffect(() => {
     if (!selectedNode?.breadcrumb) return
     const ancestorIds = selectedNode.breadcrumb
-      .slice(0, -1)  // all except the node itself
+      .slice(0, -1)
       .map((b: any) => b.id)
     if (ancestorIds.length === 0) return
     setExpandedIds(prev => {
@@ -239,7 +235,7 @@ export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery
     )
     return (
       <div className={styles.tree}>
-        {(searchResults as any[]).map((node: any) => (
+        {(searchResults as NodeStub[]).map(node => (
           <div
             key={node.id}
             className={`${styles.nodeItem} ${node.id === selectedId ? styles.selected : ''} ${selectedIds?.has(node.id) ? styles.checked : ''}`}
@@ -264,6 +260,7 @@ export default function NodeTree({ selectedId, onSelect, onAddChild, searchQuery
                     {node.level_of_description}
                   </span>
                 )}
+                <NodeStatusBadges node={node} size="xs" />
               </div>
             </div>
           </div>

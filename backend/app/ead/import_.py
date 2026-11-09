@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Optional
 from lxml import etree
 from app.extensions import db
-from app.models.node import Node, NodeStatus
+from app.models.node import Node, DescriptionStatus
 from app.models.hierarchy import HierarchyType, HierarchyLevel
 
 
@@ -250,7 +250,7 @@ def _parse_component(el: etree._Element, institution_id: int,
         date_certainty=did_data.get('date_certainty'),
         extent=did_data.get('extent'),
         language=did_data.get('language'),
-        status=NodeStatus.DRAFT,
+        description_status=DescriptionStatus.DRAFT.value,
         created_by_id=created_by_id,
         updated_by_id=created_by_id,
         metadata_spec={},

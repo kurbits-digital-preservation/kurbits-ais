@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Search, FileText, User, Building2, UsersRound, Bot, X, Command } from 'lucide-react'
 import { searchApi } from '@/api'
+import NodeStatusBadges from '@/components/node/NodeStatusBadges'
 import styles from './GlobalSearch.module.css'
 
 // ─── Agent type icons ─────────────────────────────────────────────────
@@ -17,6 +18,7 @@ const AGENT_ICONS: Record<string, typeof User> = {
 // ─── Result row ───────────────────────────────────────────────────────
 
 function NodeResult({ item, onClick, active }: { item: any; onClick: () => void; active: boolean }) {
+  const hasState = item.description_status === 'draft' || (item.access_status && item.access_status !== 'open')
   return (
     <button
       className={`${styles.result} ${active ? styles.resultActive : ''}`}
@@ -31,10 +33,10 @@ function NodeResult({ item, onClick, active }: { item: any; onClick: () => void;
           <span className={styles.resultRef}>{item.ref_code}</span>
           <span className={styles.resultSep}>·</span>
           <span className={styles.resultLevel}>{item.level}</span>
-          {item.status !== 'published' && (
+          {hasState && (
             <>
               <span className={styles.resultSep}>·</span>
-              <span className={styles.resultStatus}>{item.status}</span>
+              <NodeStatusBadges node={item} size="xs" />
             </>
           )}
           {(item.date_start || item.date_end) && (

@@ -7,9 +7,14 @@ from app.extensions import db
 import re
 
 
-class NodeStatus(str, Enum):
+class DescriptionStatus(str, Enum):
     DRAFT = 'draft'
-    PUBLISHED = 'published'
+    FINAL = 'final'
+
+
+class AccessStatus(str, Enum):
+    OPEN = 'open'
+    REVIEW = 'review'
     RESTRICTED = 'restricted'
 
 
@@ -90,10 +95,23 @@ class Node(db.Model):
     # --- Extended/level-specific metadata ---
     metadata_spec: so.Mapped[Optional[dict]] = so.mapped_column(sa.JSON, nullable=True, default=dict)
 
-    # --- Status ---
-    status: so.Mapped[NodeStatus] = so.mapped_column(
-        sa.Enum(NodeStatus), nullable=False, default=NodeStatus.DRAFT
+    # --- Description, publication and access ---
+    description_status: so.Mapped[str] = so.mapped_column(
+        sa.String(20), nullable=False,
+        default=DescriptionStatus.DRAFT.value, server_default=DescriptionStatus.DRAFT.value,
     )
+    portal_published: so.Mapped[bool] = so.mapped_column(
+        sa.Boolean, nullable=False, default=False, server_default=sa.false(),
+    )
+    portal_published_at: so.Mapped[Optional[datetime]] = so.mapped_column(
+        sa.DateTime(timezone=True), nullable=True,
+    )
+    access_status: so.Mapped[str] = so.mapped_column(
+        sa.String(20), nullable=False,
+        default=AccessStatus.OPEN.value, server_default=AccessStatus.OPEN.value,
+    )
+    access_basis: so.Mapped[Optional[str]] = so.mapped_column(sa.String(300), nullable=True)
+    access_restricted_until: so.Mapped[Optional[date]] = so.mapped_column(sa.Date, nullable=True)
 
     # --- Hierarchy ---
     hierarchy_type_id: so.Mapped[int] = so.mapped_column(
@@ -353,7 +371,16 @@ class Node(db.Model):
         ).scalar_one_or_none()
         return level.effective_is_object_level if level else False
 
-    # --- Versioning ---
+    def inherit_access_from(self, parent: Optional['Node']) -> None:
+        if parent is None:
+            return
+        self.access_status = parent.access_status
+        self.access_basis = parent.access_basis
+        self.access_restricted_until = parent.access_restricted_until
+
+    @property
+    def files_publishable(self) -> bool:
+        return self.access_status == AccessStatus.OPEN.value
 
     def to_dict(self) -> Dict:
         return {
@@ -373,7 +400,12 @@ class Node(db.Model):
             'language': self.language,
             'finding_aids': self.finding_aids,
             'metadata_spec': self.metadata_spec,
-            'status': self.status.value,
+            'description_status': self.description_status,
+            'access_status': self.access_status,
+            'access_basis': self.access_basis,
+            'access_restricted_until': (
+                self.access_restricted_until.isoformat() if self.access_restricted_until else None
+            ),
             'parent_id': self.parent_id,
             'hierarchy_type_id': self.hierarchy_type_id,
         }
@@ -402,13 +434,11 @@ class Node(db.Model):
         restore = target.after_data if target.change_type == 'create' else target.before_data
 
         for field, value in restore.items():
-            if field in ('parent_id', 'hierarchy_type_id', 'ref_code'):
+            if field in ('parent_id', 'hierarchy_type_id', 'ref_code', 'status'):
                 continue
-            # Convert types stored as strings in JSON back to Python types
-            if field == 'status' and isinstance(value, str):
-                value = NodeStatus(value)
-            elif field in ('date_start', 'date_end') and isinstance(value, str):
-                from datetime import date
+            if field == 'description_status' and self.portal_published:
+                continue
+            if field in ('date_start', 'date_end', 'access_restricted_until') and isinstance(value, str):
                 value = date.fromisoformat(value)
             setattr(self, field, value)
 

@@ -4,7 +4,8 @@ import type {
   LocationStub, LocationDetail, ClassificationStub, ApiResponse, ExternalIntegration,
   AgentNameForm, AgentNameFormType,
   SourcePluginInfo, SourceNodeTarget, SourceKeyInfo, SourceMapping,
-  LevelSourceOption, SourceHit, SourcePreview, AgentTypeSchemaInfo, QuickStatementsResult
+  LevelSourceOption, SourceHit, SourcePreview, AgentTypeSchemaInfo, QuickStatementsResult,
+  DescriptionStatus, AccessStatus,
 } from '@/types'
 
 
@@ -58,17 +59,40 @@ export const nodesApi = {
   counts: (nodeId: number) =>
     api.get<{ status: string; data: NodeCounts }>(`/nodes/${nodeId}/counts`),
 
-  updateStatus: (nodeId: number, status: string) =>
-    api.patch(`/nodes/${nodeId}/status`, { status }),
+  // Description status, access and portal publication
+  setDescriptionStatus: (nodeId: number, description_status: DescriptionStatus) =>
+    api.patch<{ status: string; data: NodeDetail }>(
+      `/nodes/${nodeId}/description-status`, { description_status },
+    ),
+
+  setAccess: (nodeId: number, data: {
+    access_status: AccessStatus
+    access_basis?: string | null
+    access_restricted_until?: string | null
+    apply_to_descendants?: boolean
+  }) =>
+    api.patch<{ status: string; data: NodeDetail; meta?: { updated: number } }>(
+      `/nodes/${nodeId}/access`, data,
+    ),
+
+  publish: (nodeId: number, include_descendants = false) =>
+    api.post<{ status: string; data: NodeDetail; meta?: { published: number; skipped: number } }>(
+      `/nodes/${nodeId}/publish`, { include_descendants },
+    ),
+
+  unpublish: (nodeId: number) =>
+    api.post<{ status: string; data: NodeDetail; meta?: { unpublished: number } }>(
+      `/nodes/${nodeId}/unpublish`,
+    ),
 
   move: (nodeId: number, parent_id: number | null) =>
     api.patch<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}/move`, { parent_id }),
 
   bulkMove: (node_ids: number[], parent_id: number | null) =>
-  api.post<{ status: string; data: { moved: number[]; errors: any[] } }>('/nodes/bulk-move', { node_ids, parent_id }),
+    api.post<{ status: string; data: { moved: number[]; errors: any[] } }>('/nodes/bulk-move', { node_ids, parent_id }),
 
-bulkDelete: (node_ids: number[], force = false) =>
-  api.post<{ status: string; data: { deleted: number[]; errors: any[] } }>('/nodes/bulk-delete', { node_ids, force }),
+  bulkDelete: (node_ids: number[], force = false) =>
+    api.post<{ status: string; data: { deleted: number[]; errors: any[] } }>('/nodes/bulk-delete', { node_ids, force }),
 
   getHistory: (nodeId: number) =>
     api.get(`/nodes/${nodeId}/history`),
@@ -108,7 +132,6 @@ bulkDelete: (node_ids: number[], force = false) =>
   getDownloadUrl: (nodeId: number, attachmentId: number) =>
     `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/download`,
 
-
   printLabels: (nodeIds: number[], format: string, copies: number,
                 includeDescendants: boolean, templateId?: number | null) =>
     api.post('/nodes/labels',
@@ -119,7 +142,7 @@ bulkDelete: (node_ids: number[], force = false) =>
   findingAid: (nodeId: number) =>
     api.get(`/nodes/${nodeId}/finding-aid`, { responseType: 'blob' }),
 
-    citation: (nodeId: number, accessDate = false) =>
+  citation: (nodeId: number, accessDate = false) =>
     api.get<{ status: string; data: {
       chicago: string
       apa: string
@@ -138,15 +161,18 @@ bulkDelete: (node_ids: number[], force = false) =>
 
   getAttachmentUrl: (nodeId: number, attachmentId: number) =>
     `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/download`,
-    duplicate: (nodeId: number) =>
-  api.post<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}/duplicate`),
-ocr: (nodeId: number, attachmentId: number, forceOcr: boolean = false) =>
-  api.post<{ status: string; data: { task_id: string; status: string } }>(
-    `/nodes/${nodeId}/attachments/${attachmentId}/ocr`,
-    { force_ocr: forceOcr }
-  ),
-getTextUrl: (nodeId: number, attachmentId: number) =>
-  `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/text`,
+
+  duplicate: (nodeId: number) =>
+    api.post<{ status: string; data: NodeDetail }>(`/nodes/${nodeId}/duplicate`),
+
+  ocr: (nodeId: number, attachmentId: number, forceOcr: boolean = false) =>
+    api.post<{ status: string; data: { task_id: string; status: string } }>(
+      `/nodes/${nodeId}/attachments/${attachmentId}/ocr`,
+      { force_ocr: forceOcr }
+    ),
+
+  getTextUrl: (nodeId: number, attachmentId: number) =>
+    `/api/v1/nodes/${nodeId}/attachments/${attachmentId}/text`,
 
   getIdentifiers: (nodeId: number) => api.get(`/nodes/${nodeId}/identifiers`),
   addIdentifier: (nodeId: number, data: any) => api.post(`/nodes/${nodeId}/identifiers`, data),
@@ -154,11 +180,11 @@ getTextUrl: (nodeId: number, attachmentId: number) =>
   deleteIdentifier: (nodeId: number, id: number) => api.delete(`/nodes/${nodeId}/identifiers/${id}`),
   generateIdentifier: (nodeId: number, schemeId: number) => api.post(`/nodes/${nodeId}/identifiers/generate`, { scheme_id: schemeId }),
 
-transcribe: (nodeId: number, attachmentId: number, modelSize: string = 'medium') =>
-  api.post<{ status: string; data: { task_id: string; status: string; model_size: string } }>(
-    `/nodes/${nodeId}/attachments/${attachmentId}/transcribe`,
-    { model_size: modelSize }
-  ),
+  transcribe: (nodeId: number, attachmentId: number, modelSize: string = 'medium') =>
+    api.post<{ status: string; data: { task_id: string; status: string; model_size: string } }>(
+      `/nodes/${nodeId}/attachments/${attachmentId}/transcribe`,
+      { model_size: modelSize }
+    ),
 }
 
 // ─── Agents ──────────────────────────────────────────────────────────
@@ -202,16 +228,20 @@ export const agentsApi = {
 
   getRelationTypes: () => api.get('/agents/relation-types'),
   getNodeRelationTypes: () => api.get('/agents/node-relation-types'),
-    getTypeSchemas: () =>
+
+  // Agent type schemas
+  getTypeSchemas: () =>
     api.get<ApiResponse<AgentTypeSchemaInfo[]>>('/agents/type-schemas').then(r => r.data.data ?? []),
   getTypeSchema: (agentType: string) =>
     api.get<ApiResponse<AgentTypeSchemaInfo>>(`/agents/type-schemas/${agentType}`).then(r => r.data.data!),
   updateTypeSchema: (agentType: string, metadata_schema: Record<string, unknown>) =>
     api.patch<ApiResponse<AgentTypeSchemaInfo>>(`/agents/type-schemas/${agentType}`, { metadata_schema })
       .then(r => r.data.data!),
-   counts: (agentId: number) =>
+
+  counts: (agentId: number) =>
     api.get<{ status: string; data: AgentCounts }>(`/agents/${agentId}/counts`),
-    // Identifiers
+
+  // Identifiers
   getIdentifiers: (agentId: number) => api.get(`/agents/${agentId}/identifiers`),
   addIdentifier: (agentId: number, data: any) => api.post(`/agents/${agentId}/identifiers`, data),
   updateIdentifier: (agentId: number, id: number, data: any) =>
@@ -219,7 +249,8 @@ export const agentsApi = {
   deleteIdentifier: (agentId: number, id: number) =>
     api.delete(`/agents/${agentId}/identifiers/${id}`),
 
-     getNameForms: (agentId: number) =>
+  // Name forms
+  getNameForms: (agentId: number) =>
     api.get<{ status: string; data: AgentNameForm[] }>(`/agents/${agentId}/name-forms`),
   addNameForm: (agentId: number, data: Record<string, unknown>) =>
     api.post<{ status: string; data: AgentNameForm }>(`/agents/${agentId}/name-forms`, data),
@@ -227,11 +258,14 @@ export const agentsApi = {
     api.patch<{ status: string; data: AgentNameForm }>(`/agents/${agentId}/name-forms/${formId}`, data),
   deleteNameForm: (agentId: number, formId: number) =>
     api.delete(`/agents/${agentId}/name-forms/${formId}`),
-      quickStatements: (data: {
+
+  // Wikidata export
+  quickStatements: (data: {
     agent_ids: number[]
     create_missing: boolean
     include_aliases: boolean
     include_archives_at: boolean
+    include_relations: boolean
   }) =>
     api.post<ApiResponse<QuickStatementsResult>>('/agents/quickstatements', data).then(r => r.data.data!),
 
@@ -246,7 +280,6 @@ export const agentsApi = {
   getAttachmentDownloadUrl: (agentId: number, attachmentId: number) =>
     `/api/v1/agents/${agentId}/attachments/${attachmentId}/download`,
 }
-
 
 
 // ─── Locations ───────────────────────────────────────────────────────
@@ -389,7 +422,7 @@ export const classificationsApi = {
   updateBpmn: (id: number, bpmnXml: string | null, taskLinks?: any[]) =>
     api.patch(`/classifications/${id}/bpmn`, { bpmn_xml: bpmnXml, task_links: taskLinks ?? [] }),
   getProducedBy: (id: number) => api.get(`/classifications/${id}/produced-by`),
-    getRecords: (id: number) => api.get(`/classifications/${id}/records`),
+  getRecords: (id: number) => api.get(`/classifications/${id}/records`),
   getRecordsVocabulary: () => api.get('/records-vocabulary'),
   addRecordsVocabTerm: (field: string, value: string) =>
     api.post('/records-vocabulary', { field, value }),
@@ -520,7 +553,6 @@ export const vocabApi = {
   deleteAgentNodeRelationType: (id: number) =>
     api.delete(`/agents/node-relation-types/${id}`),
 
-
   // Agent name form types
   listAgentNameFormTypes: () =>
     api.get<{ status: string; data: AgentNameFormType[] }>('/agents/name-form-types'),
@@ -616,7 +648,9 @@ export const searchApi = {
   search: (params: {
     q: string
     types?: string
-    status?: string
+    description_status?: DescriptionStatus
+    access_status?: AccessStatus
+    portal_published?: 'true' | 'false'
     level?: string
     hierarchy_type_id?: number
     date_from?: string
@@ -664,7 +698,7 @@ export const flagsApi = {
   }) => api.get<{ status: string; data: any }>('/flags', { params }),
 }
 
-
+// ─── Places ───────────────────────────────────────────────────────────
 export const placesApi = {
   getNodePlaces: (nodeId: number) =>
     api.get<{ status: string; data: any[] }>(`/nodes/${nodeId}/places`),
@@ -774,6 +808,7 @@ export const checklistTemplatesApi = {
     api.delete(`/vocab/checklist-templates/${id}`),
 }
 
+// ─── Integrations ─────────────────────────────────────────────────────
 export const integrationsApi = {
   list: (entity_type?: string) =>
     api.get<ApiResponse<ExternalIntegration[]>>('/integrations', {
@@ -802,6 +837,7 @@ export const sourcesApi = {
   setPluginEnabled: (key: string, enabled: boolean) =>
     api.put(`/sources/plugins/${encodeURIComponent(key)}`, { enabled }),
 
+  // Records
   nodeTargets: () =>
     api.get<ApiResponse<SourceNodeTarget[]>>('/sources/node-targets').then(r => r.data.data ?? []),
 
@@ -832,7 +868,9 @@ export const sourcesApi = {
     current: { node: Record<string, unknown>; meta: Record<string, unknown> }
   }) =>
     api.post<ApiResponse<SourcePreview>>('/sources/node-preview', data).then(r => r.data.data!),
-      agentTargets: () =>
+
+  // Agents
+  agentTargets: () =>
     api.get<ApiResponse<SourceNodeTarget[]>>('/sources/agent-targets').then(r => r.data.data ?? []),
 
   suggestedAgentMappings: (integrationId: number, agentType: string) =>
@@ -855,6 +893,7 @@ export const sourcesApi = {
     api.post<ApiResponse<SourcePreview>>('/sources/agent-preview', data).then(r => r.data.data!),
 }
 
+// ─── Representations ──────────────────────────────────────────────────
 export const representationsApi = {
   // Vocabulary (admin)
   listTypes: () =>
@@ -876,13 +915,13 @@ export const representationsApi = {
   delete: (nodeId: number, repId: number) =>
     api.delete(`/nodes/${nodeId}/representations/${repId}`),
 
-uploadFile: (nodeId: number, repId: number, formData: FormData, config?: any) => {
-  formData.append('representation_id', String(repId))
-  return api.post(`/nodes/${nodeId}/attachments`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    ...config,
-  })
-},
+  uploadFile: (nodeId: number, repId: number, formData: FormData, config?: any) => {
+    formData.append('representation_id', String(repId))
+    return api.post(`/nodes/${nodeId}/attachments`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      ...config,
+    })
+  },
   getDownloadUrl: (nodeId: number, fileId: number) =>
     `/api/v1/nodes/${nodeId}/attachments/${fileId}/download`,
   getThumbnailUrl: (nodeId: number, fileId: number) =>
@@ -929,8 +968,6 @@ export const historyApi = {
     }),
 }
 
-
-// ─── AI ───────────────────────────────────────────────────────────────
 // ─── Whisper transcription ────────────────────────────────────────────
 export const whisperApi = {
   getConfig: () =>
@@ -953,7 +990,6 @@ export const whisperApi = {
     ),
 }
 
-
 // ─── Background tasks ─────────────────────────────────────────────────
 export const tasksApi = {
   get: (taskId: string) =>
@@ -964,7 +1000,6 @@ export const tasksApi = {
       params: { entity_type: entityType, entity_id: entityId },
     }),
 }
-
 
 // ─── Portal (institution admin) ───────────────────────────────────────
 export const portalApi = {
@@ -981,6 +1016,7 @@ export const portalApi = {
     api.post<{ status: string; data: any }>('/portal/sync'),
 }
 
+// ─── Identifier schemes ───────────────────────────────────────────────
 export const identifierSchemesApi = {
   list: (includeInactive = false) =>
     api.get('/identifier-schemes', { params: { include_inactive: includeInactive } }),
@@ -989,6 +1025,7 @@ export const identifierSchemesApi = {
   delete: (id: number) => api.delete(`/identifier-schemes/${id}`),
 }
 
+// ─── Label templates ──────────────────────────────────────────────────
 export const labelTemplatesApi = {
   list: () => api.get('/label-templates'),
   get: (id: number) => api.get(`/label-templates/${id}`),
