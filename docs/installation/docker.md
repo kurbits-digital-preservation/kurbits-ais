@@ -12,7 +12,7 @@ docker pull ghcr.io/kurbits-digital-preservation/kurbits-ais:latest
 docker run -d --name kurbits-ais -p 8080:8080 \
   -e DATABASE_URL=sqlite:////app/database/kurbits.db \
   -v kurbits_db:/app/database \
-  asegerberg/kurbits-ais
+  ghcr.io/kurbits-digital-preservation/kurbits-ais:latest
 ```
 
 Then open <http://localhost:8080> in your browser.
@@ -36,7 +36,7 @@ Kurbits needs at least one institution and one admin user before anyone can log 
 For trying Kurbits out or setting up a demo, `dev-setup` creates everything in one go — an institution, a system admin, the default hierarchies (ISAD(G), Library, Physical Storage, Classification), and default vocabularies:
 
 ```bash
-docker exec -it kurbits flask dev-setup
+docker exec -it kurbits-ais flask dev-setup
 ```
 
 This uses sensible defaults (institution "Demo Institution", admin `admin@kurbits.dev` / `admin`) and also creates an archivist and a read-only test user so you can try out role-based access. All of it is configurable:
@@ -127,7 +127,7 @@ All the commands above assume you started the container with `--name kurbits-ais
 docker ps
 ```
 
-and use that in place of `kurbits` in the `docker exec` commands.
+and use that in place of `kurbits-ais` in the `docker exec` commands.
 
 ## Keeping uploaded files
 
@@ -138,7 +138,7 @@ docker run -d --name kurbits-ais -p 8080:8080 \
   -e DATABASE_URL=sqlite:////app/database/kurbits.db \
   -v kurbits_db:/app/database \
   -v kurbits_uploads:/app/uploads \
-  asegerberg/kurbits-ais
+  ghcr.io/kurbits-digital-preservation/kurbits-ais:latest
 ```
 
 ## Building the image yourself
@@ -166,10 +166,10 @@ Set these with additional `-e` flags if needed:
 Pull the newest image and start a fresh container using the same volumes — your data is preserved:
 
 ```bash
-docker pull asegerberg/kurbits-ais
-docker stop kurbits && docker rm kurbits
-docker run -d --name kurbits -p 8080:8080 \
+docker pull ghcr.io/kurbits-digital-preservation/kurbits-ais:latest
+docker stop kurbits-ais && docker rm kurbits-ais
+docker run -d --name kurbits-ais -p 8080:8080 \
   -e DATABASE_URL=sqlite:////app/database/kurbits.db \
   -v kurbits_db:/app/database \
-  asegerberg/kurbits-ais
+  ghcr.io/kurbits-digital-preservation/kurbits-ais:latest
 ```
